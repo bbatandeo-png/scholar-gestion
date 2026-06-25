@@ -1,0 +1,47 @@
+﻿{% extends "layout.njk" %}
+{% block content %}
+  <section class="grid cols-2">
+    <div class="panel">
+      <h2>Inscription</h2>
+      <p><strong>Eleve:</strong> {{ enrollment.studentId.lastname if enrollment.studentId }} {{ enrollment.studentId.firstname if enrollment.studentId }}</p>
+      <p><strong>Annee:</strong> {{ enrollment.schoolYearId.label if enrollment.schoolYearId }}</p>
+      <p><strong>Niveau:</strong> {{ enrollment.levelId.label if enrollment.levelId }}</p>
+      <p><strong>Type:</strong> {{ enrollment.type }}</p>
+      <p><strong>Statut:</strong> {% set value = enrollment.status %}{% include "partials/status-badge.njk" %}</p>
+    </div>
+
+    <div class="panel">
+      <h2>Facture</h2>
+      {% if invoice %}
+        <p><strong>Frais d inscription:</strong> {{ invoice.registrationFee }}</p>
+        <p><strong>Ecolage:</strong> {{ invoice.tuitionFee }}</p>
+        <p><strong>Remise:</strong> {{ invoice.discountAmount }}</p>
+        <p><strong>Impayes reportes:</strong> {{ invoice.arrearsAmount }}</p>
+        <p><strong>Total du:</strong> {{ invoice.totalDue }}</p>
+        <p><strong>Paye:</strong> {{ invoice.paidAmount }}</p>
+        <p><strong>Reste:</strong> {{ invoice.balanceDue }}</p>
+        <p><strong>Statut:</strong> {% set value = invoice.status %}{% include "partials/status-badge.njk" %}</p>
+
+        <form method="post" action="/payments" class="stack">
+          <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+          <input type="hidden" name="invoiceId" value="{{ invoice._id }}" />
+          <div class="form-grid">
+            <label>Montant<input type="number" name="amount" min="1" required /></label>
+            <label>Mode
+              <select name="method">
+                <option value="cash">cash</option>
+                <option value="mobile_money">mobile_money</option>
+                <option value="bank_transfer">bank_transfer</option>
+                <option value="other">other</option>
+              </select>
+            </label>
+            <label>Reference<input name="reference" /></label>
+          </div>
+          <button type="submit">Enregistrer le paiement</button>
+        </form>
+      {% else %}
+        <p>Aucune facture disponible.</p>
+      {% endif %}
+    </div>
+  </section>
+{% endblock %}

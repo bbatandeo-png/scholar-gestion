@@ -1,0 +1,19 @@
+{% extends "layout.njk" %}
+
+{% block content %}
+  <section class="hero">
+    <h2>Pilotage global</h2>
+    <p class="muted">Vue synthese des effectifs, recettes, impayes et recouvrement.</p>
+  </section>
+
+  <section class="grid cols-3">
+    <article class="card"><div class="muted">Effectif total</div><div class="metric">{{ summary.totalStudents }}</div></article>
+    <article class="card"><div class="muted">Recettes encaissees</div><div class="metric">{{ summary.revenue }}</div></article>
+    <article class="card"><div class="muted">Impayes globaux</div><div class="metric">{{ summary.totalBalance }}</div></article>
+    <article class="card"><div class="muted">Taux de recouvrement</div><div class="metric">{{ summary.recoveryRate }}%</div></article>
+    <article class="card"><div class="muted">Eleves actifs</div><div class="metric">{{ summary.activeStudents }}</div></article>
+    <article class="card"><div class="muted">Eleves archives</div><div class="metric">{{ summary.archivedStudents }}</div></article>
+    <article class="card"><div class="muted">Impayes reportes</div><div class="metric">{{ summary.arrearsOpen }}</div></article>
+    <article class="card"><div class="muted">Inscriptions actives</div><div class="metric">{{ summary.enrollmentsActive }}</div></article>
+  </section>
+{% endblock %}

@@ -1,0 +1,68 @@
+﻿{% extends "layout.njk" %}
+{% block content %}
+  <section class="grid cols-2">
+    <div class="panel">
+      <h2>{% if editYear %}Modifier annee scolaire{% else %}Nouvelle annee scolaire{% endif %}</h2>
+      <div class="notice notice-info">
+        Une seule annee scolaire peut etre active (<strong>open</strong>) a la fois. Ouvrir une nouvelle annee repassera l'annee deja active en draft.
+      </div>
+      <form method="post" action="{% if editYear %}/settings/school-years/{{ editYear._id }}{% else %}/settings/school-years{% endif %}" class="stack">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+        <div class="form-grid">
+          <label>Libelle<input name="label" value="{{ editYear and editYear.label or '' }}" required /></label>
+          <label>Date debut<input type="date" name="startDate" value="{% if editYear %}{{ editYear.startDate | slice(0, 10) }}{% endif %}" required /></label>
+          <label>Date fin<input type="date" name="endDate" value="{% if editYear %}{{ editYear.endDate | slice(0, 10) }}{% endif %}" required /></label>
+          <label>Statut
+            <select name="status">
+              <option value="draft" {% if editYear and editYear.status == 'draft' %}selected{% endif %}>draft</option>
+              <option value="open" {% if editYear and editYear.status == 'open' %}selected{% endif %}>open</option>
+              <option value="closed" {% if editYear and editYear.status == 'closed' %}selected{% endif %}>closed</option>
+              <option value="archived" {% if editYear and editYear.status == 'archived' %}selected{% endif %}>archived</option>
+            </select>
+          </label>
+        </div>
+        <div class="stack" style="gap: 8px; align-items: flex-start;">
+          <button type="submit">{% if editYear %}Mettre a jour{% else %}Enregistrer{% endif %}</button>
+          {% if editYear %}
+            <a class="button secondary" href="/settings/school-years">Annuler</a>
+          {% endif %}
+        </div>
+      </form>
+    </div>
+    <div class="panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Annees configurees</h2>
+          <p class="muted">Export Excel de la liste des années scolaires.</p>
+        </div>
+        <a class="button secondary" href="/settings/school-years/export">Exporter Excel</a>
+      </div>
+      <table>
+        <thead><tr><th>Libelle</th><th>Debut</th><th>Fin</th><th>Statut</th><th>Actions</th></tr></thead>
+        <tbody>
+          {% for item in schoolYears %}
+            <tr>
+              <td>{{ item.label }}</td>
+              <td>{{ item.startDate }}</td>
+              <td>{{ item.endDate }}</td>
+              <td>{% set value = item.status %}{% include "partials/status-badge.njk" %}</td>
+              <td>
+                <a class="button btn-sm" href="/settings/school-years/{{ item._id }}/edit">Modifier</a>
+                <form method="post" action="/settings/school-years/{{ item._id }}/status" style="display:inline-flex;gap:8px;flex-wrap:wrap;">
+                  <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+                  <input type="hidden" name="status" value="open" />
+                  <button type="submit" class="button btn-sm" {% if item.status == 'open' %}disabled{% endif %}>Ouvrir</button>
+                </form>
+                <form method="post" action="/settings/school-years/{{ item._id }}/status" style="display:inline-flex;gap:8px;flex-wrap:wrap;">
+                  <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+                  <input type="hidden" name="status" value="closed" />
+                  <button type="submit" class="button btn-sm secondary" {% if item.status == 'closed' %}disabled{% endif %}>Cloturer</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

@@ -1,0 +1,22 @@
+﻿{% extends "layout.njk" %}
+{% block content %}
+  <section class="panel">
+    <h2>Recu {{ receipt.receiptNumber }}</h2>
+    <p><strong>Date:</strong> {{ receipt.paidAt }}</p>
+    <p><strong>Montant:</strong> {{ receipt.amount }}</p>
+    <p><strong>Mode:</strong> {{ receipt.method }}</p>
+    <p><strong>Reference:</strong> {{ receipt.reference or '-' }}</p>
+    <h3>Allocation</h3>
+    <table>
+      <thead><tr><th>Type</th><th>Montant</th></tr></thead>
+      <tbody>
+        {% for item in receipt.allocation %}
+          <tr><td>{{ item.type }}</td><td>{{ item.amount }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="actions" style="margin-top: 16px;">
+      <a class="button" href="/receipts/{{ receipt._id }}?format=pdf">Version PDF</a>
+    </div>
+  </section>
+{% endblock %}

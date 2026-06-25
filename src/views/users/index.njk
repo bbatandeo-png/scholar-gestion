@@ -1,0 +1,181 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <section class="grid user-page two-columns">
+    <div class="panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Créer un utilisateur</h2>
+          <p class="muted">Attribuez un rôle, définissez le statut et créez un compte en quelques secondes.</p>
+        </div>
+        <span class="badge badge-neutral">Nouveau</span>
+      </div>
+
+      <div class="card role-summary">
+        <div class="card-body">
+          <h3 class="card-title">Rôles et accès</h3>
+          <p class="muted">Sélectionnez le rôle adapté au profil et contrôlez rapidement les menus disponibles.</p>
+        </div>
+        <div class="table-shell">
+          <table class="table-report">
+            <thead>
+              <tr><th>Role</th><th>Signification</th><th>Menus accessibles</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>super_admin</td>
+                <td>Contrôle total de l’application.</td>
+                <td>Dashboard, Élèves, Recherche, Inscriptions, Impayés, Promotions, Années scolaires, Niveaux, Frais, Utilisateurs, Rapports</td>
+              </tr>
+              <tr>
+                <td>direction</td>
+                <td>Pilotage pédagogique et administratif.</td>
+                <td>Dashboard, Élèves, Recherche, Inscriptions, Impayés, Promotions, Années scolaires, Niveaux, Frais, Rapports</td>
+              </tr>
+              <tr>
+                <td>secrétariat</td>
+                <td>Gestion opérationnelle des dossiers scolaires.</td>
+                <td>Dashboard, Élèves, Recherche, Inscriptions</td>
+              </tr>
+              <tr>
+                <td>comptabilité</td>
+                <td>Gestion financière et suivi des règlements.</td>
+                <td>Dashboard, Inscriptions, Impayés, Rapports (recettes/financier)</td>
+              </tr>
+              <tr>
+                <td>auditeur</td>
+                <td>Consultation et contrôle sans opérations sensibles.</td>
+                <td>Dashboard, Élèves, Recherche, Inscriptions, Impayés, Promotions, Rapports</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <form method="post" action="/users" class="stack user-form">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+        <div class="form-grid form-grid-2">
+          <label><span>Nom complet</span>
+            <input name="name" required />
+          </label>
+          <label><span>Email</span>
+            <input type="email" name="email" required />
+          </label>
+          <label><span>Mot de passe initial</span>
+            <input type="password" name="password" minlength="8" required />
+          </label>
+          <label><span>Role</span>
+            <select name="role" required>
+              {% for role in roleOptions %}
+                <option value="{{ role }}">{{ role }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label><span>Statut</span>
+            <select name="status" required>
+              {% for status in statusOptions %}
+                <option value="{{ status }}" {% if status == 'active' %}selected{% endif %}>{{ status }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        </div>
+        <button type="submit" class="button btn-lg btn-icon icon-save">Créer l’utilisateur</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Comptes utilisateurs</h2>
+          <p class="muted">{{ pagination.total }} compte(s) • page {{ pagination.page }} / {{ pagination.totalPages }}</p>
+        </div>
+        <a class="button secondary" href="/users">Réinitialiser</a>
+      </div>
+
+      <form method="get" action="/users" class="toolbar toolbar-grid user-filters">
+        <label><span>Recherche</span>
+          <input type="search" name="q" value="{{ query }}" placeholder="Nom ou email" />
+        </label>
+        <label><span>Role</span>
+          <select name="role">
+            <option value="">Tous les rôles</option>
+            {% for role in roleOptions %}
+              <option value="{{ role }}" {% if role == selectedRole %}selected{% endif %}>{{ role }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label><span>Statut</span>
+          <select name="status">
+            <option value="">Tous les statuts</option>
+            {% for status in statusOptions %}
+              <option value="{{ status }}" {% if status == selectedStatus %}selected{% endif %}>{{ status }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <input type="hidden" name="pageSize" value="{{ pagination.pageSize }}" />
+        <button type="submit" class="button btn-md btn-icon icon-search">Filtrer</button>
+      </form>
+
+      <div class="table-shell">
+        <table class="table-report">
+          <thead>
+            <tr><th>Nom</th><th>Email</th><th>Role</th><th>Statut</th><th>Actions</th></tr>
+          </thead>
+          <tbody>
+            {% for user in users %}
+              <tr>
+                <td>{{ user.name }}</td>
+                <td>{{ user.email }}</td>
+                <td>{{ user.role }}</td>
+                <td>{% set value = user.status %}{% include "partials/status-badge.njk" %}</td>
+                <td>
+                  <div class="table-actions">
+                    <form method="post" action="/users/{{ user._id }}/access" class="inline-form no-wrap">
+                      <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+                      <select name="role">
+                        {% for role in roleOptions %}
+                          <option value="{{ role }}" {% if role == user.role %}selected{% endif %}>{{ role }}</option>
+                        {% endfor %}
+                      </select>
+                      <select name="status">
+                        {% for status in statusOptions %}
+                          <option value="{{ status }}" {% if status == user.status %}selected{% endif %}>{{ status }}</option>
+                        {% endfor %}
+                      </select>
+                      <button type="submit" class="secondary btn-sm btn-icon icon-save">Accès</button>
+                    </form>
+                    <form method="post" action="/users/{{ user._id }}/password" class="inline-form no-wrap top-gap">
+                      <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+                      <input type="password" name="password" minlength="8" placeholder="Nouveau mot de passe" required />
+                      <button type="submit" class="btn-sm btn-icon icon-save">Mot de passe</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="5">Aucun utilisateur.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="pagination-row">
+        <form method="get" action="/users" class="inline-form">
+          <input type="hidden" name="q" value="{{ query }}" />
+          <input type="hidden" name="role" value="{{ selectedRole }}" />
+          <input type="hidden" name="status" value="{{ selectedStatus }}" />
+          <input type="hidden" name="pageSize" value="{{ pagination.pageSize }}" />
+          <input type="hidden" name="page" value="{{ pagination.prevPage }}" />
+          <button type="submit" class="secondary btn-sm btn-icon icon-prev" {% if not pagination.hasPrev %}disabled{% endif %}>Précédent</button>
+        </form>
+        <span class="muted">Page {{ pagination.page }} sur {{ pagination.totalPages }}</span>
+        <form method="get" action="/users" class="inline-form">
+          <input type="hidden" name="q" value="{{ query }}" />
+          <input type="hidden" name="role" value="{{ selectedRole }}" />
+          <input type="hidden" name="status" value="{{ selectedStatus }}" />
+          <input type="hidden" name="pageSize" value="{{ pagination.pageSize }}" />
+          <input type="hidden" name="page" value="{{ pagination.nextPage }}" />
+          <button type="submit" class="secondary btn-sm btn-icon icon-next" {% if not pagination.hasNext %}disabled{% endif %}>Suivant</button>
+        </form>
+      </div>
+    </div>
+  </section>
+{% endblock %}

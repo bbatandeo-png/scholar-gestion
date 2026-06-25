@@ -1,0 +1,62 @@
+﻿{% extends "layout.njk" %}
+{% block content %}
+  <section class="panel">
+    <h2>Validation promotion</h2>
+    {% set sourceLabel = '' %}
+    {% set targetLabel = '' %}
+    {% for year in schoolYears %}
+      {% if year._id == sourceSchoolYearId %}{% set sourceLabel = year.label %}{% endif %}
+      {% if year._id == targetSchoolYearId %}{% set targetLabel = year.label %}{% endif %}
+    {% endfor %}
+    <p class="muted">
+      Année source : <strong>{{ sourceLabel or sourceSchoolYearId }}</strong>
+      &middot;
+      Année cible : <strong>{{ targetLabel or targetSchoolYearId }}</strong>
+      &middot;
+      {{ candidates | length }} inscription(s) à valider
+    </p>
+    {% if importedCount %}
+      <p><strong>{{ importedCount }}</strong> decision(s) pre-remplies depuis le fichier Excel.</p>
+    {% endif %}
+    <form method="post" action="/promotions/validate" class="stack">
+      <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+      <input type="hidden" name="sourceSchoolYearId" value="{{ sourceSchoolYearId }}" />
+      <input type="hidden" name="targetSchoolYearId" value="{{ targetSchoolYearId }}" />
+      <input type="hidden" name="carryOverArrears" value="true" />
+      <table>
+        <thead><tr><th>Eleve</th><th>Niveau source</th><th>Decision</th><th>Niveau cible</th></tr></thead>
+        <tbody>
+          {% if candidates | length == 0 %}
+            <tr><td colspan="4">Aucune inscription active trouvée pour cette année source.</td></tr>
+          {% else %}
+            {% for candidate in candidates %}
+              <tr>
+                <td>
+                  {{ candidate.studentId.lastname if candidate.studentId }} {{ candidate.studentId.firstname if candidate.studentId }}
+                  <input type="hidden" name="decisions[{{ loop.index0 }}][studentId]" value="{{ candidate.studentId._id if candidate.studentId }}" />
+                  <input type="hidden" name="decisions[{{ loop.index0 }}][sourceEnrollmentId]" value="{{ candidate._id }}" />
+                </td>
+                <td>{{ candidate.levelId.label if candidate.levelId }}</td>
+                <td>
+                  <select name="decisions[{{ loop.index0 }}][decision]">
+                    <option value="promoted" {% if candidate.importedDecision == 'promoted' %}selected{% endif %}>promoted</option>
+                    <option value="repeated" {% if candidate.importedDecision == 'repeated' %}selected{% endif %}>repeated</option>
+                    <option value="transferred" {% if candidate.importedDecision == 'transferred' %}selected{% endif %}>transferred</option>
+                    <option value="left" {% if candidate.importedDecision == 'left' %}selected{% endif %}>left</option>
+                    <option value="archived" {% if candidate.importedDecision == 'archived' %}selected{% endif %}>archived</option>
+                  </select>
+                </td>
+                <td>
+                  <select name="decisions[{{ loop.index0 }}][targetLevelId]">
+                    {% for level in levels %}<option value="{{ level._id }}" {% if candidate.importedTargetLevelId and candidate.importedTargetLevelId == (level._id | string) %}selected{% endif %}>{{ level.label }}</option>{% endfor %}
+                  </select>
+                </td>
+              </tr>
+            {% endfor %}
+          {% endif %}
+        </tbody>
+      </table>
+      <button type="submit">Valider les decisions</button>
+    </form>
+  </section>
+{% endblock %}

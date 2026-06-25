@@ -1,0 +1,26 @@
+﻿{% extends "layout.njk" %}
+{% block content %}
+  <section class="panel">
+    <div class="panel-heading">
+      <div>
+        <h2>Recettes</h2>
+        <p class="muted">Export Excel de la synthèse financière globale.</p>
+      </div>
+      <a class="button secondary btn-icon icon-export" href="/reports/revenue/export">Exporter Excel</a>
+    </div>
+    <div class="report-metrics">
+      <article class="report-metric">
+        <span>Encaisse</span>
+        <strong>{{ report.collected }}</strong>
+      </article>
+      <article class="report-metric">
+        <span>Reste a encaisser</span>
+        <strong>{{ report.outstanding }}</strong>
+      </article>
+      <article class="report-metric">
+        <span>Total attendu</span>
+        <strong>{{ report.totalDue }}</strong>
+      </article>
+    </div>
+  </section>
+{% endblock %}

@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ title or 'Connexion - Scolar-Gestion' }}</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="login-page">
+      <div class="login-card">
+        <div class="login-brand">
+          <p class="eyebrow">Scolar-Gestion</p>
+          <h1>Connexion</h1>
+          <p class="muted">Administration scolaire sécurisée</p>
+        </div>
+
+        {% if flash %}
+          <div class="flash {{ flash.type }}">{{ flash.message }}</div>
+        {% endif %}
+
+        {% block content %}{% endblock %}
+      </div>
+    </div>
+  </body>
+</html>

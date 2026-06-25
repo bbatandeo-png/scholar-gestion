@@ -1,0 +1,104 @@
+﻿{% extends "layout.njk" %}
+{% block content %}
+  <section class="panel">
+    <div class="topbar">
+      <div class="topbar-heading">
+        <div class="topbar-title-row">
+          <h2>Anciens élèves</h2>
+          <p class="muted">{{ pagination.total }} résultat(s) • page {{ pagination.page }} / {{ pagination.totalPages }}</p>
+        </div>
+      </div>
+
+      <div class="topbar-actions">
+        <form method="get" action="/students/search" class="inline-form" id="search-archived">
+          <label style="display:flex;gap:8px;align-items:center;">
+            <input type="search" name="q" value="{{ query }}" placeholder="Matricule, nom, prénom, quartier" style="min-width:320px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);" />
+            <button type="submit" class="button btn-icon icon-search">Rechercher</button>
+            <button type="button" id="toggle-advanced-archived" class="button secondary">Filtres</button>
+          </label>
+        </form>
+      </div>
+    </div>
+
+    <div id="advanced-filters-archived" style="display:none;margin-top:14px;">
+      <div class="panel form-section">
+        <form method="get" action="/students/search" class="form-grid">
+          <input type="hidden" name="q" value="{{ query }}" />
+          <label>Niveau
+            <input name="level" placeholder="Ex: 6ème, 5ème" />
+          </label>
+          <label>Année
+            <input name="schoolYear" placeholder="Ex: 2024/2025" />
+          </label>
+          <label>Quartier
+            <input name="district" placeholder="Quartier" />
+          </label>
+          <div>
+            <button type="submit" class="button">Appliquer</button>
+            <a href="/students/search" class="button secondary">Réinitialiser</a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="table-shell">
+      <table class="js-sortable">
+        <thead>
+          <tr>
+            <th class="sortable" data-column-index="0" data-sort-type="text">Matricule</th>
+            <th class="sortable" data-column-index="1" data-sort-type="text">Nom</th>
+            <th class="sortable" data-column-index="2" data-sort-type="text">Statut</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for student in students %}
+            <tr>
+              <td>{{ student.matricule }}</td>
+              <td>{{ student.lastname }} {{ student.firstname }}</td>
+              <td>{% set value = student.status %}{% include "partials/status-badge.njk" %}</td>
+              <td class="actions">
+                <a class="button secondary btn-sm btn-icon icon-view" href="/students/{{ student._id }}">Fiche</a>
+                <a class="button" href="/students/{{ student._id }}/reenroll">Reinscrire</a>
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="4">Aucun dossier correspondant.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination-row">
+      <form method="get" action="/students/search" class="inline-form">
+        <input type="hidden" name="q" value="{{ query }}" />
+        <input type="hidden" name="pageSize" value="{{ pagination.pageSize }}" />
+        <input type="hidden" name="page" value="{{ pagination.prevPage }}" />
+        <button type="submit" class="secondary btn-sm btn-icon icon-prev" {% if not pagination.hasPrev %}disabled{% endif %}>Precedent</button>
+      </form>
+      <span class="muted">Page {{ pagination.page }} sur {{ pagination.totalPages }}</span>
+      <form method="get" action="/students/search" class="inline-form">
+        <input type="hidden" name="q" value="{{ query }}" />
+        <input type="hidden" name="pageSize" value="{{ pagination.pageSize }}" />
+        <input type="hidden" name="page" value="{{ pagination.nextPage }}" />
+        <button type="submit" class="secondary btn-sm btn-icon icon-next" {% if not pagination.hasNext %}disabled{% endif %}>Suivant</button>
+      </form>
+    </div>
+  </section>
+
+  <script>
+    (function(){
+      const toggle = document.getElementById('toggle-advanced-archived');
+      const panel = document.getElementById('advanced-filters-archived');
+      if (toggle && panel) {
+        toggle.addEventListener('click', () => {
+          const isHidden = panel.style.display === 'none' || panel.style.display === '';
+          panel.style.display = isHidden ? 'block' : 'none';
+          try { localStorage.setItem('studentsAdvancedFiltersArchived', isHidden ? '1' : '0'); } catch(e){}
+        });
+        try { const v = localStorage.getItem('studentsAdvancedFiltersArchived'); if (v === '1') panel.style.display = 'block'; } catch(e){}
+      }
+    })();
+  </script>
+  
+  </section>
+{% endblock %}

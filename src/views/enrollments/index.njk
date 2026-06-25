@@ -1,0 +1,220 @@
+﻿{% extends "layout.njk" %}
+{% block content %}
+  <section class="enrollment-layout">
+    <div class="panel">
+      <h2>Creer une inscription</h2>
+      <form method="post" action="/enrollments" class="stack">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+        <div class="form-grid">
+          <label>Eleve
+            <select name="studentId" id="studentIdSelect">
+              {% for student in students %}
+                <option value="{{ student._id }}">{{ student.matricule }} - {{ student.lastname }} {{ student.firstname }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Annee
+            <select name="schoolYearId">
+              {% for year in schoolYears %}
+                <option value="{{ year._id }}">{{ year.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Niveau
+            <select name="levelId">
+              {% for level in levels %}
+                <option value="{{ level._id }}">{{ level.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Type
+            <select name="type">
+              <option value="initial">initial</option>
+              <option value="re_enrollment">re_enrollment</option>
+              <option value="promotion">promotion</option>
+              <option value="repeat">repeat</option>
+            </select>
+          </label>
+          <label>Reduction de frais (optionnel)
+            <input type="number" name="discountAmount" min="0" step="0.01" placeholder="0.00" />
+          </label>
+        </div>
+        <button type="submit" class="btn-lg btn-icon icon-save">Creer l inscription</button>
+      </form>
+    </div>
+
+    <div class="panel status-panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Situation de l eleve</h2>
+          <p class="muted">Aperçu instantané pour décider de l inscription ou du règlement à prévoir.</p>
+        </div>
+        <span id="studentFinancialBadge" class="badge badge-neutral">En attente</span>
+      </div>
+
+      <div id="studentFinancialStatus" class="status-empty stack">
+        <p class="muted">Selectionne un eleve pour voir son etat financier.</p>
+      </div>
+    </div>
+
+    <div class="panel enrollment-list-panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Liste des inscriptions</h2>
+          <p class="muted">{{ pagination.total }} inscription(s) • page {{ pagination.page }} / {{ pagination.totalPages }}</p>
+        </div>
+        <a class="button secondary btn-icon icon-export" href="/enrollments/export">Exporter Excel</a>
+      </div>
+      <div class="table-shell">
+        <table>
+          <thead><tr><th>Eleve</th><th>Annee</th><th>Niveau</th><th>Statut</th><th></th></tr></thead>
+          <tbody>
+            {% for item in enrollments %}
+              <tr>
+                <td>{{ item.studentId.lastname if item.studentId }} {{ item.studentId.firstname if item.studentId }}</td>
+                <td>{{ item.schoolYearId.label if item.schoolYearId }}</td>
+                <td>{{ item.levelId.label if item.levelId }}</td>
+                <td>{% set value = item.status %}{% include "partials/status-badge.njk" %}</td>
+                <td><a class="button secondary btn-sm btn-icon icon-view" href="/enrollments/{{ item._id }}">Voir</a></td>
+              </tr>
+            {% else %}
+              <tr><td colspan="5">Aucune inscription.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="pagination-row">
+        <form method="get" action="/enrollments" class="inline-form">
+          <input type="hidden" name="pageSize" value="{{ pagination.pageSize }}" />
+          <input type="hidden" name="page" value="{{ pagination.prevPage }}" />
+          <button type="submit" class="secondary btn-sm btn-icon icon-prev" {% if not pagination.hasPrev %}disabled{% endif %}>Precedent</button>
+        </form>
+        <span class="muted">Page {{ pagination.page }} sur {{ pagination.totalPages }}</span>
+        <form method="get" action="/enrollments" class="inline-form">
+          <input type="hidden" name="pageSize" value="{{ pagination.pageSize }}" />
+          <input type="hidden" name="page" value="{{ pagination.nextPage }}" />
+          <button type="submit" class="secondary btn-sm btn-icon icon-next" {% if not pagination.hasNext %}disabled{% endif %}>Suivant</button>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    (() => {
+      const select = document.getElementById('studentIdSelect');
+      const container = document.getElementById('studentFinancialStatus');
+      const badge = document.getElementById('studentFinancialBadge');
+
+      if (!select || !container || !badge) {
+        return;
+      }
+
+      const renderEmpty = (message) => {
+        badge.textContent = 'En attente';
+        badge.className = 'badge badge-neutral';
+        container.className = 'status-empty stack';
+        container.innerHTML = `<p class="muted">${message}</p>`;
+      };
+
+      const renderStatus = (payload) => {
+        const currentEnrollment = payload.currentEnrollment || {};
+        const currentInvoice = payload.currentInvoice || {};
+        const totalDue = Number(payload.totalDue ?? 0);
+        const openArrearsAmount = Number(payload.openArrearsAmount ?? 0);
+        const outstandingInvoicesAmount = Number(payload.outstandingInvoicesAmount ?? 0);
+        const settlementLabel = payload.isSettled ? 'Soldé' : 'A régler';
+        const settlementClass = payload.isSettled ? 'badge' : 'badge badge-danger';
+        const invoiceProgress = currentInvoice.totalDue
+          ? Math.min(Math.round(((Number(currentInvoice.paidAmount ?? 0) / Number(currentInvoice.totalDue)) * 100)), 100)
+          : 0;
+
+        badge.textContent = settlementLabel;
+        badge.className = settlementClass;
+
+        container.className = 'status-summary';
+        container.innerHTML = `
+          <div class="status-hero ${payload.isSettled ? 'is-settled' : 'needs-payment'}">
+            <div>
+              <p class="eyebrow">Etat financier</p>
+              <h3>${settlementLabel}</h3>
+              <p class="muted">${payload.isSettled ? 'Aucun solde à régulariser.' : 'Le dossier comporte encore des montants à solder.'}</p>
+            </div>
+            <div class="status-amount">
+              <span>Total à solder</span>
+              <strong>${totalDue}</strong>
+            </div>
+          </div>
+
+          <div class="status-metrics">
+            <article class="status-metric">
+              <span>Dernière inscription</span>
+              <strong>${currentEnrollment.schoolYearId?.label || '-'}</strong>
+            </article>
+            <article class="status-metric">
+              <span>Niveau actuel</span>
+              <strong>${currentEnrollment.levelId?.label || '-'}</strong>
+            </article>
+            <article class="status-metric">
+              <span>Facture en cours</span>
+              <strong>${currentInvoice.status || '-'}</strong>
+            </article>
+            <article class="status-metric">
+              <span>Reste facture</span>
+              <strong>${Number(currentInvoice.balanceDue ?? 0)}</strong>
+            </article>
+          </div>
+
+          <div class="status-breakdown">
+            <div>
+              <span>Impayes reportes</span>
+              <strong>${openArrearsAmount}</strong>
+            </div>
+            <div>
+              <span>Factures restantes</span>
+              <strong>${outstandingInvoicesAmount}</strong>
+            </div>
+            <div>
+              <span>Dossiers ouverts</span>
+              <strong>${payload.openArrearsCount ?? 0}</strong>
+            </div>
+          </div>
+
+          <div class="status-progress">
+            <div class="status-progress-head">
+              <span>Avancement du règlement de la facture actuelle</span>
+              <strong>${invoiceProgress}%</strong>
+            </div>
+            <div class="progress-bar"><span style="width:${invoiceProgress}%"></span></div>
+          </div>
+        `;
+      };
+
+      const loadStatus = async () => {
+        const studentId = select.value;
+        if (!studentId) {
+          renderEmpty('Selectionne un eleve pour voir son etat financier.');
+          return;
+        }
+
+        renderEmpty('Chargement de la situation...');
+
+        try {
+          const response = await fetch(`/students/${studentId}/financial-status`, {
+            headers: { 'Accept': 'application/json' },
+          });
+
+          if (!response.ok) {
+            throw new Error('Impossible de charger la situation');
+          }
+
+          renderStatus(await response.json());
+        } catch (error) {
+          renderEmpty('Situation indisponible pour cet eleve.');
+        }
+      };
+
+      select.addEventListener('change', loadStatus);
+      loadStatus();
+    })();
+  </script>
+{% endblock %}

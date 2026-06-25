@@ -1,0 +1,109 @@
+﻿{% extends "layout.njk" %}
+{% block content %}
+  <section class="grid cols-2">
+    <div class="panel">
+      <h2>{% if editFee %}Modifier frais{% else %}Ajouter frais{% endif %}</h2>
+      <form method="post" action="{% if editFee %}/settings/fees/{{ editFee._id }}{% else %}/settings/fees{% endif %}" class="stack">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+        {% if editFee %}
+          <input type="hidden" name="schoolYearId" value="{{ editFee.schoolYearId._id }}" />
+          <input type="hidden" name="levelId" value="{{ editFee.levelId._id }}" />
+        {% endif %}
+        <div class="form-grid">
+          <label>Annee
+            <select name="schoolYearId" {% if editFee %}disabled{% endif %}>
+              {% for year in schoolYears %}
+                <option value="{{ year._id }}" {% if editFee and editFee.schoolYearId._id == year._id %}selected{% endif %}>{{ year.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Niveau
+            <select name="levelId" {% if editFee %}disabled{% endif %}>
+              {% for level in levels %}
+                <option value="{{ level._id }}" {% if editFee and editFee.levelId._id == level._id %}selected{% endif %}>{{ level.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Frais inscription<input type="number" name="registrationFee" value="{{ editFee.registrationFee if editFee else '' }}" min="0" required /></label>
+          <label>Ecolage<input type="number" name="tuitionFee" value="{{ editFee.tuitionFee if editFee else '' }}" min="0" required /></label>
+        </div>
+        <div class="stack" style="gap: 8px; align-items: flex-start;">
+          <button type="submit" class="btn-icon icon-save">{% if editFee %}Mettre a jour{% else %}Enregistrer les frais{% endif %}</button>
+          {% if editFee %}
+            <a class="button secondary" href="/settings/fees">Annuler</a>
+          {% endif %}
+        </div>
+      </form>
+
+      <hr />
+
+      <h3>Import Excel des frais</h3>
+      <p>Colonnes attendues: annee, niveau, frais_inscription, ecolage</p>
+      <form method="post" action="/settings/fees/import" enctype="multipart/form-data" class="stack">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+        <label>Fichier Excel (.xlsx)
+          <input type="file" name="file" accept=".xlsx,.xls" required />
+        </label>
+        <button type="submit" class="secondary btn-icon icon-import">Importer les frais</button>
+      </form>
+      <hr />
+      <form method="post" action="/settings/payment-allocation" class="stack">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+        <label>Regle d imputation
+          <select name="value">
+            <option value="arrears_first">arrears_first</option>
+            <option value="current_fees_first">current_fees_first</option>
+          </select>
+        </label>
+        <div class="muted">
+          <p><strong>Signification:</strong></p>
+          <ul class="simple-list">
+            <li><strong>arrears_first</strong>: le paiement couvre d abord les impayes reportes, puis la facture courante.</li>
+            <li><strong>current_fees_first</strong>: le paiement couvre d abord la facture courante, puis les impayes reportes.</li>
+          </ul>
+        </div>
+        <button type="submit" class="secondary btn-icon icon-save">Mettre a jour la regle</button>
+      </form>
+
+      <hr />
+
+      <h3>Parametrage du matricule</h3>
+      <p>Format genere: <strong>{{ matriculePreview }}</strong></p>
+      <form method="post" action="/settings/matricule-rule" class="stack">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+        <div class="form-grid">
+          <label>Prefixe<input name="prefix" value="{{ matriculeRule.prefix }}" required /></label>
+          <label>Separateur<input name="separator" value="{{ matriculeRule.separator }}" required /></label>
+          <label>Nombre de chiffres<input type="number" name="padding" min="1" value="{{ matriculeRule.padding }}" required /></label>
+          <label>Debut compteur<input type="number" name="startAt" min="1" value="{{ matriculeRule.startAt }}" required /></label>
+        </div>
+        <button type="submit" class="secondary btn-icon icon-save">Mettre a jour le matricule</button>
+      </form>
+    </div>
+    <div class="panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Grille des frais</h2>
+          <p class="muted">Télécharge la grille des frais au format Excel.</p>
+        </div>
+        <a class="button secondary btn-icon icon-export" href="/settings/fees/export">Exporter Excel</a>
+      </div>
+      <table>
+        <thead><tr><th>Annee</th><th>Niveau</th><th>Inscription</th><th>Ecolage</th><th>Actions</th></tr></thead>
+        <tbody>
+          {% for item in feeSchedules %}
+            <tr>
+              <td>{{ item.schoolYearId.label if item.schoolYearId }}</td>
+              <td>{{ item.levelId.label if item.levelId }}</td>
+              <td>{{ item.registrationFee }}</td>
+              <td>{{ item.tuitionFee }}</td>
+              <td><a class="button btn-sm" href="/settings/fees/{{ item._id }}/edit">Modifier</a></td>
+            </tr>
+          {% else %}
+            <tr><td colspan="5">Aucun frais configure.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

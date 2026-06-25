@@ -1,0 +1,46 @@
+﻿{% extends "layout.njk" %}
+{% block content %}
+  <section class="panel">
+    <div class="panel-heading">
+      <div>
+        <h2>Eleves soldes</h2>
+        <p class="muted">Export Excel des élèves totalement réglés.</p>
+      </div>
+      <a class="button secondary btn-icon icon-export" href="/reports/paid-students/export">Exporter Excel</a>
+    </div>
+    <p class="muted">Clique sur un en-tete pour trier le tableau.</p>
+    <p class="muted">{{ report.length }} facture(s) totalement reglee(s).</p>
+    <div class="table-shell">
+      <table class="table-report js-sortable">
+        <thead>
+          <tr>
+            <th class="sortable" data-column-index="0" data-sort-type="text">Eleve</th>
+            <th class="sortable" data-column-index="1" data-sort-type="text">Matricule</th>
+            <th class="sortable" data-column-index="2" data-sort-type="text">Annee</th>
+            <th class="sortable" data-column-index="3" data-sort-type="text">Niveau</th>
+            <th class="sortable" data-column-index="4" data-sort-type="number">Total du</th>
+            <th class="sortable" data-column-index="5" data-sort-type="number">Paye</th>
+            <th class="sortable" data-column-index="6" data-sort-type="number">Reste</th>
+            <th class="sortable" data-column-index="7" data-sort-type="text">Statut</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in report %}
+            <tr>
+              <td>{{ item.enrollmentId.studentId.lastname if item.enrollmentId and item.enrollmentId.studentId }} {{ item.enrollmentId.studentId.firstname if item.enrollmentId and item.enrollmentId.studentId }}</td>
+              <td>{{ item.enrollmentId.studentId.matricule if item.enrollmentId and item.enrollmentId.studentId }}</td>
+              <td>{{ item.enrollmentId.schoolYearId.label if item.enrollmentId and item.enrollmentId.schoolYearId }}</td>
+              <td>{{ item.enrollmentId.levelId.label if item.enrollmentId and item.enrollmentId.levelId }}</td>
+              <td>{{ item.totalDue }}</td>
+              <td>{{ item.paidAmount }}</td>
+              <td>{{ item.balanceDue }}</td>
+              <td>{% set value = item.status or 'paid' %}{% include "partials/status-badge.njk" %}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="8">Aucun eleve solde.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

@@ -1,0 +1,31 @@
+{% extends "login-layout.njk" %}
+
+{% block content %}
+<section class="panel auth-panel">
+  <div class="auth-panel__header">
+    <p class="eyebrow">Accès sécurisé</p>
+    <h3>Connexion</h3>
+    <p class="muted">Session, RBAC et protection CSRF activées.</p>
+  </div>
+
+  <form action="/login" method="post" class="stack auth-form">
+    <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+
+    <div class="field">
+      <label for="email">
+        <span>Email</span>
+        <input id="email" type="email" name="email" required placeholder="exemple@ecole.local" />
+      </label>
+    </div>
+
+    <div class="field">
+      <label for="password">
+        <span>Mot de passe</span>
+        <input id="password" type="password" name="password" required placeholder="••••••••" />
+      </label>
+    </div>
+
+    <button type="submit" class="button full-width">Se connecter</button>
+  </form>
+</section>
+{% endblock %}

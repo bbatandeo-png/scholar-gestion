@@ -1,0 +1,5 @@
+matricule,nom,prenoms,sexe,date_naissance,lieu_naissance,quartier
+MAT-100,Doe,Jane,F,2014-05-12,Abidjan,Cocody
+MAT-101,Konan,Awa,F,2013-10-03,Bouake,Belleville
+MAT-102,Yao,Lina,F,2012-03-10,Man,Nord
+MAT-103,Kouassi,Marc,M,2012-08-01,Daloa,Centre

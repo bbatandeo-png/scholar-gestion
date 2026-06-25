@@ -1,0 +1,42 @@
+﻿{% extends "layout.njk" %}
+{% block content %}
+  <section class="panel">
+    <div class="panel-heading">
+      <div>
+        <h2>Impayes reportes</h2>
+        <p class="muted">{{ pagination.total }} impaye(s) • page {{ pagination.page }} / {{ pagination.totalPages }}</p>
+      </div>
+      <a class="button secondary btn-icon icon-export" href="/arrears/export">Exporter Excel</a>
+    </div>
+    <div class="table-shell">
+      <table>
+        <thead><tr><th>Eleve</th><th>Montant initial</th><th>Montant restant</th><th>Statut</th></tr></thead>
+        <tbody>
+          {% for item in arrears %}
+            <tr>
+              <td>{{ item.studentId.lastname if item.studentId }} {{ item.studentId.firstname if item.studentId }}</td>
+              <td>{{ item.amountInitial }}</td>
+              <td>{{ item.amountRemaining }}</td>
+              <td>{% set value = item.status %}{% include "partials/status-badge.njk" %}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="4">Aucun impaye reporte.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination-row">
+      <form method="get" action="/arrears" class="inline-form">
+        <input type="hidden" name="pageSize" value="{{ pagination.pageSize }}" />
+        <input type="hidden" name="page" value="{{ pagination.prevPage }}" />
+        <button type="submit" class="secondary btn-sm btn-icon icon-prev" {% if not pagination.hasPrev %}disabled{% endif %}>Precedent</button>
+      </form>
+      <span class="muted">Page {{ pagination.page }} sur {{ pagination.totalPages }}</span>
+      <form method="get" action="/arrears" class="inline-form">
+        <input type="hidden" name="pageSize" value="{{ pagination.pageSize }}" />
+        <input type="hidden" name="page" value="{{ pagination.nextPage }}" />
+        <button type="submit" class="secondary btn-sm btn-icon icon-next" {% if not pagination.hasNext %}disabled{% endif %}>Suivant</button>
+      </form>
+    </div>
+  </section>
+{% endblock %}

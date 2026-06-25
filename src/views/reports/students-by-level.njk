@@ -1,0 +1,33 @@
+﻿{% extends "layout.njk" %}
+{% block content %}
+  <section class="panel">
+    <div class="panel-heading">
+      <div>
+        <h2>Eleves par niveau</h2>
+        <p class="muted">Export Excel de la synthese par niveau.</p>
+      </div>
+      <a class="button secondary btn-icon icon-export" href="/reports/students-by-level/export">Exporter Excel</a>
+    </div>
+    <p class="muted">Clique sur un en-tete pour trier le tableau.</p>
+    <div class="table-shell">
+      <table class="table-report js-sortable">
+        <thead>
+          <tr>
+            <th class="sortable" data-column-index="0" data-sort-type="text">Niveau (ID)</th>
+            <th class="sortable" data-column-index="1" data-sort-type="number">Total eleves actifs</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in report %}
+            <tr>
+              <td>{{ item._id }}</td>
+              <td>{{ item.total }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="2">Aucune donnee disponible.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

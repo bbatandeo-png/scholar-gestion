@@ -1,0 +1,184 @@
+﻿{% extends "layout.njk" %}
+{% block content %}
+  <section class="panel">
+    <div class="topbar">
+      <div class="topbar-heading">
+        <div class="topbar-title-row">
+          <h2>Élèves</h2>
+          <p class="muted">{{ pagination.total }} élève(s) • page {{ pagination.page }} / {{ pagination.totalPages }}</p>
+        </div>
+      </div>
+
+      <div class="topbar-actions">
+        <form method="get" action="/students" class="inline-form" id="main-search">
+          <label style="display:flex;gap:8px;align-items:center;">
+            <input type="search" name="q" value="{{ query }}" placeholder="Rechercher par nom, prénom ou matricule" style="min-width:320px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);" />
+            <button type="submit" class="button btn-icon icon-search">Rechercher</button>
+            <button type="button" id="toggle-advanced" class="button secondary">Filtres</button>
+          </label>
+        </form>
+
+        <a class="button secondary" href="/students/search">Anciens élèves</a>
+
+        <form method="get" action="/students/export" class="inline-form">
+          <input type="hidden" name="q" value="{{ query }}" />
+          <button type="submit" class="button secondary btn-icon icon-export">Exporter</button>
+        </form>
+      </div>
+    </div>
+
+    <div id="advanced-filters" style="display:none;margin-top:14px;">
+      <div class="panel form-section">
+        <form method="get" action="/students" class="form-grid" id="advanced-search">
+          <input type="hidden" name="q" value="{{ query }}" />
+          <label>Niveau
+            <input name="level" placeholder="Ex: 6ème, 5ème" />
+          </label>
+          <label>Statut
+            <select name="status">
+              <option value="">Tous</option>
+              <option value="active">Actif</option>
+              <option value="inactive">Inactif</option>
+            </select>
+          </label>
+          <label>Matricule
+            <input name="matricule" placeholder="Matricule exact" />
+          </label>
+          <label>Année scolaire
+            <input name="schoolYear" placeholder="Ex: 2025/2026" />
+          </label>
+          <div>
+            <button type="submit" class="button">Appliquer</button>
+            <a href="/students" class="button secondary">Réinitialiser</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <section class="grid cols-2">
+    <div class="panel">
+      <h2>Creer un eleve</h2>
+      <form method="post" action="/students" class="stack">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+        <div class="form-grid">
+          <label>Matricule
+            <input name="matricule" placeholder="Laisser vide pour generation automatique" />
+          </label>
+          <label>Nom<input name="lastname" required /></label>
+          <label>Prenoms<input name="firstname" required /></label>
+          <label>Sexe<input name="gender" required /></label>
+          <label>Date de naissance<input type="date" name="birthDate" required /></label>
+          <label>Lieu de naissance<input name="birthPlace" required /></label>
+          <label>Quartier<input name="district" required /></label>
+        </div>
+
+        <h3>Responsables (parents / tuteur)</h3>
+        <p class="muted">Renseigne au moins les informations disponibles (nom, prenoms, contact).</p>
+        <div class="form-grid">
+          <input type="hidden" name="guardians[0][type]" value="father" />
+          <label>Nom complet du pere
+            <input name="guardians[0][fullname]" placeholder="Nom complet du pere" />
+          </label>
+          <label>Contact du pere
+            <input name="guardians[0][phone]" placeholder="Telephone du pere" />
+          </label>
+          <label>Adresse du pere
+            <input name="guardians[0][address]" placeholder="Adresse du pere" />
+          </label>
+
+          <input type="hidden" name="guardians[1][type]" value="mother" />
+          <label>Nom complet de la mere
+            <input name="guardians[1][fullname]" placeholder="Nom complet de la mere" />
+          </label>
+          <label>Contact de la mere
+            <input name="guardians[1][phone]" placeholder="Telephone de la mere" />
+          </label>
+          <label>Adresse de la mere
+            <input name="guardians[1][address]" placeholder="Adresse de la mere" />
+          </label>
+
+          <input type="hidden" name="guardians[2][type]" value="tutor" />
+          <label>Nom complet du tuteur
+            <input name="guardians[2][fullname]" placeholder="Nom complet du tuteur" />
+          </label>
+          <label>Contact du tuteur
+            <input name="guardians[2][phone]" placeholder="Telephone du tuteur" />
+          </label>
+          <label>Adresse du tuteur
+            <input name="guardians[2][address]" placeholder="Adresse du tuteur" />
+          </label>
+        </div>
+
+        <p class="muted">Le matricule sera genere automatiquement si le champ reste vide.</p>
+        <button type="submit" class="btn-lg btn-icon icon-save">Creer le dossier</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>Liste des eleves</h2>
+      <p class="muted">{{ pagination.total }} eleve(s) • page {{ pagination.page }} / {{ pagination.totalPages }}</p>
+      <div class="table-shell">
+        <table class="js-sortable">
+          <thead>
+            <tr>
+              <th class="sortable" data-column-index="0" data-sort-type="text">Matricule</th>
+              <th class="sortable" data-column-index="1" data-sort-type="text">Nom complet</th>
+              <th class="sortable" data-column-index="2" data-sort-type="text">Niveau</th>
+              <th class="sortable" data-column-index="3" data-sort-type="text">Statut</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for student in students %}
+              <tr>
+                <td>{{ student.matricule }}</td>
+                <td>{{ student.lastname }} {{ student.firstname }}</td>
+                <td>{{ student.currentLevel }}</td>
+                <td>{% set value = student.status %}{% include "partials/status-badge.njk" %}</td>
+                <td><a class="button secondary btn-sm btn-icon icon-view" href="/students/{{ student._id }}">Voir</a></td>
+              </tr>
+            {% else %}
+              <tr><td colspan="5">Aucun eleve trouve.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="pagination-row">
+        <form method="get" action="/students" class="inline-form">
+          <input type="hidden" name="q" value="{{ query }}" />
+          <input type="hidden" name="pageSize" value="{{ pagination.pageSize }}" />
+          <input type="hidden" name="page" value="{{ pagination.prevPage }}" />
+          <button type="submit" class="secondary btn-sm btn-icon icon-prev" {% if not pagination.hasPrev %}disabled{% endif %}>Precedent</button>
+        </form>
+        <span class="muted">Page {{ pagination.page }} sur {{ pagination.totalPages }}</span>
+        <form method="get" action="/students" class="inline-form">
+          <input type="hidden" name="q" value="{{ query }}" />
+          <input type="hidden" name="pageSize" value="{{ pagination.pageSize }}" />
+          <input type="hidden" name="page" value="{{ pagination.nextPage }}" />
+          <button type="submit" class="secondary btn-sm btn-icon icon-next" {% if not pagination.hasNext %}disabled{% endif %}>Suivant</button>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    (function(){
+      const toggle = document.getElementById('toggle-advanced');
+      const panel = document.getElementById('advanced-filters');
+      if (toggle && panel) {
+        toggle.addEventListener('click', () => {
+          const isHidden = panel.style.display === 'none' || panel.style.display === '';
+          panel.style.display = isHidden ? 'block' : 'none';
+          try { localStorage.setItem('studentsAdvancedFilters', isHidden ? '1' : '0'); } catch(e){}
+        });
+
+        // restore state
+        try {
+          const v = localStorage.getItem('studentsAdvancedFilters');
+          if (v === '1') panel.style.display = 'block';
+        } catch(e){}
+      }
+    })();
+  </script>
+{% endblock %}

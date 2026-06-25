@@ -1,0 +1,124 @@
+﻿{% extends "layout.njk" %}
+{% block content %}
+  <section class="panel">
+    <h2>Synthese eleve</h2>
+    {% if currentEnrollment %}
+      <p><strong>Niveau actuel:</strong> {{ currentEnrollment.levelId.label if currentEnrollment.levelId }} - {{ currentEnrollment.schoolYearId.label if currentEnrollment.schoolYearId }}</p>
+      <p><strong>Statut inscription:</strong> {% set value = currentEnrollment.status %}{% include "partials/status-badge.njk" %}</p>
+    {% else %}
+      <p>Aucune inscription active ou historique disponible.</p>
+    {% endif %}
+  </section>
+
+  <section class="grid cols-2">
+    <div class="panel">
+      <h2>Dossier eleve</h2>
+      <form method="post" action="/students/{{ student._id }}?_method=PUT" class="stack">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+        <div class="form-grid">
+          <label>Matricule<input name="matricule" value="{{ student.matricule }}" /></label>
+          <label>Nom<input name="lastname" value="{{ student.lastname }}" /></label>
+          <label>Prenoms<input name="firstname" value="{{ student.firstname }}" /></label>
+          <label>Sexe<input name="gender" value="{{ student.gender }}" /></label>
+          <label>Date de naissance<input type="date" name="birthDate" value="{{ student.birthDate | string | truncate(10, true, '') }}" /></label>
+          <label>Lieu de naissance<input name="birthPlace" value="{{ student.birthPlace }}" /></label>
+          <label>Quartier<input name="district" value="{{ student.district }}" /></label>
+        </div>
+
+        <h3>Responsables (parents / tuteur)</h3>
+        <div class="form-grid">
+          <input type="hidden" name="guardians[0][type]" value="father" />
+          <label>Nom complet du pere
+            <input name="guardians[0][fullname]" value="{{ fatherGuardian.lastname if fatherGuardian }} {{ fatherGuardian.firstname if fatherGuardian }}" />
+          </label>
+          <label>Contact du pere
+            <input name="guardians[0][phone]" value="{{ fatherGuardian.phone if fatherGuardian }}" />
+          </label>
+          <label>Adresse du pere
+            <input name="guardians[0][address]" value="{{ fatherGuardian.address if fatherGuardian }}" />
+          </label>
+
+          <input type="hidden" name="guardians[1][type]" value="mother" />
+          <label>Nom complet de la mere
+            <input name="guardians[1][fullname]" value="{{ motherGuardian.lastname if motherGuardian }} {{ motherGuardian.firstname if motherGuardian }}" />
+          </label>
+          <label>Contact de la mere
+            <input name="guardians[1][phone]" value="{{ motherGuardian.phone if motherGuardian }}" />
+          </label>
+          <label>Adresse de la mere
+            <input name="guardians[1][address]" value="{{ motherGuardian.address if motherGuardian }}" />
+          </label>
+
+          <input type="hidden" name="guardians[2][type]" value="tutor" />
+          <label>Nom complet du tuteur
+            <input name="guardians[2][fullname]" value="{{ tutorGuardian.lastname if tutorGuardian }} {{ tutorGuardian.firstname if tutorGuardian }}" />
+          </label>
+          <label>Contact du tuteur
+            <input name="guardians[2][phone]" value="{{ tutorGuardian.phone if tutorGuardian }}" />
+          </label>
+          <label>Adresse du tuteur
+            <input name="guardians[2][address]" value="{{ tutorGuardian.address if tutorGuardian }}" />
+          </label>
+        </div>
+
+        <div class="actions">
+          <button type="submit">Mettre a jour</button>
+          <a class="button secondary" href="/students/{{ student._id }}/reenroll">Reinscription</a>
+        </div>
+      </form>
+    </div>
+    <div class="panel">
+      <h2>Responsables</h2>
+      <table>
+        <thead><tr><th>Type</th><th>Nom</th><th>Contact</th></tr></thead>
+        <tbody>
+          {% for guardian in guardians %}
+            <tr><td>{{ guardian.type }}</td><td>{{ guardian.lastname }} {{ guardian.firstname }}</td><td>{{ guardian.phone or '-' }}</td></tr>
+          {% else %}
+            <tr><td colspan="3">Aucun responsable enregistre.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Historique administratif et financier</h2>
+    <table>
+      <thead><tr><th>Annee</th><th>Niveau</th><th>Type</th><th>Statut</th></tr></thead>
+      <tbody>
+        {% for item in history %}
+          <tr>
+            <td>{{ item.schoolYearId.label if item.schoolYearId }}</td>
+            <td>{{ item.levelId.label if item.levelId }}</td>
+            <td>{{ item.type }}</td>
+            <td>{% set value = item.status %}{% include "partials/status-badge.njk" %}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="4">Aucun historique.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel">
+    <h2>Historique des paiements</h2>
+    <table>
+      <thead><tr><th>Date</th><th>Montant</th><th>Mode</th><th>Recu</th><th>Annee</th><th>Niveau</th></tr></thead>
+      <tbody>
+        {% for payment in paymentHistory %}
+          <tr>
+            <td>{{ payment.paidAt }}</td>
+            <td>{{ payment.amount }}</td>
+            <td>{{ payment.method }}</td>
+            <td><a class="button secondary" href="/receipts/{{ payment._id }}">{{ payment.receiptNumber }}</a></td>
+            <td>{{ payment.enrollment.schoolYearId.label if payment.enrollment and payment.enrollment.schoolYearId }}</td>
+            <td>{{ payment.enrollment.levelId.label if payment.enrollment and payment.enrollment.levelId }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="6">Aucun paiement enregistre pour cet eleve.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endblock %}

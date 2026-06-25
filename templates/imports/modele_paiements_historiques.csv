@@ -1,0 +1,5 @@
+matricule,annee,niveau,date_paiement,montant,methode,reference
+MAT-001,2026-2027,CP1,2026-10-05,15000,cash,PAI-001
+MAT-001,2026-2027,CP1,2026-11-05,10000,mobile_money,PAI-002
+MAT-002,2026-2027,CE1,2026-10-12,20000,bank_transfer,VIR-4451
+MAT-003,2026-2027,CM1,2026-10-20,5000,cash,PAI-003

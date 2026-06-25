@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ title or 'Scolar-Gestion' }}</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div>
+          <p class="eyebrow">Complexe scolaire</p>
+          <h1>Scolar-Gestion</h1>
+        </div>
+        <nav class="nav-links">
+          {% set role = currentUser.role if currentUser else '' %}
+          <a href="/dashboard" class="{% if currentPath == '/dashboard' %}is-active{% endif %}">Dashboard</a>
+          {% if role == 'super_admin' or role == 'direction' or role == 'secretariat' or role == 'auditeur' %}
+            <a href="/students" class="{% if currentPath and currentPath.startsWith('/students') %}is-active{% endif %}">Eleves</a>
+            <a href="/students/search" class="{% if currentPath == '/students/search' %}is-active{% endif %}">Recherche ancien eleve</a>
+          {% endif %}
+          {% if role == 'super_admin' or role == 'direction' or role == 'secretariat' or role == 'comptabilite' or role == 'auditeur' %}
+            <a href="/enrollments" class="{% if currentPath and currentPath.startsWith('/enrollments') %}is-active{% endif %}">Inscriptions</a>
+          {% endif %}
+          {% if role == 'super_admin' or role == 'direction' or role == 'comptabilite' or role == 'auditeur' %}
+            <a href="/arrears" class="{% if currentPath and currentPath.startsWith('/arrears') %}is-active{% endif %}">Impayes</a>
+          {% endif %}
+          {% if role == 'super_admin' or role == 'direction' or role == 'auditeur' %}
+            <a href="/promotions" class="{% if currentPath and currentPath.startsWith('/promotions') %}is-active{% endif %}">Promotions</a>
+          {% endif %}
+          {% if role == 'super_admin' or role == 'direction' %}
+            <a href="/settings/school-years" class="{% if currentPath and currentPath.startsWith('/settings/school-years') %}is-active{% endif %}">Annees scolaires</a>
+            <a href="/settings/levels" class="{% if currentPath and currentPath.startsWith('/settings/levels') %}is-active{% endif %}">Niveaux</a>
+            <a href="/settings/fees" class="{% if currentPath and currentPath.startsWith('/settings/fees') %}is-active{% endif %}">Frais</a>
+          {% endif %}
+          {% if role == 'super_admin' %}
+            <a href="/users" class="{% if currentPath and currentPath.startsWith('/users') %}is-active{% endif %}">Utilisateurs</a>
+          {% endif %}
+          {% if role == 'comptabilite' %}
+            <a href="/reports/revenue" class="{% if currentPath and currentPath.startsWith('/reports') %}is-active{% endif %}">Rapports</a>
+          {% elif role == 'super_admin' or role == 'direction' or role == 'auditeur' %}
+            <a href="/reports/students-by-level" class="{% if currentPath and currentPath.startsWith('/reports') %}is-active{% endif %}">Rapports</a>
+          {% endif %}
+        </nav>
+      </aside>
+      <main class="content">
+        <header class="topbar">
+          <div class="topbar-heading">
+            <p class="eyebrow">Application administrative et financiere</p>
+            <div class="topbar-title-row">
+              {% if currentUser and currentPath and currentPath != '/dashboard' %}
+                <button
+                  type="button"
+                  class="button secondary btn-sm btn-icon icon-prev"
+                  onclick="if (window.history.length > 1) { window.history.back(); } else { window.location.href = '/dashboard'; }"
+                >
+                  Retour
+                </button>
+              {% endif %}
+              <h2>{{ title or 'Scolar-Gestion' }}</h2>
+            </div>
+          </div>
+          <div class="topbar-actions">
+            {% if currentUser %}
+              <span class="badge badge-neutral">{{ currentUser.role }}</span>
+              <form action="/logout" method="post">
+                <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+                <button type="submit" class="button secondary">Deconnexion</button>
+              </form>
+            {% else %}
+              <a href="/login" class="button">Connexion</a>
+            {% endif %}
+          </div>
+        </header>
+
+        {% if flash %}
+          <div class="flash {{ flash.type }}">{{ flash.message }}</div>
+        {% endif %}
+
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+    <script>
+      (() => {
+        const tables = document.querySelectorAll('table.js-sortable');
+
+        tables.forEach((table) => {
+          const body = table.querySelector('tbody');
+          const headers = Array.from(table.querySelectorAll('th.sortable'));
+
+          if (!body || headers.length === 0) {
+            return;
+          }
+
+          headers.forEach((header) => {
+            header.addEventListener('click', () => {
+              const index = Number(header.dataset.columnIndex || '-1');
+              const type = header.dataset.sortType || 'text';
+
+              if (index < 0) {
+                return;
+              }
+
+              const rows = Array.from(body.querySelectorAll('tr'));
+              const current = header.dataset.sortDirection === 'asc' ? 'asc' : 'desc';
+              const next = current === 'asc' ? 'desc' : 'asc';
+
+              headers.forEach((th) => {
+                th.classList.remove('sort-asc', 'sort-desc');
+                th.dataset.sortDirection = '';
+              });
+
+              rows.sort((a, b) => {
+                const aText = (a.children[index]?.textContent || '').trim();
+                const bText = (b.children[index]?.textContent || '').trim();
+
+                if (type === 'number') {
+                  const aNum = Number(aText.replace(/[^0-9.-]/g, '')) || 0;
+                  const bNum = Number(bText.replace(/[^0-9.-]/g, '')) || 0;
+                  return next === 'asc' ? aNum - bNum : bNum - aNum;
+                }
+
+                return next === 'asc'
+                  ? aText.localeCompare(bText, 'fr', { sensitivity: 'base' })
+                  : bText.localeCompare(aText, 'fr', { sensitivity: 'base' });
+              });
+
+              rows.forEach((row) => body.appendChild(row));
+              header.dataset.sortDirection = next;
+              header.classList.add(next === 'asc' ? 'sort-asc' : 'sort-desc');
+            });
+          });
+        });
+      })();
+    </script>
+  </body>
+</html>
