@@ -9,7 +9,7 @@ export class RootController {
     return;
   }
 
-  @Get('/health')
+  @Get(['/health','/scholar', '/scholar/'])
   health(@Req() req: Request, @Res() res: Response) {
     return res.json({
       ok: true,
