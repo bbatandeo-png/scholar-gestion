@@ -17,6 +17,14 @@ export class UsersService {
     return this.userModel.findById(id).exec();
   }
 
+  async findByIds(ids: string[]) {
+    return this.userModel
+      .find({ _id: { $in: ids } })
+      .select({ name: 1, email: 1, role: 1 })
+      .lean()
+      .exec();
+  }
+
   async list() {
     return this.userModel
       .find()

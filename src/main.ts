@@ -45,10 +45,26 @@ async function bootstrap() {
   app.setBaseViewsDir(viewsDir);
   app.setViewEngine('njk');
   app.useStaticAssets(publicDir);
-  nunjucks.configure(viewsDir, {
+  const nunjucksEnv = nunjucks.configure(viewsDir, {
     autoescape: true,
     express: app.getHttpAdapter().getInstance(),
     noCache: true,
+  });
+
+  nunjucksEnv.addFilter('formatDate', (value: unknown) => {
+    if (!value) {
+      return '';
+    }
+
+    const date = value instanceof Date ? value : new Date(value as string | number);
+    if (Number.isNaN(date.getTime())) {
+      return '';
+    }
+
+    return date.toLocaleString('fr-FR', {
+      dateStyle: 'long',
+      timeStyle: 'short',
+    });
   });
 
   app.use(cookieParser());

@@ -22,4 +22,12 @@ export class AuditService {
       details: payload.details ?? {},
     });
   }
+
+  async findByEntityTypes(entityTypes: string[], entityId: string) {
+    return this.auditLogModel
+      .find({ entityType: { $in: entityTypes }, entityId })
+      .sort({ createdAt: -1 })
+      .lean()
+      .exec();
+  }
 }

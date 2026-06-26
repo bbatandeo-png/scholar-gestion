@@ -2,16 +2,62 @@
 {% block content %}
   <section class="grid cols-2">
     <div class="panel">
-      <h2>Inscription</h2>
+      <div class="panel-heading">
+        <div>
+          <h2>Inscription</h2>
+          <p class="muted">Modifiez les informations de base de l'inscription.</p>
+        </div>
+      </div>
       <p><strong>Eleve:</strong> {{ enrollment.studentId.lastname if enrollment.studentId }} {{ enrollment.studentId.firstname if enrollment.studentId }}</p>
       <p><strong>Annee:</strong> {{ enrollment.schoolYearId.label if enrollment.schoolYearId }}</p>
       <p><strong>Niveau:</strong> {{ enrollment.levelId.label if enrollment.levelId }}</p>
       <p><strong>Type:</strong> {{ enrollment.type }}</p>
       <p><strong>Statut:</strong> {% set value = enrollment.status %}{% include "partials/status-badge.njk" %}</p>
+
+      <form method="post" action="/enrollments/{{ enrollment._id }}?_method=PUT" class="stack">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+        <div class="form-grid">
+          <label>Eleve
+            <select name="studentId">
+              {% for student in students %}
+                <option value="{{ student._id }}" {% if enrollment.studentId and enrollment.studentId._id and student._id and enrollment.studentId._id == student._id %}selected{% endif %}>{{ student.matricule }} - {{ student.lastname }} {{ student.firstname }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Annee
+            <select name="schoolYearId">
+              {% for year in schoolYears %}
+                <option value="{{ year._id }}" {% if enrollment.schoolYearId and enrollment.schoolYearId._id and year._id and enrollment.schoolYearId._id == year._id %}selected{% endif %}>{{ year.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Niveau
+            <select name="levelId">
+              {% for level in levels %}
+                <option value="{{ level._id }}" {% if enrollment.levelId and enrollment.levelId._id and level._id and enrollment.levelId._id == level._id %}selected{% endif %}>{{ level.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Type
+            <select name="type">
+              <option value="initial" {% if enrollment.type == 'initial' %}selected{% endif %}>initial</option>
+              <option value="re_enrollment" {% if enrollment.type == 're_enrollment' %}selected{% endif %}>re_enrollment</option>
+              <option value="promotion" {% if enrollment.type == 'promotion' %}selected{% endif %}>promotion</option>
+              <option value="repeat" {% if enrollment.type == 'repeat' %}selected{% endif %}>repeat</option>
+            </select>
+          </label>
+        </div>
+        <button type="submit">Enregistrer les changements</button>
+      </form>
     </div>
 
     <div class="panel">
-      <h2>Facture</h2>
+      <div class="panel-heading">
+        <div>
+          <h2>Facture</h2>
+          <p class="muted">Gestion financière de l'inscription.</p>
+        </div>
+      </div>
       {% if invoice %}
         <p><strong>Frais d inscription:</strong> {{ invoice.registrationFee }}</p>
         <p><strong>Ecolage:</strong> {{ invoice.tuitionFee }}</p>
@@ -22,23 +68,79 @@
         <p><strong>Reste:</strong> {{ invoice.balanceDue }}</p>
         <p><strong>Statut:</strong> {% set value = invoice.status %}{% include "partials/status-badge.njk" %}</p>
 
-        <form method="post" action="/payments" class="stack">
-          <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
-          <input type="hidden" name="invoiceId" value="{{ invoice._id }}" />
-          <div class="form-grid">
-            <label>Montant<input type="number" name="amount" min="1" required /></label>
-            <label>Mode
-              <select name="method">
-                <option value="cash">cash</option>
-                <option value="mobile_money">mobile_money</option>
-                <option value="bank_transfer">bank_transfer</option>
-                <option value="other">other</option>
-              </select>
-            </label>
-            <label>Reference<input name="reference" /></label>
+        {% if currentUser and currentUser.role == 'super_admin' %}
+          <div class="stack">
+            <h3>Historique des modifications</h3>
+            {% if auditLogs and auditLogs.length %}
+              <ul class="audit-history">
+                {% for log in auditLogs %}
+                  <li>
+                    <strong>{{ log.actionLabel }}</strong><br>
+                    <small>
+                      Effectué par : {{ log.actorName }}
+                      le {{ log.createdAt | formatDate }}
+                    </small>
+                    {% if log.detailsSummary and log.detailsSummary.length %}
+                      <ul class="stack" style="margin-top: 0.35rem; padding-left: 1rem;">
+                        {% for item in log.detailsSummary %}
+                          <li>{{ item }}</li>
+                        {% endfor %}
+                      </ul>
+                    {% endif %}
+                  </li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <p>Aucune modification enregistrée.</p>
+            {% endif %}
           </div>
-          <button type="submit">Enregistrer le paiement</button>
-        </form>
+        {% endif %}
+
+        <div class="stack">
+          <h3>Paiement</h3>
+          <form method="post" action="/payments" class="stack">
+            <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+            <input type="hidden" name="invoiceId" value="{{ invoice._id }}" />
+            <div class="form-grid">
+              <label>Montant<input type="number" name="amount" min="1" required /></label>
+              <label>Mode
+                <select name="method">
+                  <option value="cash">cash</option>
+                  <option value="mobile_money">mobile_money</option>
+                  <option value="bank_transfer">bank_transfer</option>
+                  <option value="other">other</option>
+                </select>
+              </label>
+              <label>Reference<input name="reference" /></label>
+            </div>
+            <button type="submit">Enregistrer le paiement</button>
+          </form>
+        </div>
+
+        {% if currentUser and (currentUser.role == 'super_admin' or currentUser.role == 'comptabilite') %}
+          <div class="stack">
+            <h3>Modification financière</h3>
+            <p class="muted">Cette action est réservée au Super Administrateur ou au Comptable. Le motif est obligatoire.</p>
+            <form method="post" action="/enrollments/{{ enrollment._id }}/financial-details" class="stack">
+              <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+              <div class="form-grid">
+                <label>Frais d inscription
+                  <input type="number" name="registrationFee" value="{{ invoice.registrationFee }}" min="0" step="0.01" required />
+                </label>
+                <label>Remise appliquee
+                  <input type="number" name="discountAmount" value="{{ invoice.discountAmount }}" min="0" step="0.01" required />
+                </label>
+                <label>Montant paye
+                  <input type="number" name="paidAmount" value="{{ invoice.paidAmount }}" min="0" step="0.01" required />
+                </label>
+              </div>
+              <label>Motif de modification
+                <textarea name="reason" rows="3" required></textarea>
+              </label>
+              <button type="submit">Enregistrer la modification financiere</button>
+            </form>
+          </div>
+        {% endif %}
       {% else %}
         <p>Aucune facture disponible.</p>
       {% endif %}

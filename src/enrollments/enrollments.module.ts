@@ -6,6 +6,7 @@ import { BillingModule } from '../billing/billing.module';
 import { LevelsModule } from '../levels/levels.module';
 import { SchoolYearsModule } from '../school-years/school-years.module';
 import { StudentsModule } from '../students/students.module';
+import { UsersModule } from '../users/users.module';
 import { EnrollmentsController } from './enrollments.controller';
 import { EnrollmentsService } from './enrollments.service';
 import { Enrollment, EnrollmentSchema } from './schemas/enrollment.schema';
@@ -18,6 +19,7 @@ import { Enrollment, EnrollmentSchema } from './schemas/enrollment.schema';
 		SchoolYearsModule,
 		LevelsModule,
 		AuditModule,
+		UsersModule,
 		forwardRef(() => StudentsModule),
 	],
 	controllers: [EnrollmentsController],

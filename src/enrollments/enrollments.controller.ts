@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Post, Query, Render, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Query, Render, Req, Res, UseGuards } from '@nestjs/common';
+import { ForbiddenException } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { StudentsService } from '../students/students.service';
 import { LevelsService } from '../levels/levels.service';
@@ -82,10 +83,59 @@ export class EnrollmentsController {
   @Get('/:id')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT, Role.COMPTABILITE, Role.AUDITEUR)
   @Render('enrollments/detail')
-  async detail(@Param('id') id: string) {
+  async detail(@Param('id') id: string): Promise<{
+    title: string;
+    enrollment: any;
+    invoice: any;
+    auditLogs: any[];
+    students: any[];
+    schoolYears: any[];
+    levels: any[];
+  }> {
+    const detail = await this.enrollmentsService.findById(id);
     return {
       title: 'Detail inscription',
-      ...(await this.enrollmentsService.findById(id)),
+      ...detail,
+      students: await this.studentsService.list(),
+      schoolYears: await this.schoolYearsService.list(),
+      levels: await this.levelsService.list(),
     };
+  }
+
+  @Put('/:id')
+  @Roles(Role.SUPER_ADMIN, Role.SECRETARIAT)
+  async update(@Param('id') id: string, @Body() dto: CreateEnrollmentDto, @Req() req: Request, @Res() res: Response) {
+    await this.enrollmentsService.updateEnrollment(id, dto, req.session.user?.id);
+    setFlash(req, 'success', 'Inscription mise a jour');
+    return res.redirect(req.get('referer') || `/enrollments/${id}`);
+  }
+
+  @Post('/:id/financial-details')
+  @Roles(Role.SUPER_ADMIN, Role.COMPTABILITE)
+  async updateFinancialDetails(
+    @Param('id') id: string,
+    @Body() dto: { registrationFee?: string; discountAmount?: string; paidAmount?: string; reason?: string },
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const actorRole = req.session?.user?.role;
+    if (actorRole !== Role.SUPER_ADMIN && actorRole !== Role.COMPTABILITE) {
+      throw new ForbiddenException('Acces refuse pour ce role');
+    }
+
+    await this.enrollmentsService.updateFinancialDetails(
+      id,
+      {
+        registrationFee: dto.registrationFee !== undefined ? Number(dto.registrationFee) : undefined,
+        discountAmount: dto.discountAmount !== undefined ? Number(dto.discountAmount) : undefined,
+        paidAmount: dto.paidAmount !== undefined ? Number(dto.paidAmount) : undefined,
+        reason: dto.reason,
+      },
+      req.session.user?.id,
+      actorRole,
+    );
+
+    setFlash(req, 'success', 'Montants financiers mis a jour');
+    return res.redirect(req.get('referer') || `/enrollments/${id}`);
   }
 }

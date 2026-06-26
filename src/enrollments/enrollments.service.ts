@@ -1,4 +1,4 @@
-import { ConflictException, Inject, Injectable, NotFoundException, forwardRef } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, forwardRef } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Connection, Model } from 'mongoose';
 import { ArrearsService } from '../arrears/arrears.service';
@@ -9,13 +9,62 @@ import {
   EnrollmentStatus,
   EnrollmentType,
   FinalDecision,
+  Role,
 } from '../common/enums/domain.enums';
 import { runWithMongoTransactionFallback } from '../common/utils/mongo-transaction.util';
 import { LevelsService } from '../levels/levels.service';
 import { SchoolYearsService } from '../school-years/school-years.service';
 import { StudentsService } from '../students/students.service';
+import { UsersService } from '../users/users.service';
 import { CreateEnrollmentDto } from './dto/create-enrollment.dto';
 import { Enrollment, EnrollmentDocument } from './schemas/enrollment.schema';
+
+function getAuditActionLabel(action: string) {
+  switch (action) {
+    case AuditAction.DISCOUNT_APPLIED:
+      return 'Remise appliquée';
+    case AuditAction.ENROLLMENT_CREATED:
+      return 'Création d’inscription';
+    case AuditAction.REENROLLMENT_CREATED:
+      return 'Réinscription';
+    default:
+      return action.replace(/_/g, ' ');
+  }
+}
+
+function buildAuditDetailsSummary(details?: Record<string, unknown>) {
+  if (!details || typeof details !== 'object') {
+    return [];
+  }
+
+  const items: string[] = [];
+
+  if (Array.isArray(details.updatedFields) && details.updatedFields.length) {
+    items.push(`Champs modifiés : ${details.updatedFields.join(', ')}`);
+  }
+
+  if (details.reason) {
+    items.push(`Motif : ${String(details.reason)}`);
+  }
+
+  if (details.registrationFeeBefore !== undefined && details.registrationFeeAfter !== undefined) {
+    items.push(`Frais d'inscription : ${String(details.registrationFeeBefore)} → ${String(details.registrationFeeAfter)}`);
+  }
+
+  if (details.discountAmountBefore !== undefined && details.discountAmountAfter !== undefined) {
+    items.push(`Remise : ${String(details.discountAmountBefore)} → ${String(details.discountAmountAfter)}`);
+  }
+
+  if (details.paidAmountBefore !== undefined && details.paidAmountAfter !== undefined) {
+    items.push(`Montant payé : ${String(details.paidAmountBefore)} → ${String(details.paidAmountAfter)}`);
+  }
+
+  if (details.arrearsAmount !== undefined) {
+    items.push(`Impayés reportés : ${String(details.arrearsAmount)}`);
+  }
+
+  return items;
+}
 
 @Injectable()
 export class EnrollmentsService {
@@ -30,6 +79,7 @@ export class EnrollmentsService {
     @Inject(forwardRef(() => StudentsService))
     private readonly studentsService: StudentsService,
     @InjectConnection() private readonly connection: Connection,
+    private readonly usersService: UsersService,
   ) {}
 
   async list() {
@@ -68,7 +118,7 @@ export class EnrollmentsService {
     };
   }
 
-  async findById(id: string) {
+  async findById(id: string): Promise<{ enrollment: any; invoice: any; auditLogs: any[] }> {
     const enrollment = await this.enrollmentModel
       .findById(id)
       .populate('studentId')
@@ -81,7 +131,30 @@ export class EnrollmentsService {
     }
 
     const invoice = await this.billingService.findInvoiceByEnrollment(id);
-    return { enrollment, invoice };
+    const auditLogs = await this.getAuditHistoryForEnrollment(id);
+
+    return { enrollment, invoice, auditLogs };
+  }
+
+  private async getAuditHistoryForEnrollment(id: string) {
+    const logs = await this.auditService.findByEntityTypes(
+      ['Enrollment', 'EnrollmentInvoice'],
+      id,
+    );
+
+    const actorIds = Array.from(
+      new Set(logs.map((log) => log.actorId).filter((actorId): actorId is string => Boolean(actorId))),
+    );
+    const users = actorIds.length ? await this.usersService.findByIds(actorIds) : [];
+    const userById = new Map(users.map((user) => [String(user._id), user]));
+
+    return logs.map((log) => ({
+      ...log,
+      actor: log.actorId ? userById.get(String(log.actorId)) : null,
+      actorName: log.actorId ? userById.get(String(log.actorId))?.name ?? 'Utilisateur inconnu' : 'Système',
+      actionLabel: getAuditActionLabel(log.action),
+      detailsSummary: buildAuditDetailsSummary(log.details as Record<string, unknown> | undefined),
+    }));
   }
 
   async findStudentHistory(studentId: string) {
@@ -227,6 +300,96 @@ export class EnrollmentsService {
       },
       payload.actorId,
     );
+  }
+
+  async updateEnrollment(id: string, dto: Partial<CreateEnrollmentDto>, actorId?: string) {
+    const enrollment = await this.enrollmentModel.findById(id).exec();
+    if (!enrollment) {
+      throw new NotFoundException('Inscription introuvable');
+    }
+
+    const updated = await this.enrollmentModel
+      .findByIdAndUpdate(
+        id,
+        {
+          studentId: dto.studentId ?? enrollment.studentId,
+          schoolYearId: dto.schoolYearId ?? enrollment.schoolYearId,
+          levelId: dto.levelId ?? enrollment.levelId,
+          type: dto.type ?? enrollment.type,
+          previousEnrollmentId: dto.previousEnrollmentId ?? enrollment.previousEnrollmentId,
+        },
+        { new: true },
+      )
+      .exec();
+
+    await this.auditService.log({
+      actorId,
+      action: AuditAction.ENROLLMENT_CREATED,
+      entityType: 'Enrollment',
+      entityId: String(updated?._id),
+      details: {
+        updatedFields: Object.keys(dto),
+      },
+    });
+
+    return updated;
+  }
+
+  async updateFinancialDetails(
+    id: string,
+    payload: {
+      registrationFee?: number;
+      discountAmount?: number;
+      paidAmount?: number;
+      reason?: string;
+    },
+    actorId?: string,
+    actorRole?: string,
+  ) {
+    const enrollment = await this.enrollmentModel.findById(id).exec();
+    if (!enrollment) {
+      throw new NotFoundException('Inscription introuvable');
+    }
+
+    const canAuthorizeFinancialUpdate = actorRole === Role.SUPER_ADMIN || actorRole === Role.COMPTABILITE;
+    if (!canAuthorizeFinancialUpdate) {
+      throw new BadRequestException('Seuls le super administrateur et le comptable peuvent modifier les montants financiers');
+    }
+
+    const hasFinancialChange = payload.registrationFee !== undefined || payload.discountAmount !== undefined;
+    if (hasFinancialChange && !payload.reason?.trim()) {
+      throw new BadRequestException('Un motif est obligatoire pour toute modification des montants financiers');
+    }
+
+    const invoice = await this.billingService.findInvoiceByEnrollment(id);
+    if (!invoice) {
+      throw new NotFoundException('Facture introuvable pour cette inscription');
+    }
+
+    const updatedInvoice = await this.billingService.createOrUpdateInvoice({
+      enrollmentId: id,
+      registrationFee: payload.registrationFee ?? invoice.registrationFee,
+      tuitionFee: invoice.tuitionFee,
+      discountAmount: payload.discountAmount ?? invoice.discountAmount,
+      arrearsAmount: invoice.arrearsAmount,
+      paidAmount: payload.paidAmount ?? invoice.paidAmount,
+    });
+
+    await this.auditService.log({
+      actorId,
+      action: AuditAction.DISCOUNT_APPLIED,
+      entityType: 'EnrollmentInvoice',
+      entityId: id,
+      details: {
+        registrationFeeBefore: invoice.registrationFee,
+        registrationFeeAfter: updatedInvoice?.registrationFee,
+        discountAmountBefore: invoice.discountAmount,
+        discountAmountAfter: updatedInvoice?.discountAmount,
+        reason: payload.reason?.trim(),
+      },
+    });
+
+    return updatedInvoice;
   }
 
   async closeEnrollmentWithDecision(
