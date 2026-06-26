@@ -47,6 +47,15 @@
         <button type="submit" class="secondary btn-icon icon-import">Importer les frais</button>
       </form>
       <hr />
+      <form method="post" action="/settings/school-name" class="stack">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+        <label>Nom de l'école
+          <input type="text" name="name" value="{{ schoolName or '' }}" required />
+        </label>
+        <button type="submit" class="secondary btn-icon icon-save">Enregistrer le nom de l'école</button>
+      </form>
+
+      <hr />
       <form method="post" action="/settings/payment-allocation" class="stack">
         <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
         <label>Regle d imputation

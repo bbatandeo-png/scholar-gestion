@@ -7,11 +7,15 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { setFlash } from '../common/utils/flash.util';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { PaymentsService } from './payments.service';
+import { SettingsService } from '../settings/settings.service';
 
 @Controller()
 @UseGuards(AuthenticatedGuard, RolesGuard)
 export class PaymentsController {
-  constructor(private readonly paymentsService: PaymentsService) {}
+  constructor(
+    private readonly paymentsService: PaymentsService,
+    private readonly settingsService: SettingsService,
+  ) {}
 
   @Post('/payments')
   @Roles(Role.SUPER_ADMIN, Role.COMPTABILITE)
@@ -35,9 +39,11 @@ export class PaymentsController {
       return res.send(pdf);
     }
 
+    const receipt = await this.paymentsService.findReceiptById(id);
+    const schoolName = await this.settingsService.getSchoolName();
     return res.render('payments/receipt', {
       title: 'Recu',
-      receipt: await this.paymentsService.findReceiptById(id),
+      receipt: { ...receipt, schoolName: schoolName || undefined },
     });
   }
 }

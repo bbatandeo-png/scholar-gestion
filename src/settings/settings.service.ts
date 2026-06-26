@@ -81,4 +81,21 @@ export class SettingsService {
       { upsert: true, new: true, setDefaultsOnInsert: true },
     );
   }
+
+  async getSchoolName() {
+    const setting = await this.settingModel
+      .findOne({ key: SettingKey.SCHOOL_NAME })
+      .lean()
+      .exec();
+
+    return setting?.value ?? '';
+  }
+
+  async setSchoolName(value: string) {
+    return this.settingModel.findOneAndUpdate(
+      { key: SettingKey.SCHOOL_NAME },
+      { key: SettingKey.SCHOOL_NAME, value: value.trim() },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
+  }
 }

@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsEnum, IsNumber, IsString, Min } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsNumber, IsString, Min } from 'class-validator';
 import { Body, Controller, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -32,6 +32,12 @@ class UpdateStudentMatriculeRuleDto implements StudentMatriculeRule {
   startAt: number;
 }
 
+class UpdateSchoolNameDto {
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+}
+
 @Controller('/settings')
 @UseGuards(AuthenticatedGuard, RolesGuard)
 export class SettingsController {
@@ -58,6 +64,18 @@ export class SettingsController {
   ) {
     await this.settingsService.setStudentMatriculeRule(dto);
     setFlash(req, 'success', 'Parametrage du matricule mis a jour');
+    return res.redirect('/settings/fees');
+  }
+
+  @Post('/school-name')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION)
+  async updateSchoolName(
+    @Body() dto: UpdateSchoolNameDto,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    await this.settingsService.setSchoolName(dto.name);
+    setFlash(req, 'success', 'Nom de l école mis a jour');
     return res.redirect('/settings/fees');
   }
 }

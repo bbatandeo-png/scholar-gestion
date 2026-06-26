@@ -1,20 +1,27 @@
 ﻿{% extends "layout.njk" %}
 {% block content %}
   <section class="panel">
-    <h2>Recu {{ receipt.receiptNumber }}</h2>
-    <p><strong>Date:</strong> {{ receipt.paidAt }}</p>
-    <p><strong>Montant:</strong> {{ receipt.amount }}</p>
-    <p><strong>Mode:</strong> {{ receipt.method }}</p>
-    <p><strong>Reference:</strong> {{ receipt.reference or '-' }}</p>
-    <h3>Allocation</h3>
-    <table>
-      <thead><tr><th>Type</th><th>Montant</th></tr></thead>
-      <tbody>
-        {% for item in receipt.allocation %}
-          <tr><td>{{ item.type }}</td><td>{{ item.amount }}</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <h2>{{ receipt.schoolName or "Nom de l'école" }}</h2>
+    <h3 style="text-align: center; margin-top: 0;">REÇU DE PAIEMENT DES FRAIS DE SCOLARITE</h3>
+
+    {% set invoice = receipt.invoiceId %}
+    {% set enrollment = invoice.enrollmentId if invoice %}
+    {% set student = enrollment.studentId if enrollment %}
+
+    <p><strong>Référence ou Numéro de reçu :</strong> {{ receipt.receiptNumber }}</p>
+    <p><strong>Année scolaire            :</strong> {{ enrollment.schoolYearId.label if enrollment and enrollment.schoolYearId else '-' }}</p>
+    <p><strong>Nom et prénoms de l’élève :</strong> {{ student.lastname ~ ' ' ~ student.firstname if student else '-' }}</p>
+    <p><strong>N° Matricule              :</strong> {{ student.matricule if student else '-' }}</p>
+    <p><strong>Sexe                      :</strong> {{ student.gender if student else '-' }}</p>
+    <p><strong>Classe                    :</strong> {{ enrollment.levelId.label if enrollment and enrollment.levelId else '-' }}</p>
+    <p><strong>Montant de l’écolage      :</strong> {{ invoice.tuitionFee if invoice else '-' }}</p>
+    <p><strong>Nouveau paiement          :</strong> {{ receipt.amount }}</p>
+    <p><strong>Total payé                :</strong> {{ invoice.paidAmount if invoice else '-' }}</p>
+    <p><strong>Reste à payer             :</strong> {{ invoice.balanceDue if invoice else '-' }}</p>
+
+    <p style="text-align: right; margin-top: 40px;">Lomé, le {{ receipt.paidAt | string }}</p>
+    <p style="text-align: right; margin-top: 40px;">L’économe</p>
+
     <div class="actions" style="margin-top: 16px;">
       <a class="button" href="/receipts/{{ receipt._id }}?format=pdf">Version PDF</a>
     </div>

@@ -136,7 +136,21 @@ export class PaymentsService {
   }
 
   async findReceiptById(id: string) {
-    const payment = await this.paymentModel.findById(id).populate('invoiceId').lean().exec();
+    const payment = await this.paymentModel
+      .findById(id)
+      .populate({
+        path: 'invoiceId',
+        populate: {
+          path: 'enrollmentId',
+          populate: [
+            { path: 'studentId' },
+            { path: 'schoolYearId' },
+            { path: 'levelId' },
+          ],
+        },
+      })
+      .lean()
+      .exec();
     if (!payment) {
       throw new NotFoundException('Recu introuvable');
     }
@@ -162,20 +176,54 @@ export class PaymentsService {
     const doc = new PDFDocument({ margin: 40 });
     doc.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
 
+    const storedSchoolName = await this.settingsService.getSchoolName();
+    const schoolName = storedSchoolName || process.env.SCHOOL_NAME || "Nom de l'école";
+    const invoice = receipt.invoiceId as any;
+    const enrollment = invoice?.enrollmentId as any;
+    const student = enrollment?.studentId as any;
+    const schoolYearLabel = enrollment?.schoolYearId?.label ?? '-';
+    const levelLabel = enrollment?.levelId?.label ?? '-';
+    const gender = student?.gender ?? '-';
+    const studentFullName = `${student?.lastname ?? ''} ${student?.firstname ?? ''}`.trim() || '-';
+    const receiptDate = receipt.paidAt ? new Date(receipt.paidAt) : new Date();
+    const formattedDate = `${receiptDate.getDate().toString().padStart(2, '0')}/${(
+      receiptDate.getMonth() + 1
+    )
+      .toString()
+      .padStart(2, '0')} / ${receiptDate.getFullYear()} à ${receiptDate.getHours().toString().padStart(2, '0')}h ${receiptDate
+      .getMinutes()
+      .toString()
+      .padStart(2, '0')}`;
+
     return await new Promise<Buffer>((resolve) => {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
-      doc.fontSize(18).text('Scolar-Gestion - Recu de paiement');
-      doc.moveDown();
-      doc.fontSize(12).text(`Numero: ${receipt.receiptNumber}`);
-      doc.text(`Date: ${new Date(receipt.paidAt).toLocaleString('fr-FR')}`);
-      doc.text(`Montant: ${receipt.amount}`);
-      doc.text(`Mode: ${receipt.method}`);
-      doc.text(`Reference: ${receipt.reference ?? '-'}`);
-      doc.moveDown();
-      doc.text('Allocations:');
-      for (const item of receipt.allocation as Array<Record<string, unknown>>) {
-        doc.text(`- ${String(item.type)}: ${String(item.amount)}`);
-      }
+
+      doc.font('Times-Bold').fontSize(18).text(schoolName, { align: 'center' });
+      doc.moveDown(0.5);
+      doc.font('Times-Bold').fontSize(14).text('REÇU DE PAIEMENT DES FRAIS DE SCOLARITE', { align: 'center' });
+      doc.moveDown(1);
+
+      const pad = (text: string, width: number) => text.padEnd(width, ' ');
+      const field = (label: string, value: string | number) => {
+        doc.font('Courier').fontSize(12).text(`${pad(label, 35)}: ${String(value)}`);
+      };
+
+      field('Référence ou Numéro de reçu', receipt.receiptNumber ?? '-');
+      field('Année scolaire', schoolYearLabel);
+      field('Nom et prénoms de l’élève', studentFullName);
+      field('N° Matricule', student?.matricule ?? '-');
+      field('Sexe', gender);
+      field('Classe', levelLabel);
+      field('Montant de l’écolage', invoice?.tuitionFee ?? '-');
+      field('Nouveau paiement', receipt.amount ?? '-');
+      field('Total payé', invoice?.paidAmount ?? '-');
+      field('Reste à payer', invoice?.balanceDue ?? '-');
+
+      doc.moveDown(2);
+      doc.font('Courier').text(`Lomé, le ${formattedDate}`, { align: 'right' });
+      doc.moveDown(2);
+      doc.font('Times-Roman').text('L’économe', { align: 'right' });
+
       doc.end();
     });
   }

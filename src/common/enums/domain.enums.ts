@@ -90,6 +90,7 @@ export enum AuditAction {
 export enum SettingKey {
   PAYMENT_ALLOCATION_RULE = 'payment_allocation_rule',
   STUDENT_MATRICULE_RULE = 'student_matricule_rule',
+  SCHOOL_NAME = 'school_name',
 }
 
 export enum PaymentAllocationRule {
