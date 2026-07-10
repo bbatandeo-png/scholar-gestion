@@ -1,0 +1,62 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <section class="panel">
+    <div class="panel-heading">
+      <div>
+        <h2>Élèves ayant payé l'inscription</h2>
+        <p class="muted">Filtrer les élèves selon le paiement des frais d'inscription et d'écolage.</p>
+      </div>
+      <div class="panel-heading-actions">
+        <a class="button secondary btn-icon icon-export" href="/reports/registration-paid/pdf?filter={{ filter }}">Télécharger PDF</a>
+      </div>
+    </div>
+    <form method="get" action="/reports/registration-paid" class="toolbar-grid">
+      <label>
+        Filtre
+        <select name="filter">
+          <option value="registration" {% if filter == 'registration' %}selected{% endif %}>Inscription payée</option>
+          <option value="tuition" {% if filter == 'tuition' %}selected{% endif %}>Écolage payé</option>
+          <option value="full" {% if filter == 'full' %}selected{% endif %}>Inscription et écolage payés</option>
+          <option value="partial" {% if filter == 'partial' %}selected{% endif %}>Paiement partiel</option>
+          <option value="none" {% if filter == 'none' %}selected{% endif %}>Aucun paiement</option>
+        </select>
+      </label>
+      <button type="submit" class="button secondary">Appliquer</button>
+    </form>
+    <p class="muted">Filtre actif :
+      {% if filter == 'registration' %}Inscription payée{% elif filter == 'tuition' %}Écolage payé{% elif filter == 'full' %}Inscription et écolage payés{% else %}Aucun paiement{% endif %}
+      — {{ report.length }} résultat(s).
+    </p>
+    <p class="muted">Clique sur un en-tête pour trier le tableau.</p>
+    <div class="table-shell">
+      <table class="table-report js-sortable">
+        <thead>
+          <tr>
+            <th class="sortable" data-column-index="0" data-sort-type="text">Élève</th>
+            <th class="sortable" data-column-index="1" data-sort-type="text">Matricule</th>
+            <th class="sortable" data-column-index="2" data-sort-type="text">Année</th>
+            <th class="sortable" data-column-index="3" data-sort-type="text">Niveau</th>
+            <th class="sortable" data-column-index="4" data-sort-type="number">Frais inscription</th>
+            <th class="sortable" data-column-index="5" data-sort-type="number">Payé</th>
+            <th class="sortable" data-column-index="6" data-sort-type="number">Reste</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in report %}
+            <tr>
+              <td>{{ item.enrollmentId.studentId.lastname if item.enrollmentId and item.enrollmentId.studentId }} {{ item.enrollmentId.studentId.firstname if item.enrollmentId and item.enrollmentId.studentId }}</td>
+              <td>{{ item.enrollmentId.studentId.matricule if item.enrollmentId and item.enrollmentId.studentId }}</td>
+              <td>{{ item.enrollmentId.schoolYearId.label if item.enrollmentId and item.enrollmentId.schoolYearId }}</td>
+              <td>{{ item.enrollmentId.levelId.label if item.enrollmentId and item.enrollmentId.levelId }}</td>
+              <td>{{ item.registrationFee }}</td>
+              <td>{{ item.paidAmount }}</td>
+              <td>{{ item.balanceDue }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="7">Aucun élève n'a payé l'inscription.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

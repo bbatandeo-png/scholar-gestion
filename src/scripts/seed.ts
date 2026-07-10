@@ -10,7 +10,15 @@ import { SchoolYear } from '../school-years/schemas/school-year.schema';
 import { SettingsService } from '../settings/settings.service';
 import { UsersService } from '../users/users.service';
 
-async function bootstrap() {
+export function shouldRunSeed(env: NodeJS.ProcessEnv = process.env) {
+  if (env.NODE_ENV === 'test') {
+    return false;
+  }
+
+  return env.SEED_ON_START !== 'false';
+}
+
+export async function runSeed() {
   const app = await NestFactory.createApplicationContext(AppModule);
   try {
     const usersService = app.get(UsersService);
@@ -73,4 +81,6 @@ async function bootstrap() {
   }
 }
 
-void bootstrap();
+if (require.main === module) {
+  void runSeed();
+}

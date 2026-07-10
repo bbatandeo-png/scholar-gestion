@@ -1,0 +1,52 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <section class="panel">
+    <div class="panel-heading">
+      <div>
+        <h2>Situation financière des classes</h2>
+        <p class="muted">Montants à payer, montants payés et restes à payer par élève, distingués par frais d'inscription et écolage.</p>
+      </div>
+      <div class="toolbar">
+        <a class="button secondary btn-icon icon-export" href="/reports/class-financial-situation/export{% if levelId %}?levelId={{ levelId }}{% endif %}">Exporter Excel</a>
+      </div>
+    </div>
+    <form method="get" action="/reports/class-financial-situation" class="toolbar-grid">
+      <label>Niveau<select name="levelId"><option value="">Tous</option>{% for level in levels %}<option value="{{ level._id }}" {% if levelId == level._id %}selected{% endif %}>{{ level.label }}</option>{% endfor %}</select></label>
+      <button type="submit" class="btn-icon icon-search">Filtrer</button>
+    </form>
+    <div class="table-shell">
+      <table>
+        <thead>
+          <tr>
+            <th>N°</th>
+            <th>Matricule</th>
+            <th>Nom et prénoms</th>
+            <th>Sexe</th>
+            <th>Frais inscription</th>
+            <th>Écolage</th>
+            <th>Montant à payer</th>
+            <th>Montant payé</th>
+            <th>Reste à payer</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in report %}
+            <tr>
+              <td>{{ loop.index }}</td>
+              <td>{{ item.student.matricule if item.student else '' }}</td>
+              <td>{{ (item.student.lastname or '') ~ ' ' ~ (item.student.firstname or '') }}</td>
+              <td>{{ item.student.gender if item.student else '' }}</td>
+              <td>{{ item.registrationFee }}</td>
+              <td>{{ item.tuitionFee }}</td>
+              <td>{{ item.totalDue }}</td>
+              <td>{{ item.paidAmount }}</td>
+              <td>{{ item.balanceDue }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="9">Aucune donnée disponible.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

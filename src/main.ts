@@ -13,6 +13,7 @@ import csurf from 'csurf';
 import { AppModule } from './app.module';
 import { FeeScheduleNotFoundFilter } from './common/filters/fee-schedule-not-found.filter';
 import { SessionUser } from './common/types/session-user.type';
+import { runSeed, shouldRunSeed } from './scripts/seed';
 
 function resolveExistingPath(candidates: string[]) {
   for (const candidate of candidates) {
@@ -65,6 +66,19 @@ async function bootstrap() {
       dateStyle: 'long',
       timeStyle: 'short',
     });
+  });
+
+  nunjucksEnv.addFilter('inputDate', (value: unknown) => {
+    if (!value) {
+      return '';
+    }
+
+    const date = value instanceof Date ? value : new Date(value as string | number);
+    if (Number.isNaN(date.getTime())) {
+      return '';
+    }
+
+    return date.toISOString().slice(0, 10);
   });
 
   app.use(cookieParser());
@@ -121,6 +135,10 @@ async function bootstrap() {
 
   // Global filter to present a friendly message when fee schedule is missing
   app.useGlobalFilters(new FeeScheduleNotFoundFilter());
+
+  if (shouldRunSeed()) {
+    await runSeed();
+  }
 
   await app.listen(process.env.PORT ?? 3000);
 }

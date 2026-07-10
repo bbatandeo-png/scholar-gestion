@@ -21,7 +21,10 @@
             <a href="/students/search" class="{% if currentPath == '/students/search' %}is-active{% endif %}">Recherche ancien eleve</a>
           {% endif %}
           {% if role == 'super_admin' or role == 'direction' or role == 'secretariat' or role == 'comptabilite' or role == 'auditeur' %}
-            <a href="/enrollments" class="{% if currentPath and currentPath.startsWith('/enrollments') %}is-active{% endif %}">Inscriptions</a>
+            <a href="/enrollments" class="{% if currentPath and currentPath.startsWith('/enrollments') %}is-active{% endif %}">Inscription et paiement</a>
+          {% endif %}
+          {% if role == 'super_admin' or role == 'direction' or role == 'comptabilite' %}
+            <a href="/expenses" class="{% if currentPath and currentPath.startsWith('/expenses') %}is-active{% endif %}">Dépenses</a>
           {% endif %}
           {% if role == 'super_admin' or role == 'direction' or role == 'comptabilite' or role == 'auditeur' %}
             <a href="/arrears" class="{% if currentPath and currentPath.startsWith('/arrears') %}is-active{% endif %}">Impayes</a>
@@ -39,8 +42,10 @@
           {% endif %}
           {% if role == 'comptabilite' %}
             <a href="/reports/revenue" class="{% if currentPath and currentPath.startsWith('/reports') %}is-active{% endif %}">Rapports</a>
+            <a href="/reports/registration-paid" class="{% if currentPath and currentPath.startsWith('/reports/registration-paid') %}is-active{% endif %}">Inscriptions payées</a>
           {% elif role == 'super_admin' or role == 'direction' or role == 'auditeur' %}
             <a href="/reports/students-by-level" class="{% if currentPath and currentPath.startsWith('/reports') %}is-active{% endif %}">Rapports</a>
+            <a href="/reports/registration-paid" class="{% if currentPath and currentPath.startsWith('/reports/registration-paid') %}is-active{% endif %}">Inscriptions payées</a>
           {% endif %}
         </nav>
       </aside>

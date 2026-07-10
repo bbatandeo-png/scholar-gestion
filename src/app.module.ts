@@ -14,6 +14,7 @@ import { GuardiansModule } from './guardians/guardians.module';
 import { EnrollmentsModule } from './enrollments/enrollments.module';
 import { ArrearsModule } from './arrears/arrears.module';
 import { PaymentsModule } from './payments/payments.module';
+import { ExpensesModule } from './expenses/expenses.module';
 import { PromotionsModule } from './promotions/promotions.module';
 import { ReportsModule } from './reports/reports.module';
 import { RootController } from './root.controller';
@@ -35,6 +36,7 @@ import { RootController } from './root.controller';
     EnrollmentsModule,
     BillingModule,
     PaymentsModule,
+    ExpensesModule,
     ArrearsModule,
     PromotionsModule,
     DashboardModule,

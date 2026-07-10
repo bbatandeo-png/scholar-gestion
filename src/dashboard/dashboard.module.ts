@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { Arrear, ArrearSchema } from '../arrears/schemas/arrear.schema';
 import { Invoice, InvoiceSchema } from '../billing/schemas/invoice.schema';
 import { Enrollment, EnrollmentSchema } from '../enrollments/schemas/enrollment.schema';
+import { Expense, ExpenseSchema } from '../expenses/schemas/expense.schema';
 import { Student, StudentSchema } from '../students/schemas/student.schema';
 import { DashboardController } from './dashboard.controller';
 import { DashboardService } from './dashboard.service';
@@ -14,6 +15,7 @@ import { DashboardService } from './dashboard.service';
 			{ name: Enrollment.name, schema: EnrollmentSchema },
 			{ name: Invoice.name, schema: InvoiceSchema },
 			{ name: Arrear.name, schema: ArrearSchema },
+			{ name: Expense.name, schema: ExpenseSchema },
 		]),
 	],
 	controllers: [DashboardController],

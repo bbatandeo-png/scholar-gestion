@@ -1,0 +1,35 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <section class="grid cols-2">
+    <div class="panel">
+      <h2>Ajouter une catégorie</h2>
+      <form method="post" action="/expenses/categories" class="stack">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+        <label>Nom<input type="text" name="name" required /></label>
+        <label>Description<textarea name="description"></textarea></label>
+        <button type="submit" class="btn-icon icon-save">Enregistrer</button>
+      </form>
+    </div>
+    <div class="panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Catégories</h2>
+          <p class="muted">Modifiez ou supprimez les catégories de dépenses.</p>
+        </div>
+        <a class="button secondary" href="/expenses">Retour aux dépenses</a>
+      </div>
+      <div class="table-shell">
+        <table>
+          <thead><tr><th>Nom</th><th>Description</th></tr></thead>
+          <tbody>
+            {% for category in categories %}
+              <tr><td>{{ category.name }}</td><td>{{ category.description }}</td></tr>
+            {% else %}
+              <tr><td colspan="2">Aucune catégorie enregistrée.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+{% endblock %}

@@ -1,0 +1,37 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <section class="panel">
+    <div class="panel-heading">
+      <div>
+        <h2>Détail de la dépense</h2>
+        <p class="muted">Fiche complète de l'opération et motif de dernière modification.</p>
+      </div>
+      <div class="toolbar">
+        <a class="button secondary" href="/expenses">Retour aux dépenses</a>
+        <a class="button" href="/expenses/{{ expense._id }}/edit">Modifier</a>
+      </div>
+    </div>
+    <div class="stack">
+      <div><strong>Numéro:</strong> {{ expense.orderNumber }}</div>
+      <div><strong>Date:</strong> {{ expense.expenseDate | formatDate }}</div>
+      <div><strong>Libellé:</strong> {{ expense.label }}</div>
+      <div><strong>Montant:</strong> {{ expense.amount }}</div>
+      <div><strong>Bénéficiaire:</strong> {{ expense.beneficiary }}</div>
+      <div><strong>Catégorie:</strong> {{ expense.categoryId.name if expense.categoryId else '' }}</div>
+      <div><strong>Dernière modification:</strong>
+        {% if expense.modifiedAt %}
+          {{ expense.modifiedAt | formatDate }}
+        {% else %}
+          Aucune
+        {% endif %}
+      </div>
+      <div><strong>Motif de modification:</strong>
+        {% if expense.lastModificationReason %}
+          {{ expense.lastModificationReason }}
+        {% else %}
+          Aucun
+        {% endif %}
+      </div>
+    </div>
+  </section>
+{% endblock %}

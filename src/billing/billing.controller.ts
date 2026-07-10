@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
   Render,
   Req,
   Res,
@@ -26,6 +27,7 @@ import { buildExcelBuffer } from '../common/utils/excel.util';
 import { UpsertFeeScheduleDto } from './dto/upsert-fee-schedule.dto';
 import { BillingService } from './billing.service';
 import { SettingsService } from '../settings/settings.service';
+import { ExpensesService } from '../expenses/expenses.service';
 
 @Controller('/settings/fees')
 @UseGuards(AuthenticatedGuard, RolesGuard)
@@ -35,25 +37,47 @@ export class BillingController {
     private readonly schoolYearsService: SchoolYearsService,
     private readonly levelsService: LevelsService,
     private readonly settingsService: SettingsService,
+    private readonly expensesService: ExpensesService,
   ) {}
 
   @Get()
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION)
   @Render('settings/fees')
-  async index() {
+  async index(@Query('editCategoryId') editCategoryId?: string) {
     const [matriculeRule, schoolName] = await Promise.all([
       this.settingsService.getStudentMatriculeRule(),
       this.settingsService.getSchoolName(),
     ]);
+    const categories = await this.expensesService.listCategories();
+    const editCategory = editCategoryId ? await this.expensesService.findCategoryById(editCategoryId) : undefined;
+
     return {
       title: 'Frais par niveau',
       feeSchedules: await this.billingService.listFeeSchedules(),
       schoolYears: await this.schoolYearsService.list(),
       levels: await this.levelsService.list(),
+      expenseCategories: categories,
       matriculeRule,
       schoolName,
       matriculePreview: `${matriculeRule.prefix}${matriculeRule.separator}${String(matriculeRule.startAt).padStart(matriculeRule.padding, '0')}`,
+      editCategory,
     };
+  }
+
+  @Post('/expense-categories')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION)
+  async createExpenseCategory(@Body() dto: { name: string; description?: string }, @Req() req: Request, @Res() res: Response) {
+    await this.expensesService.createCategory(dto as any);
+    setFlash(req, 'success', 'Catégorie enregistrée');
+    return res.redirect('/settings/fees');
+  }
+
+  @Post('/expense-categories/:id')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION)
+  async updateExpenseCategory(@Param('id') id: string, @Body() dto: { name: string; description?: string }, @Req() req: Request, @Res() res: Response) {
+    await this.expensesService.updateCategory(id, dto as any);
+    setFlash(req, 'success', 'Catégorie modifiée');
+    return res.redirect('/settings/fees');
   }
 
   @Get('/export')

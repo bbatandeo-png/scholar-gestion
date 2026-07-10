@@ -1,0 +1,96 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <section class="panel">
+    <div class="panel-heading">
+      <div>
+        <h2>Enregistrer une dépense</h2>
+        <p class="muted">Gestion des sorties de fonds et suivi des catégories.</p>
+      </div>
+      <div class="toolbar">
+        <a class="button secondary" href="/expenses/categories">Catégories</a>
+        <a class="button secondary btn-icon icon-export" href="/expenses/export">Exporter Excel</a>
+      </div>
+    </div>
+    <form method="post" action="/expenses" class="stack">
+      <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+      <div class="form-grid">
+        <label>Date<input type="date" name="expenseDate" required /></label>
+        <label>Libellé<input type="text" name="label" required /></label>
+        <label>Montant<input type="number" name="amount" min="0" step="0.01" required /></label>
+        <label>Bénéficiaire<input type="text" name="beneficiary" required /></label>
+        <label>Catégorie<select name="categoryId" required>
+          {% for category in categories %}<option value="{{ category._id }}">{{ category.name }}</option>{% endfor %}
+        </select></label>
+      </div>
+      <button type="submit" class="btn-icon icon-save">Enregistrer</button>
+    </form>
+  </section>
+
+  {% if editExpense %}
+    <section class="panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Modifier une dépense</h2>
+          <p class="muted">Indiquez le motif de la modification (obligatoire).</p>
+        </div>
+      </div>
+      <form method="post" action="/expenses/{{ editExpense._id }}" class="stack">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+        <div class="form-grid">
+          <label>Date<input type="date" name="expenseDate" value="{{ editExpense.expenseDate | inputDate }}" required /></label>
+          <label>Libellé<input type="text" name="label" value="{{ editExpense.label }}" required /></label>
+          <label>Montant<input type="number" name="amount" min="0" step="0.01" value="{{ editExpense.amount }}" required /></label>
+          <label>Bénéficiaire<input type="text" name="beneficiary" value="{{ editExpense.beneficiary }}" required /></label>
+          <label>Catégorie<select name="categoryId" required>
+            {% for category in categories %}
+              <option value="{{ category._id }}" {% if editExpense.categoryId and editExpense.categoryId._id == category._id %}selected{% endif %}>{{ category.name }}</option>
+            {% endfor %}
+          </select></label>
+        </div>
+        <label>Motif de modification<textarea name="modificationReason" required></textarea></label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button type="submit" class="btn-icon icon-save">Enregistrer la modification</button>
+          <a class="button secondary" href="/expenses">Annuler</a>
+        </div>
+      </form>
+    </section>
+  {% endif %}
+
+  <section class="panel">
+    <div class="panel-heading">
+      <div>
+        <h2>Liste des dépenses</h2>
+        <p class="muted">Recherche et filtre par catégorie.</p>
+      </div>
+    </div>
+    <form method="get" action="/expenses" class="toolbar-grid">
+      <label>Recherche<input name="query" value="{{ query }}" placeholder="Numéro, libellé, bénéficiaire" /></label>
+      <label>Catégorie<select name="categoryId"><option value="">Toutes</option>{% for category in categories %}<option value="{{ category._id }}" {% if categoryId == category._id %}selected{% endif %}>{{ category.name }}</option>{% endfor %}</select></label>
+      <button type="submit" class="btn-icon icon-search">Rechercher</button>
+    </form>
+    <div class="table-shell">
+      <table>
+        <thead><tr><th>N°</th><th>Date</th><th>Libellé</th><th>Montant</th><th>Bénéficiaire</th><th>Catégorie</th><th>Motif</th><th>Actions</th></tr></thead>
+        <tbody>
+          {% for item in expenses %}
+            <tr>
+              <td>{{ item.orderNumber }}</td>
+              <td>{{ item.expenseDate | formatDate }}</td>
+              <td>{{ item.label }}</td>
+              <td>{{ item.amount }}</td>
+              <td>{{ item.beneficiary }}</td>
+              <td>{{ item.categoryId.name if item.categoryId else '' }}</td>
+              <td>{{ item.lastModificationReason or '' }}</td>
+              <td>
+                <a class="button btn-sm" href="/expenses/{{ item._id }}">Détails</a>
+                <a class="button btn-sm" href="/expenses/{{ item._id }}/edit">Modifier</a>
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="8">Aucune dépense enregistrée.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

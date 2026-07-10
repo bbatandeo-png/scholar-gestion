@@ -10,6 +10,14 @@
     </div>
     <div class="report-metrics">
       <article class="report-metric">
+        <span>Recettes frais d'inscription</span>
+        <strong>{{ report.registrationRevenue or 0 }}</strong>
+      </article>
+      <article class="report-metric">
+        <span>Recettes écolage</span>
+        <strong>{{ report.tuitionRevenue or 0 }}</strong>
+      </article>
+      <article class="report-metric">
         <span>Encaisse</span>
         <strong>{{ report.collected }}</strong>
       </article>
