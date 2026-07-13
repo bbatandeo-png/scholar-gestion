@@ -15,7 +15,7 @@ export class Student {
   @Prop({ required: true, trim: true, index: true })
   firstname: string;
 
-  @Prop({ required: true, trim: true })
+  @Prop({ required: true, trim: true, uppercase: true, enum: ['M', 'F'] })
   gender: string;
 
   @Prop({ required: true })

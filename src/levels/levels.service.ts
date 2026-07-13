@@ -20,6 +20,10 @@ export class LevelsService {
     return this.levelModel.findById(id).lean().exec();
   }
 
+  async update(id: string, dto: CreateLevelDto) {
+    return this.levelModel.findByIdAndUpdate(id, dto, { new: true }).lean().exec();
+  }
+
   async findNextLevel(levelId: string) {
     const level = await this.levelModel.findById(levelId).lean().exec();
     if (!level) {

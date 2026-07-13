@@ -56,6 +56,25 @@
       </form>
 
       <hr />
+      <form method="post" action="/settings/receipt-mode" class="stack">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+        <label>Mode du reçu de paiement
+          <select name="value" required>
+            <option value="tuition_only" {% if receiptMode == 'tuition_only' %}selected{% endif %}>Uniquement écolage</option>
+            <option value="tuition_and_registration" {% if receiptMode == 'tuition_and_registration' %}selected{% endif %}>Écolage + frais d'inscription</option>
+          </select>
+        </label>
+        <div class="muted">
+          <p><strong>Signification:</strong></p>
+          <ul class="simple-list">
+            <li><strong>Uniquement écolage</strong>: le reçu affiche uniquement le montant d'écolage.</li>
+            <li><strong>Écolage + frais d'inscription</strong>: le reçu affiche les montants de l'écolage et des frais d'inscription.</li>
+          </ul>
+        </div>
+        <button type="submit" class="secondary btn-icon icon-save">Mettre à jour le mode du reçu</button>
+      </form>
+
+      <hr />
       <form method="post" action="/settings/payment-allocation" class="stack">
         <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
         <label>Regle d imputation

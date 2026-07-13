@@ -91,6 +91,12 @@ export enum SettingKey {
   PAYMENT_ALLOCATION_RULE = 'payment_allocation_rule',
   STUDENT_MATRICULE_RULE = 'student_matricule_rule',
   SCHOOL_NAME = 'school_name',
+  RECEIPT_MODE = 'receipt_mode',
+}
+
+export enum ReceiptMode {
+  TUITION_ONLY = 'tuition_only',
+  TUITION_AND_REGISTRATION = 'tuition_and_registration',
 }
 
 export enum PaymentAllocationRule {

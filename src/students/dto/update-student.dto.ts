@@ -3,6 +3,7 @@ import {
 	ArrayMaxSize,
 	IsArray,
 	IsDateString,
+	IsIn,
 	IsOptional,
 	IsString,
 	ValidateNested,
@@ -24,6 +25,7 @@ export class UpdateStudentDto {
 
 	@IsOptional()
 	@IsString()
+	@IsIn(['M', 'F'])
 	gender?: string;
 
 	@IsOptional()

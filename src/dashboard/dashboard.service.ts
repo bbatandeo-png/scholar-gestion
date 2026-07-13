@@ -27,13 +27,20 @@ export class DashboardService {
       this.expenseModel.find().lean().exec(),
     ]);
 
-    const revenue = invoices.reduce((sum, invoice: any) => sum + invoice.paidAmount, 0);
-    const totalDue = invoices.reduce((sum, invoice: any) => sum + invoice.totalDue, 0);
-    const totalBalance = invoices.reduce((sum, invoice: any) => sum + invoice.balanceDue, 0);
-    const totalExpenses = expenses.reduce((sum, expense: any) => sum + expense.amount, 0);
-    const currentBalance = revenue - totalExpenses;
-    const registrationRevenue = invoices.reduce((sum, invoice: any) => sum + (invoice.registrationFee || 0), 0);
-    const tuitionRevenue = invoices.reduce((sum, invoice: any) => sum + (invoice.tuitionFee || 0), 0);
+    const revenue = invoices.reduce((sum, invoice: any) => sum + (invoice.paidAmount ?? 0), 0);
+    const totalDue = invoices.reduce((sum, invoice: any) => sum + (invoice.totalDue ?? 0), 0);
+    const totalBalance = invoices.reduce((sum, invoice: any) => sum + (invoice.balanceDue ?? 0), 0);
+    const totalExpenses = expenses.reduce((sum, expense: any) => sum + (expense.amount ?? 0), 0);
+    const registrationRevenue = invoices.reduce(
+      (sum, invoice: any) => sum + Math.min(invoice.paidAmount ?? 0, invoice.registrationFee ?? 0),
+      0,
+    );
+    const tuitionRevenue = invoices.reduce((sum, invoice: any) => {
+      const paidAmount = invoice.paidAmount ?? 0;
+      const registrationFee = invoice.registrationFee ?? 0;
+      return sum + Math.max(Math.min(paidAmount - registrationFee, invoice.tuitionFee ?? 0), 0);
+    }, 0);
+    const availableBalance = tuitionRevenue - totalExpenses;
     const recoveryRate = totalDue === 0 ? 0 : Math.round((revenue / totalDue) * 100);
 
     return {
@@ -43,7 +50,7 @@ export class DashboardService {
       tuitionRevenue,
       totalBalance,
       totalExpenses,
-      currentBalance,
+      availableBalance,
       recoveryRate,
       activeStudents,
       archivedStudents,

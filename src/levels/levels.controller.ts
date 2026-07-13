@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Render, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Render, Req, Res, UseGuards } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/enums/domain.enums';
@@ -47,6 +47,30 @@ export class LevelsController {
   async create(@Body() dto: CreateLevelDto, @Req() req: Request, @Res() res: Response) {
     await this.levelsService.create(dto);
     setFlash(req, 'success', 'Niveau enregistre');
+    return res.redirect('/settings/levels');
+  }
+
+  @Get('/:id/edit')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION)
+  @Render('settings/levels')
+  async edit(@Param('id') id: string) {
+    const [levels, editLevel] = await Promise.all([
+      this.levelsService.list(),
+      this.levelsService.findById(id),
+    ]);
+
+    return {
+      title: 'Modifier niveau',
+      levels,
+      editLevel,
+    };
+  }
+
+  @Post('/:id')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION)
+  async update(@Param('id') id: string, @Body() dto: CreateLevelDto, @Req() req: Request, @Res() res: Response) {
+    await this.levelsService.update(id, dto);
+    setFlash(req, 'success', 'Niveau modifié');
     return res.redirect('/settings/levels');
   }
 }

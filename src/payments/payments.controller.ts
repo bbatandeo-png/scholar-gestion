@@ -32,8 +32,9 @@ export class PaymentsController {
     @Query('format') format: string | undefined,
     @Res() res: Response,
   ) {
+    const receiptMode = await this.settingsService.getReceiptMode();
     if (format === 'pdf') {
-      const pdf = await this.paymentsService.renderReceiptPdf(id);
+      const pdf = await this.paymentsService.renderReceiptPdf(id, receiptMode);
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `inline; filename="receipt-${id}.pdf"`);
       return res.send(pdf);
@@ -43,7 +44,7 @@ export class PaymentsController {
     const schoolName = await this.settingsService.getSchoolName();
     return res.render('payments/receipt', {
       title: 'Recu',
-      receipt: { ...receipt, schoolName: schoolName || undefined },
+      receipt: { ...receipt, schoolName: schoolName || undefined, receiptMode },
     });
   }
 }

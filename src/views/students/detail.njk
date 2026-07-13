@@ -19,7 +19,12 @@
           <label>Matricule<input name="matricule" value="{{ student.matricule }}" /></label>
           <label>Nom<input name="lastname" value="{{ student.lastname }}" /></label>
           <label>Prenoms<input name="firstname" value="{{ student.firstname }}" /></label>
-          <label>Sexe<input name="gender" value="{{ student.gender }}" /></label>
+          <label>Sexe
+            <select name="gender">
+              <option value="M" {% if student.gender == 'M' %}selected{% endif %}>M</option>
+              <option value="F" {% if student.gender == 'F' %}selected{% endif %}>F</option>
+            </select>
+          </label>
           <label>Date de naissance<input type="date" name="birthDate" value="{{ student.birthDate | string | truncate(10, true, '') }}" /></label>
           <label>Lieu de naissance<input name="birthPlace" value="{{ student.birthPlace }}" /></label>
           <label>Quartier<input name="district" value="{{ student.district }}" /></label>

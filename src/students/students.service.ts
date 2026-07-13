@@ -221,11 +221,13 @@ export class StudentsService {
       throw new ConflictException('Un dossier eleve existe deja');
     }
 
+    const normalizedGender = dto.gender?.trim().toUpperCase();
     return runWithMongoTransactionFallback(this.connection, async (session) => {
       const student = await this.studentModel.create(
         [
           {
             ...dto,
+            gender: normalizedGender,
             matricule,
             birthDate: new Date(dto.birthDate),
             status: StudentStatus.ACTIVE,
@@ -251,6 +253,7 @@ export class StudentsService {
     return runWithMongoTransactionFallback(this.connection, async (session) => {
       const updatePayload = {
         ...dto,
+        ...(dto.gender ? { gender: dto.gender.trim().toUpperCase() } : {}),
         ...(dto.birthDate ? { birthDate: new Date(dto.birthDate) } : {}),
       };
       const student = await this.studentModel

@@ -3,7 +3,7 @@ import { IsEnum, IsNotEmpty, IsNumber, IsString, Min } from 'class-validator';
 import { Body, Controller, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { Roles } from '../common/decorators/roles.decorator';
-import { PaymentAllocationRule, Role } from '../common/enums/domain.enums';
+import { PaymentAllocationRule, ReceiptMode, Role } from '../common/enums/domain.enums';
 import { AuthenticatedGuard } from '../common/guards/authenticated.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { setFlash } from '../common/utils/flash.util';
@@ -38,6 +38,11 @@ class UpdateSchoolNameDto {
   name: string;
 }
 
+class UpdateReceiptModeDto {
+  @IsEnum(ReceiptMode)
+  value: ReceiptMode;
+}
+
 @Controller('/settings')
 @UseGuards(AuthenticatedGuard, RolesGuard)
 export class SettingsController {
@@ -64,6 +69,18 @@ export class SettingsController {
   ) {
     await this.settingsService.setStudentMatriculeRule(dto);
     setFlash(req, 'success', 'Parametrage du matricule mis a jour');
+    return res.redirect('/settings/fees');
+  }
+
+  @Post('/receipt-mode')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION)
+  async updateReceiptMode(
+    @Body() dto: UpdateReceiptModeDto,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    await this.settingsService.setReceiptMode(dto.value);
+    setFlash(req, 'success', 'Mode de recu mis a jour');
     return res.redirect('/settings/fees');
   }
 

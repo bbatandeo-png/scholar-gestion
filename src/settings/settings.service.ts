@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { PaymentAllocationRule, SettingKey } from '../common/enums/domain.enums';
+import { PaymentAllocationRule, ReceiptMode, SettingKey } from '../common/enums/domain.enums';
 import { Setting, SettingDocument } from './schemas/setting.schema';
 
 export type StudentMatriculeRule = {
@@ -95,6 +95,23 @@ export class SettingsService {
     return this.settingModel.findOneAndUpdate(
       { key: SettingKey.SCHOOL_NAME },
       { key: SettingKey.SCHOOL_NAME, value: value.trim() },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
+  }
+
+  async getReceiptMode() {
+    const setting = await this.settingModel
+      .findOne({ key: SettingKey.RECEIPT_MODE })
+      .lean()
+      .exec();
+
+    return (setting?.value as ReceiptMode | undefined) ?? ReceiptMode.TUITION_ONLY;
+  }
+
+  async setReceiptMode(value: ReceiptMode) {
+    return this.settingModel.findOneAndUpdate(
+      { key: SettingKey.RECEIPT_MODE },
+      { key: SettingKey.RECEIPT_MODE, value },
       { upsert: true, new: true, setDefaultsOnInsert: true },
     );
   }

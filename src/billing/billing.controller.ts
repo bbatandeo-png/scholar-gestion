@@ -44,9 +44,10 @@ export class BillingController {
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION)
   @Render('settings/fees')
   async index(@Query('editCategoryId') editCategoryId?: string) {
-    const [matriculeRule, schoolName] = await Promise.all([
+    const [matriculeRule, schoolName, receiptMode] = await Promise.all([
       this.settingsService.getStudentMatriculeRule(),
       this.settingsService.getSchoolName(),
+      this.settingsService.getReceiptMode(),
     ]);
     const categories = await this.expensesService.listCategories();
     const editCategory = editCategoryId ? await this.expensesService.findCategoryById(editCategoryId) : undefined;
@@ -59,6 +60,7 @@ export class BillingController {
       expenseCategories: categories,
       matriculeRule,
       schoolName,
+      receiptMode,
       matriculePreview: `${matriculeRule.prefix}${matriculeRule.separator}${String(matriculeRule.startAt).padStart(matriculeRule.padding, '0')}`,
       editCategory,
     };
@@ -161,12 +163,13 @@ export class BillingController {
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION)
   @Render('settings/fees')
   async edit(@Param('id') id: string) {
-    const [feeSchedules, schoolYears, levels, matriculeRule, schoolName, editFee] = await Promise.all([
+    const [feeSchedules, schoolYears, levels, matriculeRule, schoolName, receiptMode, editFee] = await Promise.all([
       this.billingService.listFeeSchedules(),
       this.schoolYearsService.list(),
       this.levelsService.list(),
       this.settingsService.getStudentMatriculeRule(),
       this.settingsService.getSchoolName(),
+      this.settingsService.getReceiptMode(),
       this.billingService.findFeeScheduleById(id),
     ]);
 
@@ -178,6 +181,7 @@ export class BillingController {
       editFee,
       matriculeRule,
       schoolName,
+      receiptMode,
       matriculePreview: `${matriculeRule.prefix}${matriculeRule.separator}${String(matriculeRule.startAt).padStart(matriculeRule.padding, '0')}`,
     };
   }

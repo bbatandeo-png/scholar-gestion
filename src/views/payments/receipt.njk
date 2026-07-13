@@ -14,6 +14,9 @@
     <p><strong>N° Matricule              :</strong> {{ student.matricule if student else '-' }}</p>
     <p><strong>Sexe                      :</strong> {{ student.gender if student else '-' }}</p>
     <p><strong>Classe                    :</strong> {{ enrollment.levelId.label if enrollment and enrollment.levelId else '-' }}</p>
+    {% if receipt.receiptMode == 'tuition_and_registration' %}
+      <p><strong>Frais d'inscription         :</strong> {{ invoice.registrationFee if invoice else '-' }}</p>
+    {% endif %}
     <p><strong>Montant de l’écolage      :</strong> {{ invoice.tuitionFee if invoice else '-' }}</p>
     <p><strong>Nouveau paiement          :</strong> {{ receipt.amount }}</p>
     <p><strong>Total payé                :</strong> {{ invoice.paidAmount if invoice else '-' }}</p>

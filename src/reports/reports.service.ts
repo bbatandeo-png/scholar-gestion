@@ -6,6 +6,12 @@ import { Enrollment } from '../enrollments/schemas/enrollment.schema';
 import { Invoice } from '../billing/schemas/invoice.schema';
 import { Level } from '../levels/schemas/level.schema';
 import { Student } from '../students/schemas/student.schema';
+import { SchoolYear } from '../school-years/schemas/school-year.schema';
+import { SettingsService } from '../settings/settings.service';
+import { SchoolYearStatus } from '../common/enums/domain.enums';
+
+type PdfDocumentInstance = InstanceType<typeof PDFDocument>;
+type RegistrationPaidFilter = 'registration' | 'tuition' | 'full' | 'partial' | 'none';
 
 @Injectable()
 export class ReportsService {
@@ -14,6 +20,8 @@ export class ReportsService {
     @InjectModel(Invoice.name) private readonly invoiceModel: Model<Invoice>,
     @InjectModel(Student.name) private readonly studentModel: Model<Student>,
     @InjectModel(Level.name) private readonly levelModel: Model<Level>,
+    @InjectModel(SchoolYear.name) private readonly schoolYearModel: Model<SchoolYear>,
+    private readonly settingsService: SettingsService,
   ) {}
 
   async studentsByLevel() {
@@ -39,12 +47,23 @@ export class ReportsService {
       .exec();
   }
 
-  async registrationPaidStudents(filter: 'registration' | 'tuition' | 'full' | 'partial' | 'none' = 'registration') {
+  async registrationPaidStudents(
+    filter: RegistrationPaidFilter = 'registration',
+    levelId?: string,
+    schoolYearId?: string,
+  ) {
     const invoices = await this.invoiceModel
       .find({})
       .populate({ path: 'enrollmentId', populate: [{ path: 'studentId' }, { path: 'schoolYearId' }, { path: 'levelId' }] })
       .lean()
       .exec();
+
+    const toEntityId = (value: any) => {
+      if (!value) return '';
+      if (typeof value === 'string') return value;
+      if (typeof value === 'object' && value._id) return String(value._id);
+      return String(value);
+    };
 
     return invoices
       .filter((invoice: any) => {
@@ -52,6 +71,13 @@ export class ReportsService {
         const registrationFee = invoice.registrationFee ?? 0;
         const tuitionFee = invoice.tuitionFee ?? 0;
         const totalFee = registrationFee + tuitionFee;
+        const enrollment = invoice.enrollmentId;
+        const matchesLevel = !levelId || toEntityId(enrollment?.levelId) === String(levelId);
+        const matchesSchoolYear = !schoolYearId || toEntityId(enrollment?.schoolYearId) === String(schoolYearId);
+
+        if (!matchesLevel || !matchesSchoolYear) {
+          return false;
+        }
 
         switch (filter) {
           case 'tuition':
@@ -113,6 +139,43 @@ export class ReportsService {
     return this.levelModel.find().sort({ sortOrder: 1 }).lean().exec();
   }
 
+  async listSchoolYears() {
+    return this.schoolYearModel?.find().sort({ startDate: -1 }).lean().exec() ?? [];
+  }
+
+  async findLevelName(levelId: string) {
+    const level = await this.levelModel.findById(levelId).lean().exec();
+    return level?.label;
+  }
+
+  async findOpenSchoolYearLabel() {
+    const schoolYear = await this.schoolYearModel?.findOne({ status: SchoolYearStatus.OPEN }).lean().exec();
+    if (!schoolYear) {
+      return undefined;
+    }
+    return schoolYear.label ?? `${new Date(schoolYear.startDate).getFullYear()} – ${new Date(schoolYear.endDate).getFullYear()}`;
+  }
+
+  private renderPdfHeader(doc: PdfDocumentInstance, schoolName: string, levelName?: string) {
+    const trimmedName = (schoolName || '').trim();
+    const [firstWord, ...restWords] = trimmedName.split(' ');
+    const secondLine = restWords.join(' ');
+
+    if (firstWord) {
+      doc.font('Times-Bold').fontSize(20).text(firstWord.toUpperCase(), { align: 'center' });
+    }
+    if (secondLine) {
+      doc.font('Times-Bold').fontSize(20).text(secondLine.toUpperCase(), { align: 'center' });
+    }
+
+    if (levelName) {
+      doc.moveDown(0.5);
+      doc.font('Times-Bold').fontSize(12).text(`Niveau : ${levelName}`, { align: 'center' });
+    }
+
+    doc.moveDown(1);
+  }
+
   async revenue() {
     const [aggregated] = await this.invoiceModel.aggregate([
       {
@@ -136,13 +199,20 @@ export class ReportsService {
     };
   }
 
-  async renderRegistrationPaidPdf(report: any[], filter: 'registration' | 'tuition' | 'full' | 'partial' | 'none' = 'registration') {
+  async renderRegistrationPaidPdf(
+    report: any[],
+    filter: 'registration' | 'tuition' | 'full' | 'partial' | 'none' = 'registration',
+    levelName?: string,
+  ) {
+    const schoolName = await this.settingsService.getSchoolName();
     const chunks: Buffer[] = [];
     const doc = new PDFDocument({ margin: 40, size: 'A4' });
     doc.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
 
     return await new Promise<Buffer>((resolve) => {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
+
+      this.renderPdfHeader(doc, schoolName, levelName);
 
       const filterLabel =
         filter === 'tuition'
@@ -165,39 +235,43 @@ export class ReportsService {
       const columnWidths = [140, 60, 50, 80, 65, 65, 65];
       const rowHeight = 18;
       const startX = doc.page.margins.left;
-      const maxWidth = columnWidths.reduce((sum, width) => sum + width, 0);
       const bottomLimit = doc.page.height - doc.page.margins.bottom;
 
       const drawHeader = () => {
-        let x = startX;
         const y = doc.y;
-        doc.rect(x - 2, y - 2, maxWidth + 4, rowHeight + 4).fillOpacity(0.08).fillAndStroke('#000000', '#000000');
-        doc.fillOpacity(1);
+        let x = startX;
+        doc.font('Times-Bold').fontSize(10).fillColor('#000000');
+
         headers.forEach((text, index) => {
-          doc.font('Times-Bold').fontSize(10).fillColor('#000000').text(text, x, y, {
-            width: columnWidths[index],
+          doc.rect(x, y, columnWidths[index], rowHeight).fillAndStroke('#F0F0F0', '#000000');
+          doc.fillColor('#000000').text(text, x + 4, y + 4, {
+            width: columnWidths[index] - 8,
             align: index >= 4 ? 'right' : 'left',
           });
           x += columnWidths[index];
         });
-        doc.moveDown(1.3);
-        drawLine(doc.y - 4);
+
+        doc.y = y + rowHeight;
+        doc.x = startX;
       };
 
-      const drawLine = (y: number) => {
+      const drawRow = (values: any[]) => {
+        const y = doc.y;
         let x = startX;
-        doc.save();
-        doc.lineWidth(0.5).strokeColor('#999999');
-        doc.moveTo(x, y);
-        doc.lineTo(x + maxWidth, y);
-        doc.stroke();
-        for (const width of columnWidths) {
-          doc.moveTo(x, y - rowHeight - 2);
-          doc.lineTo(x, y + rowHeight + 6);
-          doc.stroke();
-          x += width;
-        }
-        doc.restore();
+        doc.font('Times-Roman').fontSize(10).fillColor('#000000');
+
+        values.forEach((value, index) => {
+          doc.rect(x, y, columnWidths[index], rowHeight).stroke('#000000');
+          doc.fillColor('#000000').text(String(value), x + 4, y + 4, {
+            width: columnWidths[index] - 8,
+            align: index >= 4 ? 'right' : 'left',
+            ellipsis: true,
+          });
+          x += columnWidths[index];
+        });
+
+        doc.y = y + rowHeight;
+        doc.x = startX;
       };
 
       if (!report.length) {
@@ -205,9 +279,8 @@ export class ReportsService {
       } else {
         drawHeader();
         report.forEach((item: any, index: number) => {
-          if (doc.y + rowHeight * 2 > bottomLimit) {
+          if (doc.y + rowHeight > bottomLimit) {
             doc.addPage();
-            doc.moveDown(1);
             drawHeader();
           }
 
@@ -223,26 +296,92 @@ export class ReportsService {
             item.balanceDue ?? 0,
           ];
 
-          let x = startX;
-          const y = doc.y;
-          values.forEach((value, colIndex) => {
-            doc.font('Times-Roman').fontSize(10).fillColor('#000000').text(String(value), x, y, {
-              width: columnWidths[colIndex],
-              align: colIndex >= 4 ? 'right' : 'left',
-              ellipsis: true,
-            });
-            x += columnWidths[colIndex];
-          });
-          doc.moveDown(1.2);
-          const lineY = doc.y - 6;
-          doc.save();
-          doc.lineWidth(0.3).strokeColor('#DDDDDD');
-          doc.moveTo(startX, lineY);
-          doc.lineTo(startX + maxWidth, lineY);
-          doc.stroke();
-          doc.restore();
+          drawRow(values);
         });
       }
+
+      doc.end();
+    });
+  }
+
+  async renderClassFinancialSituationPdf(report: any[], levelName?: string) {
+    const schoolName = await this.settingsService.getSchoolName();
+    const schoolYearLabel = await this.findOpenSchoolYearLabel();
+    const chunks: Buffer[] = [];
+    const doc = new PDFDocument({ margin: 40, size: 'A4' });
+    doc.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+
+    return await new Promise<Buffer>((resolve) => {
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+
+      this.renderPdfHeader(doc, schoolName, levelName);
+
+      const title = `Situation financière des classes${levelName ? ` - ${levelName}` : ''}`;
+      doc.font('Times-Bold').fontSize(18).text(title, { align: 'center' });
+      doc.moveDown(0.5);
+      doc.font('Times-Roman').fontSize(10).text(`Date : ${new Date().toLocaleDateString('fr-FR')}`, { align: 'right' });
+      doc.moveDown(1);
+
+      const headers = ['Matricule', 'Nom', 'Sexe', 'Inscription', 'Écolage', 'Total dû', 'Payé', 'Reste'];
+      const columnWidths = [70, 120, 40, 70, 70, 65, 65, 65];
+      const rowHeight = 18;
+      const startX = doc.page.margins.left;
+      const bottomLimit = doc.page.height - doc.page.margins.bottom;
+
+      const drawHeader = () => {
+        const y = doc.y;
+        let x = startX;
+        doc.font('Times-Bold').fontSize(10).fillColor('#000000');
+        headers.forEach((text, index) => {
+          doc.rect(x, y, columnWidths[index], rowHeight).fillAndStroke('#F0F0F0', '#000000');
+          doc.fillColor('#000000').text(text, x + 4, y + 4, {
+            width: columnWidths[index] - 8,
+            align: index >= 3 ? 'right' : 'left',
+          });
+          x += columnWidths[index];
+        });
+        doc.y = y + rowHeight;
+        doc.x = startX;
+      };
+
+      const drawRow = (values: any[]) => {
+        const y = doc.y;
+        let x = startX;
+        doc.font('Times-Roman').fontSize(9).fillColor('#000000');
+        values.forEach((value, index) => {
+          doc.rect(x, y, columnWidths[index], rowHeight).stroke('#000000');
+          doc.fillColor('#000000').text(String(value), x + 4, y + 4, {
+            width: columnWidths[index] - 8,
+            align: index >= 3 ? 'right' : 'left',
+            ellipsis: true,
+          });
+          x += columnWidths[index];
+        });
+        doc.y = y + rowHeight;
+        doc.x = startX;
+      };
+
+      drawHeader();
+
+      report.forEach((item: any) => {
+        if (doc.y + rowHeight > bottomLimit) {
+          doc.addPage();
+          drawHeader();
+        }
+
+        const values = [
+          item.student?.matricule ?? '',
+          `${item.student?.lastname ?? ''} ${item.student?.firstname ?? ''}`.trim(),
+          item.student?.gender ?? '',
+          (item.registrationFee ?? 0).toFixed(2),
+          (item.tuitionFee ?? 0).toFixed(2),
+          (item.totalDue ?? 0).toFixed(2),
+          (item.paidAmount ?? 0).toFixed(2),
+          (item.balanceDue ?? 0).toFixed(2),
+        ];
+
+        drawRow(values);
+      });
 
       doc.end();
     });

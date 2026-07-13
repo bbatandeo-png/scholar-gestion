@@ -67,7 +67,13 @@
           </label>
           <label>Nom<input name="lastname" required /></label>
           <label>Prenoms<input name="firstname" required /></label>
-          <label>Sexe<input name="gender" required /></label>
+          <label>Sexe
+            <select name="gender" required>
+              <option value="">Sélectionner</option>
+              <option value="M">M</option>
+              <option value="F">F</option>
+            </select>
+          </label>
           <label>Date de naissance<input type="date" name="birthDate" required /></label>
           <label>Lieu de naissance<input name="birthPlace" required /></label>
           <label>Quartier<input name="district" required /></label>

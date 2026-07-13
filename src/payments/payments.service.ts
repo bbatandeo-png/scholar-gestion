@@ -8,6 +8,7 @@ import { BillingService } from '../billing/billing.service';
 import {
   AuditAction,
   PaymentAllocationRule,
+  ReceiptMode,
 } from '../common/enums/domain.enums';
 import { runWithMongoTransactionFallback } from '../common/utils/mongo-transaction.util';
 import { SettingsService } from '../settings/settings.service';
@@ -170,7 +171,7 @@ export class PaymentsService {
       .exec();
   }
 
-  async renderReceiptPdf(id: string) {
+  async renderReceiptPdf(id: string, receiptMode: ReceiptMode = ReceiptMode.TUITION_ONLY) {
     const receipt = await this.findReceiptById(id);
     const chunks: Buffer[] = [];
     const doc = new PDFDocument({ margin: 40 });
@@ -203,24 +204,48 @@ export class PaymentsService {
       doc.font('Times-Bold').fontSize(14).text('REÇU DE PAIEMENT DES FRAIS DE SCOLARITE', { align: 'center' });
       doc.moveDown(1);
 
-      const pad = (text: string, width: number) => text.padEnd(width, ' ');
-      const field = (label: string, value: string | number) => {
-        doc.font('Courier').fontSize(12).text(`${pad(label, 35)}: ${String(value)}`);
-      };
+      const rows = [
+        ['Référence ou Numéro de reçu', receipt.receiptNumber ?? '-'],
+        ['Année scolaire', schoolYearLabel],
+        ['Nom et prénoms de l’élève', studentFullName],
+        ['N° Matricule', student?.matricule ?? '-'],
+        ['Sexe', gender],
+        ['Classe', levelLabel],
+      ];
 
-      field('Référence ou Numéro de reçu', receipt.receiptNumber ?? '-');
-      field('Année scolaire', schoolYearLabel);
-      field('Nom et prénoms de l’élève', studentFullName);
-      field('N° Matricule', student?.matricule ?? '-');
-      field('Sexe', gender);
-      field('Classe', levelLabel);
-      field('Montant de l’écolage', invoice?.tuitionFee ?? '-');
-      field('Nouveau paiement', receipt.amount ?? '-');
-      field('Total payé', invoice?.paidAmount ?? '-');
-      field('Reste à payer', invoice?.balanceDue ?? '-');
+      if (receiptMode === ReceiptMode.TUITION_AND_REGISTRATION) {
+        rows.push(['Frais d\'inscription', invoice?.registrationFee ?? '-']);
+      }
 
-      doc.moveDown(2);
-      doc.font('Courier').text(`Lomé, le ${formattedDate}`, { align: 'right' });
+      rows.push(['Montant de l’écolage', invoice?.tuitionFee ?? '-']);
+      rows.push(['Nouveau paiement', receipt.amount ?? '-']);
+      rows.push(['Total payé', invoice?.paidAmount ?? '-']);
+      rows.push(['Reste à payer', invoice?.balanceDue ?? '-']);
+
+      const rowHeight = 22;
+      const startX = doc.page.margins.left;
+      const labelWidth = 190;
+      const valueWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right - labelWidth;
+      let y = doc.y;
+
+      rows.forEach(([label, value], index) => {
+        doc.rect(startX, y, labelWidth, rowHeight).stroke('#000000');
+        doc.rect(startX + labelWidth, y, valueWidth, rowHeight).stroke('#000000');
+
+        doc.font('Times-Bold').fontSize(11).text(label, startX + 6, y + 6, {
+          width: labelWidth - 12,
+          align: 'left',
+        });
+        doc.font('Times-Roman').fontSize(11).text(String(value), startX + labelWidth + 6, y + 6, {
+          width: valueWidth - 12,
+          align: 'left',
+        });
+
+        y += rowHeight;
+      });
+
+      doc.y = y + 10;
+      doc.font('Times-Roman').text(`Lomé, le ${formattedDate}`, { align: 'right' });
       doc.moveDown(2);
       doc.font('Times-Roman').text('L’économe', { align: 'right' });
 

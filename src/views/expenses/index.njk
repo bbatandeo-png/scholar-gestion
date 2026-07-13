@@ -9,6 +9,7 @@
       <div class="toolbar">
         <a class="button secondary" href="/expenses/categories">Catégories</a>
         <a class="button secondary btn-icon icon-export" href="/expenses/export">Exporter Excel</a>
+        <a class="button secondary btn-icon icon-export" href="/expenses/pdf{% if categoryId %}?categoryId={{ categoryId }}{% endif %}">Imprimer PDF</a>
       </div>
     </div>
     <form method="post" action="/expenses" class="stack">

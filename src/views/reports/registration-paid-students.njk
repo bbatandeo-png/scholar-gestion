@@ -7,7 +7,7 @@
         <p class="muted">Filtrer les élèves selon le paiement des frais d'inscription et d'écolage.</p>
       </div>
       <div class="panel-heading-actions">
-        <a class="button secondary btn-icon icon-export" href="/reports/registration-paid/pdf?filter={{ filter }}">Télécharger PDF</a>
+        <a class="button secondary btn-icon icon-export" href="/reports/registration-paid/pdf?filter={{ filter }}{% if levelId %}&levelId={{ levelId }}{% endif %}{% if schoolYearId %}&schoolYearId={{ schoolYearId }}{% endif %}">Télécharger PDF</a>
       </div>
     </div>
     <form method="get" action="/reports/registration-paid" class="toolbar-grid">
@@ -19,6 +19,24 @@
           <option value="full" {% if filter == 'full' %}selected{% endif %}>Inscription et écolage payés</option>
           <option value="partial" {% if filter == 'partial' %}selected{% endif %}>Paiement partiel</option>
           <option value="none" {% if filter == 'none' %}selected{% endif %}>Aucun paiement</option>
+        </select>
+      </label>
+      <label>
+        Niveau
+        <select name="levelId">
+          <option value="" {% if not levelId %}selected{% endif %}>Tous les niveaux</option>
+          {% for level in levels %}
+            <option value="{{ level._id }}" {% if levelId == level._id %}selected{% endif %}>{{ level.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        Année académique
+        <select name="schoolYearId">
+          <option value="" {% if not schoolYearId %}selected{% endif %}>Toutes les années</option>
+          {% for year in schoolYears %}
+            <option value="{{ year._id }}" {% if schoolYearId == year._id %}selected{% endif %}>{{ year.label }}</option>
+          {% endfor %}
         </select>
       </label>
       <button type="submit" class="button secondary">Appliquer</button>

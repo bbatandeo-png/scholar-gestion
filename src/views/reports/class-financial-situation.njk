@@ -8,6 +8,7 @@
       </div>
       <div class="toolbar">
         <a class="button secondary btn-icon icon-export" href="/reports/class-financial-situation/export{% if levelId %}?levelId={{ levelId }}{% endif %}">Exporter Excel</a>
+        <a class="button secondary btn-icon icon-export" href="/reports/class-financial-situation/pdf{% if levelId %}?levelId={{ levelId }}{% endif %}">Télécharger PDF</a>
       </div>
     </div>
     <form method="get" action="/reports/class-financial-situation" class="toolbar-grid">

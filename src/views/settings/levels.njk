@@ -1,6 +1,23 @@
 ﻿{% extends "layout.njk" %}
 {% block content %}
   <section class="grid cols-2">
+    {% if editLevel %}
+      <div class="panel">
+        <h2>Modifier niveau</h2>
+        <form method="post" action="/settings/levels/{{ editLevel._id }}" class="stack">
+          <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+          <div class="form-grid">
+            <label>Code<input name="code" value="{{ editLevel.code }}" required /></label>
+            <label>Libelle<input name="label" value="{{ editLevel.label }}" required /></label>
+            <label>Ordre<input type="number" name="sortOrder" min="1" value="{{ editLevel.sortOrder }}" required /></label>
+          </div>
+          <div class="toolbar" style="gap:8px;">
+            <button type="submit">Mettre à jour</button>
+            <a class="button secondary" href="/settings/levels">Annuler</a>
+          </div>
+        </form>
+      </div>
+    {% endif %}
     <div class="panel">
       <h2>Nouveau niveau</h2>
       <form method="post" action="/settings/levels" class="stack">
@@ -22,8 +39,17 @@
         <a class="button secondary" href="/settings/levels/export">Exporter Excel</a>
       </div>
       <table>
-        <thead><tr><th>Code</th><th>Libelle</th><th>Ordre</th></tr></thead>
-        <tbody>{% for item in levels %}<tr><td>{{ item.code }}</td><td>{{ item.label }}</td><td>{{ item.sortOrder }}</td></tr>{% endfor %}</tbody>
+        <thead><tr><th>Code</th><th>Libelle</th><th>Ordre</th><th>Actions</th></tr></thead>
+        <tbody>
+          {% for item in levels %}
+            <tr>
+              <td>{{ item.code }}</td>
+              <td>{{ item.label }}</td>
+              <td>{{ item.sortOrder }}</td>
+              <td><a class="button btn-sm" href="/settings/levels/{{ item._id }}/edit">Modifier</a></td>
+            </tr>
+          {% endfor %}
+        </tbody>
       </table>
     </div>
   </section>

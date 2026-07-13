@@ -74,25 +74,44 @@ export class ReportsController {
   @Get('/registration-paid')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.COMPTABILITE, Role.AUDITEUR)
   @Render('reports/registration-paid-students')
-  async registrationPaidStudents(@Query('filter') filter?: string) {
+  async registrationPaidStudents(
+    @Query('filter') filter?: string,
+    @Query('levelId') levelId?: string,
+    @Query('schoolYearId') schoolYearId?: string,
+  ) {
     const normalizedFilter = ['registration', 'tuition', 'full', 'partial', 'none'].includes(filter ?? '')
       ? (filter as 'registration' | 'tuition' | 'full' | 'partial' | 'none')
       : 'registration';
 
+    const [report, levels, schoolYears] = await Promise.all([
+      this.reportsService.registrationPaidStudents(normalizedFilter, levelId, schoolYearId),
+      this.reportsService.listLevels(),
+      this.reportsService.listSchoolYears(),
+    ]);
+
     return {
       title: 'Eleves ayant paye l\'inscription',
-      report: await this.reportsService.registrationPaidStudents(normalizedFilter),
+      report,
       filter: normalizedFilter,
+      levelId: levelId || '',
+      schoolYearId: schoolYearId || '',
+      levels,
+      schoolYears,
     };
   }
 
   @Get('/registration-paid/pdf')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.COMPTABILITE, Role.AUDITEUR)
-  async registrationPaidStudentsPdf(@Res() res: Response, @Query('filter') filter?: string) {
+  async registrationPaidStudentsPdf(
+    @Res() res: Response,
+    @Query('filter') filter?: string,
+    @Query('levelId') levelId?: string,
+    @Query('schoolYearId') schoolYearId?: string,
+  ) {
     const normalizedFilter = ['registration', 'tuition', 'full', 'partial', 'none'].includes(filter ?? '')
       ? (filter as 'registration' | 'tuition' | 'full' | 'partial' | 'none')
       : 'registration';
-    const report = await this.reportsService.registrationPaidStudents(normalizedFilter);
+    const report = await this.reportsService.registrationPaidStudents(normalizedFilter, levelId, schoolYearId);
     const pdf = await this.reportsService.renderRegistrationPaidPdf(report, normalizedFilter);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="registration-paid-students-${normalizedFilter}.pdf"`);
@@ -168,6 +187,19 @@ export class ReportsController {
     res?.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res?.setHeader('Content-Disposition', 'attachment; filename="situation_financiere.xlsx"');
     return res?.send(buffer);
+  }
+
+  @Get('/class-financial-situation/pdf')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.COMPTABILITE, Role.AUDITEUR)
+  async classFinancialSituationPdf(@Res() res: Response, @Query('levelId') levelId?: string) {
+    const report = await this.reportsService.classFinancialSituation();
+    const filtered = levelId ? report.filter((item: any) => String(item.level?._id ?? item.level?.id ?? '') === String(levelId)) : report;
+    const levelName = levelId ? await this.reportsService.findLevelName(levelId) : undefined;
+    const pdf = await this.reportsService.renderClassFinancialSituationPdf(filtered, levelName);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="situation_financiere${levelName ? `-${levelName.replace(/[^a-zA-Z0-9_-]/g, '_')}` : ''}.pdf"`);
+    return res.send(pdf);
   }
 
   @Get('/revenue')

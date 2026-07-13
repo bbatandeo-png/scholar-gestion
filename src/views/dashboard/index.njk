@@ -8,6 +8,10 @@
 
   <section class="grid cols-3">
     <article class="card"><div class="muted">Effectif total</div><div class="metric">{{ summary.totalStudents }}</div></article>
+    <article class="card"><div class="muted">Frais d'inscription encaissés</div><div class="metric">{{ summary.registrationRevenue }}</div></article>
+    <article class="card"><div class="muted">Frais d'écolage encaissés</div><div class="metric">{{ summary.tuitionRevenue }}</div></article>
+    <article class="card"><div class="muted">Dépenses</div><div class="metric">{{ summary.totalExpenses }}</div></article>
+    <article class="card"><div class="muted">Solde disponible</div><div class="metric">{{ summary.availableBalance }}</div></article>
     <article class="card"><div class="muted">Recettes encaissees</div><div class="metric">{{ summary.revenue }}</div></article>
     <article class="card"><div class="muted">Impayes globaux</div><div class="metric">{{ summary.totalBalance }}</div></article>
     <article class="card"><div class="muted">Taux de recouvrement</div><div class="metric">{{ summary.recoveryRate }}%</div></article>

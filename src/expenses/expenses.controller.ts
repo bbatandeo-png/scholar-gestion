@@ -55,6 +55,84 @@ export class ExpensesController {
     }
   }
 
+  @Get('/categories')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.COMPTABILITE)
+  @Render('expenses/categories')
+  async categories() {
+    return {
+      title: 'Catégories de dépenses',
+      categories: await this.expensesService.listCategories(),
+    };
+  }
+
+  @Get('/categories/:id/json')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.COMPTABILITE)
+  async categoryJson(@Param('id') id: string) {
+    const cat = await this.expensesService.findCategoryById(id);
+    return { id: cat._id, name: cat.name, description: cat.description };
+  }
+
+  @Post('/categories')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.COMPTABILITE)
+  async createCategory(@Body() dto: CreateExpenseCategoryDto, @Req() req: Request, @Res() res: Response) {
+    await this.expensesService.createCategory(dto);
+    setFlash(req, 'success', 'Catégorie enregistrée');
+    return res.redirect('/expenses/categories');
+  }
+
+  @Post('/categories/:id')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.COMPTABILITE)
+  async updateCategory(@Param('id') id: string, @Body() dto: CreateExpenseCategoryDto, @Req() req: Request, @Res() res: Response) {
+    await this.expensesService.updateCategory(id, dto);
+    setFlash(req, 'success', 'Catégorie mise à jour');
+    return res.redirect('/expenses/categories');
+  }
+
+  @Delete('/categories/:id')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.COMPTABILITE)
+  async removeCategory(@Param('id') id: string, @Req() req: Request, @Res() res: Response) {
+    await this.expensesService.deleteCategory(id);
+    setFlash(req, 'success', 'Catégorie supprimée');
+    return res.redirect('/expenses/categories');
+  }
+
+  @Get('/pdf')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.COMPTABILITE)
+  async pdf(@Res() res: Response, @Query('categoryId') categoryId?: string) {
+    const [expenses, categories] = await Promise.all([
+      this.expensesService.list('', categoryId),
+      this.expensesService.listCategories(),
+    ]);
+    const category = categoryId ? categories.find((item: any) => String(item._id) === String(categoryId)) : undefined;
+    const pdf = await this.expensesService.renderPdf(expenses, category?.name);
+    const fileName = `depenses${category?.name ? `-${category.name.replace(/[^a-zA-Z0-9_-]/g, '_')}` : ''}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    return res.send(pdf);
+  }
+
+  @Get('/export')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.COMPTABILITE)
+  async export(@Res() res: Response, @Query('categoryId') categoryId?: string) {
+    const expenses = await this.expensesService.list('', categoryId);
+    const buffer = buildExcelBuffer(
+      'Depenses',
+      expenses.map((item: any) => ({
+        numero: item.orderNumber,
+        date: new Date(item.expenseDate).toLocaleDateString('fr-FR'),
+        libelle: item.label,
+        montant: item.amount,
+        beneficiaire: item.beneficiary,
+        categorie: item.categoryId?.name ?? '',
+      })),
+    );
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="depenses.xlsx"');
+    return res.send(buffer);
+  }
+
   @Post('/:id')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.COMPTABILITE)
   async update(@Param('id') id: string, @Body() dto: CreateExpenseDto, @Req() req: Request, @Res() res: Response) {
@@ -120,67 +198,5 @@ export class ExpensesController {
     await this.expensesService.delete(id);
     setFlash(req, 'success', 'Dépense supprimée');
     return res.redirect('/expenses');
-  }
-
-  @Get('/categories')
-  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.COMPTABILITE)
-  @Render('expenses/categories')
-  async categories() {
-    return {
-      title: 'Catégories de dépenses',
-      categories: await this.expensesService.listCategories(),
-    };
-  }
-
-  @Get('/categories/:id/json')
-  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.COMPTABILITE)
-  async categoryJson(@Param('id') id: string) {
-    const cat = await this.expensesService.findCategoryById(id);
-    return { id: cat._id, name: cat.name, description: cat.description };
-  }
-
-  @Post('/categories')
-  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.COMPTABILITE)
-  async createCategory(@Body() dto: CreateExpenseCategoryDto, @Req() req: Request, @Res() res: Response) {
-    await this.expensesService.createCategory(dto);
-    setFlash(req, 'success', 'Catégorie enregistrée');
-    return res.redirect('/expenses/categories');
-  }
-
-  @Post('/categories/:id')
-  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.COMPTABILITE)
-  async updateCategory(@Param('id') id: string, @Body() dto: CreateExpenseCategoryDto, @Req() req: Request, @Res() res: Response) {
-    await this.expensesService.updateCategory(id, dto);
-    setFlash(req, 'success', 'Catégorie mise à jour');
-    return res.redirect('/expenses/categories');
-  }
-
-  @Delete('/categories/:id')
-  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.COMPTABILITE)
-  async removeCategory(@Param('id') id: string, @Req() req: Request, @Res() res: Response) {
-    await this.expensesService.deleteCategory(id);
-    setFlash(req, 'success', 'Catégorie supprimée');
-    return res.redirect('/expenses/categories');
-  }
-
-  @Get('/export')
-  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.COMPTABILITE)
-  async export(@Res() res: Response, @Query('categoryId') categoryId?: string) {
-    const expenses = await this.expensesService.list('', categoryId);
-    const buffer = buildExcelBuffer(
-      'Depenses',
-      expenses.map((item: any) => ({
-        numero: item.orderNumber,
-        date: new Date(item.expenseDate).toLocaleDateString('fr-FR'),
-        libelle: item.label,
-        montant: item.amount,
-        beneficiaire: item.beneficiary,
-        categorie: item.categoryId?.name ?? '',
-      })),
-    );
-
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename="depenses.xlsx"');
-    return res.send(buffer);
   }
 }

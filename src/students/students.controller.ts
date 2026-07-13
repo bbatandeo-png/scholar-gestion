@@ -157,7 +157,7 @@ export class StudentsController {
         matricule: pickRowValue(row, ['matricule', 'code_eleve']),
         lastname: pickRowValue(row, ['lastname', 'nom']),
         firstname: pickRowValue(row, ['firstname', 'prenoms', 'prenom']),
-        gender: pickRowValue(row, ['gender', 'sexe']),
+        gender: (pickRowValue(row, ['gender', 'sexe']) || '').toString().trim().toUpperCase(),
         birthDate: pickRowValue(row, ['birthdate', 'date_naissance']),
         birthPlace: pickRowValue(row, ['birthplace', 'lieu_naissance']),
         district: pickRowValue(row, ['district', 'quartier']),
@@ -167,6 +167,7 @@ export class StudentsController {
         !dto.lastname ||
         !dto.firstname ||
         !dto.gender ||
+        !['M', 'F'].includes(dto.gender) ||
         !dto.birthDate ||
         !dto.birthPlace ||
         !dto.district
