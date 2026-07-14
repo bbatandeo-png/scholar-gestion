@@ -27,6 +27,26 @@
       </div>
     </div>
 
+    <form method="get" action="/reports/nominal-roll/pdf" target="_blank" class="toolbar" style="margin-top: 14px;">
+      <label style="display:flex;gap:8px;align-items:center;">
+        Liste nominative de la classe
+        <select name="levelId" required>
+          <option value="">Sélectionner une classe</option>
+          {% for level in levels %}
+            <option value="{{ level._id }}">{{ level.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button type="submit" class="button secondary btn-icon icon-export" {% if not openSchoolYear %}disabled{% endif %}>
+        Ouvrir le PDF
+      </button>
+      {% if openSchoolYear %}
+        <span class="muted">Année scolaire : {{ openSchoolYear.label }}</span>
+      {% else %}
+        <span class="notice notice-warning">Ouvrez une année scolaire avant d'imprimer la liste.</span>
+      {% endif %}
+    </form>
+
     <div id="advanced-filters" style="display:none;margin-top:14px;">
       <div class="panel form-section">
         <form method="get" action="/students" class="form-grid" id="advanced-search">

@@ -15,18 +15,18 @@
     <p><strong>Sexe                      :</strong> {{ student.gender if student else '-' }}</p>
     <p><strong>Classe                    :</strong> {{ enrollment.levelId.label if enrollment and enrollment.levelId else '-' }}</p>
     {% if receipt.receiptMode == 'tuition_and_registration' %}
-      <p><strong>Frais d'inscription         :</strong> {{ invoice.registrationFee if invoice else '-' }}</p>
+      <p><strong>Frais d'inscription         :</strong> {{ receipt.receiptSummary.registrationFee }}</p>
     {% endif %}
-    <p><strong>Montant de l’écolage      :</strong> {{ invoice.tuitionFee if invoice else '-' }}</p>
+    <p><strong>Montant de l’écolage      :</strong> {{ receipt.receiptSummary.tuitionFee }}</p>
     <p><strong>Nouveau paiement          :</strong> {{ receipt.amount }}</p>
-    <p><strong>Total payé                :</strong> {{ invoice.paidAmount if invoice else '-' }}</p>
-    <p><strong>Reste à payer             :</strong> {{ invoice.balanceDue if invoice else '-' }}</p>
+    <p><strong>Total payé                :</strong> {{ receipt.receiptSummary.totalPaid }}</p>
+    <p><strong>Reste à payer             :</strong> {{ receipt.receiptSummary.balanceDue }}</p>
 
     <p style="text-align: right; margin-top: 40px;">Lomé, le {{ receipt.paidAt | string }}</p>
     <p style="text-align: right; margin-top: 40px;">L’économe</p>
 
     <div class="actions" style="margin-top: 16px;">
-      <a class="button" href="/receipts/{{ receipt._id }}?format=pdf">Version PDF</a>
+      <a class="button" target="_blank" href="/receipts/{{ receipt._id }}?format=pdf">Imprimer le reçu en double</a>
     </div>
   </section>
 {% endblock %}

@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Param, Post, Query, Render, Req, Res, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  Render,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import { Request, Response } from 'express';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/enums/domain.enums';
@@ -19,8 +30,15 @@ export class PaymentsController {
 
   @Post('/payments')
   @Roles(Role.SUPER_ADMIN, Role.COMPTABILITE)
-  async create(@Body() dto: CreatePaymentDto, @Req() req: Request, @Res() res: Response) {
-    const result = await this.paymentsService.createPayment(dto, req.session.user?.id);
+  async create(
+    @Body() dto: CreatePaymentDto,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const result = await this.paymentsService.createPayment(
+      dto,
+      req.session.user?.id,
+    );
     setFlash(req, 'success', 'Paiement enregistre');
     return res.redirect(`/receipts/${result.payment._id}`);
   }
@@ -36,15 +54,27 @@ export class PaymentsController {
     if (format === 'pdf') {
       const pdf = await this.paymentsService.renderReceiptPdf(id, receiptMode);
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `inline; filename="receipt-${id}.pdf"`);
+      res.setHeader(
+        'Content-Disposition',
+        `inline; filename="receipt-${id}.pdf"`,
+      );
       return res.send(pdf);
     }
 
     const receipt = await this.paymentsService.findReceiptById(id);
     const schoolName = await this.settingsService.getSchoolName();
+    const receiptSummary = this.paymentsService.getReceiptAmounts(
+      receipt.invoiceId,
+      receiptMode,
+    );
     return res.render('payments/receipt', {
       title: 'Recu',
-      receipt: { ...receipt, schoolName: schoolName || undefined, receiptMode },
+      receipt: {
+        ...receipt,
+        schoolName: schoolName || undefined,
+        receiptMode,
+        receiptSummary,
+      },
     });
   }
 }

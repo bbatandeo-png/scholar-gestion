@@ -47,17 +47,19 @@
               <td>{{ item.endDate }}</td>
               <td>{% set value = item.status %}{% include "partials/status-badge.njk" %}</td>
               <td>
-                <a class="button btn-sm" href="/settings/school-years/{{ item._id }}/edit">Modifier</a>
-                <form method="post" action="/settings/school-years/{{ item._id }}/status" style="display:inline-flex;gap:8px;flex-wrap:wrap;">
-                  <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
-                  <input type="hidden" name="status" value="open" />
-                  <button type="submit" class="button btn-sm" {% if item.status == 'open' %}disabled{% endif %}>Ouvrir</button>
-                </form>
-                <form method="post" action="/settings/school-years/{{ item._id }}/status" style="display:inline-flex;gap:8px;flex-wrap:wrap;">
-                  <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
-                  <input type="hidden" name="status" value="closed" />
-                  <button type="submit" class="button btn-sm secondary" {% if item.status == 'closed' %}disabled{% endif %}>Cloturer</button>
-                </form>
+                <div class="toolbar">
+                  <a class="button btn-sm" href="/settings/school-years/{{ item._id }}/edit">Modifier</a>
+                  <form method="post" action="/settings/school-years/{{ item._id }}/status" class="inline-form">
+                    <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+                    <input type="hidden" name="status" value="open" />
+                    <button type="submit" class="button btn-sm" {% if item.status == 'open' %}disabled{% endif %}>Ouvrir</button>
+                  </form>
+                  <form method="post" action="/settings/school-years/{{ item._id }}/status" class="inline-form">
+                    <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+                    <input type="hidden" name="status" value="closed" />
+                    <button type="submit" class="button btn-sm secondary" {% if item.status == 'closed' %}disabled{% endif %}>Cloturer</button>
+                  </form>
+                </div>
               </td>
             </tr>
           {% endfor %}

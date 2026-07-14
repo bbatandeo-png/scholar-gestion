@@ -35,7 +35,7 @@
           {% if role == 'super_admin' or role == 'direction' %}
             <a href="/settings/school-years" class="{% if currentPath and currentPath.startsWith('/settings/school-years') %}is-active{% endif %}">Annees scolaires</a>
             <a href="/settings/levels" class="{% if currentPath and currentPath.startsWith('/settings/levels') %}is-active{% endif %}">Niveaux</a>
-            <a href="/settings/fees" class="{% if currentPath and currentPath.startsWith('/settings/fees') %}is-active{% endif %}">Frais</a>
+            <a href="/settings/fees" class="{% if currentPath and currentPath.startsWith('/settings/fees') %}is-active{% endif %}">Paramètres et Frais</a>
           {% endif %}
           {% if role == 'super_admin' %}
             <a href="/users" class="{% if currentPath and currentPath.startsWith('/users') %}is-active{% endif %}">Utilisateurs</a>
