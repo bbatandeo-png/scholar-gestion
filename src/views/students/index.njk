@@ -9,10 +9,10 @@
         </div>
       </div>
 
-      <div class="topbar-actions">
+      <div class="topbar-actions student-list-actions">
         <form method="get" action="/students" class="inline-form" id="main-search">
-          <label style="display:flex;gap:8px;align-items:center;">
-            <input type="search" name="q" value="{{ query }}" placeholder="Rechercher par nom, prénom ou matricule" style="min-width:320px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);" />
+          <label class="field-inline">
+            <input class="search-field" type="search" name="q" value="{{ query }}" placeholder="Rechercher par nom, prénom ou matricule" />
             <button type="submit" class="button btn-icon icon-search">Rechercher</button>
             <button type="button" id="toggle-advanced" class="button secondary">Filtres</button>
           </label>
@@ -27,8 +27,8 @@
       </div>
     </div>
 
-    <form method="get" action="/reports/nominal-roll/pdf" target="_blank" class="toolbar" style="margin-top: 14px;">
-      <label style="display:flex;gap:8px;align-items:center;">
+    <form method="get" action="/reports/nominal-roll/pdf" target="_blank" class="toolbar compact-actions page-toolbar">
+      <label class="field-inline nominal-roll-field">
         Liste nominative de la classe
         <select name="levelId" required>
           <option value="">Sélectionner une classe</option>

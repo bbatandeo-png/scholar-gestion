@@ -11,7 +11,7 @@
             <label>Libelle<input name="label" value="{{ editLevel.label }}" required /></label>
             <label>Ordre<input type="number" name="sortOrder" min="1" value="{{ editLevel.sortOrder }}" required /></label>
           </div>
-          <div class="toolbar" style="gap:8px;">
+          <div class="toolbar compact-actions">
             <button type="submit">Mettre à jour</button>
             <a class="button secondary" href="/settings/levels">Annuler</a>
           </div>
@@ -38,19 +38,21 @@
         </div>
         <a class="button secondary" href="/settings/levels/export">Exporter Excel</a>
       </div>
-      <table>
-        <thead><tr><th>Code</th><th>Libelle</th><th>Ordre</th><th>Actions</th></tr></thead>
-        <tbody>
-          {% for item in levels %}
-            <tr>
-              <td>{{ item.code }}</td>
-              <td>{{ item.label }}</td>
-              <td>{{ item.sortOrder }}</td>
-              <td><a class="button btn-sm" href="/settings/levels/{{ item._id }}/edit">Modifier</a></td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      <div class="table-shell">
+        <table>
+          <thead><tr><th>Code</th><th>Libelle</th><th>Ordre</th><th>Actions</th></tr></thead>
+          <tbody>
+            {% for item in levels %}
+              <tr>
+                <td>{{ item.code }}</td>
+                <td>{{ item.label }}</td>
+                <td>{{ item.sortOrder }}</td>
+                <td><a class="button btn-sm" href="/settings/levels/{{ item._id }}/edit">Modifier</a></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
   </section>
 {% endblock %}

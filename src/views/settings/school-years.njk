@@ -21,7 +21,7 @@
             </select>
           </label>
         </div>
-        <div class="stack" style="gap: 8px; align-items: flex-start;">
+        <div class="stack compact-actions">
           <button type="submit">{% if editYear %}Mettre a jour{% else %}Enregistrer{% endif %}</button>
           {% if editYear %}
             <a class="button secondary" href="/settings/school-years">Annuler</a>
@@ -37,34 +37,36 @@
         </div>
         <a class="button secondary" href="/settings/school-years/export">Exporter Excel</a>
       </div>
-      <table>
-        <thead><tr><th>Libelle</th><th>Debut</th><th>Fin</th><th>Statut</th><th>Actions</th></tr></thead>
-        <tbody>
-          {% for item in schoolYears %}
-            <tr>
-              <td>{{ item.label }}</td>
-              <td>{{ item.startDate }}</td>
-              <td>{{ item.endDate }}</td>
-              <td>{% set value = item.status %}{% include "partials/status-badge.njk" %}</td>
-              <td>
-                <div class="toolbar">
-                  <a class="button btn-sm" href="/settings/school-years/{{ item._id }}/edit">Modifier</a>
-                  <form method="post" action="/settings/school-years/{{ item._id }}/status" class="inline-form">
-                    <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
-                    <input type="hidden" name="status" value="open" />
-                    <button type="submit" class="button btn-sm" {% if item.status == 'open' %}disabled{% endif %}>Ouvrir</button>
-                  </form>
-                  <form method="post" action="/settings/school-years/{{ item._id }}/status" class="inline-form">
-                    <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
-                    <input type="hidden" name="status" value="closed" />
-                    <button type="submit" class="button btn-sm secondary" {% if item.status == 'closed' %}disabled{% endif %}>Cloturer</button>
-                  </form>
-                </div>
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      <div class="table-shell">
+        <table>
+          <thead><tr><th>Libelle</th><th>Debut</th><th>Fin</th><th>Statut</th><th>Actions</th></tr></thead>
+          <tbody>
+            {% for item in schoolYears %}
+              <tr>
+                <td>{{ item.label }}</td>
+                <td>{{ item.startDate }}</td>
+                <td>{{ item.endDate }}</td>
+                <td>{% set value = item.status %}{% include "partials/status-badge.njk" %}</td>
+                <td>
+                  <div class="toolbar table-row-actions">
+                    <a class="button btn-sm" href="/settings/school-years/{{ item._id }}/edit">Modifier</a>
+                    <form method="post" action="/settings/school-years/{{ item._id }}/status" class="inline-form">
+                      <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+                      <input type="hidden" name="status" value="open" />
+                      <button type="submit" class="button btn-sm" {% if item.status == 'open' %}disabled{% endif %}>Ouvrir</button>
+                    </form>
+                    <form method="post" action="/settings/school-years/{{ item._id }}/status" class="inline-form">
+                      <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+                      <input type="hidden" name="status" value="closed" />
+                      <button type="submit" class="button btn-sm secondary" {% if item.status == 'closed' %}disabled{% endif %}>Cloturer</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
   </section>
 {% endblock %}

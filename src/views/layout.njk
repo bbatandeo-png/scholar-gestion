@@ -9,11 +9,16 @@
   <body>
     <div class="app-shell">
       <aside class="sidebar">
-        <div>
-          <p class="eyebrow">Complexe scolaire</p>
-          <h1>Scolar-Gestion</h1>
+        <div class="sidebar-header">
+          <div>
+            <p class="eyebrow">Complexe scolaire</p>
+            <h1>Scolar-Gestion</h1>
+          </div>
+          <button type="button" class="sidebar-toggle" aria-label="Afficher ou masquer le menu" aria-expanded="true">
+            ☰
+          </button>
         </div>
-        <nav class="nav-links">
+        <nav class="nav-links" aria-label="Navigation principale">
           {% set role = currentUser.role if currentUser else '' %}
           <a href="/dashboard" class="{% if currentPath == '/dashboard' %}is-active{% endif %}">Dashboard</a>
           {% if role == 'super_admin' or role == 'direction' or role == 'secretariat' or role == 'auditeur' %}
@@ -88,6 +93,39 @@
     </div>
     <script>
       (() => {
+        const sidebar = document.querySelector('.sidebar');
+        const toggle = document.querySelector('.sidebar-toggle');
+        const mediaQuery = window.matchMedia('(max-width: 980px)');
+
+        const applySidebarState = () => {
+          if (!sidebar || !toggle) {
+            return;
+          }
+
+          if (mediaQuery.matches) {
+            sidebar.classList.add('is-collapsed');
+            sidebar.classList.remove('is-open');
+            toggle.setAttribute('aria-expanded', 'false');
+          } else {
+            sidebar.classList.remove('is-collapsed');
+            sidebar.classList.add('is-open');
+            toggle.setAttribute('aria-expanded', 'true');
+          }
+        };
+
+        toggle?.addEventListener('click', () => {
+          if (!mediaQuery.matches) {
+            return;
+          }
+
+          const collapsed = sidebar.classList.toggle('is-collapsed');
+          toggle.setAttribute('aria-expanded', String(!collapsed));
+        });
+
+        mediaQuery.addEventListener?.('change', applySidebarState);
+        window.addEventListener('resize', applySidebarState);
+        applySidebarState();
+
         const tables = document.querySelectorAll('table.js-sortable');
 
         tables.forEach((table) => {

@@ -56,6 +56,130 @@ describe('ReportsService', () => {
 
     expect(result).toHaveLength(1);
     expect((result[0] as any).enrollmentId.studentId.lastname).toBe('A');
+    expect(result[0]).toMatchObject({
+      amountDue: 1000,
+      amountPaid: 1000,
+      balanceDue: 0,
+    });
+  });
+
+  it('separates registration payments from tuition payments', async () => {
+    const invoices = [
+      {
+        paidAmount: 1600,
+        registrationFee: 1000,
+        tuitionFee: 2200,
+        discountAmount: 200,
+        enrollmentId: {
+          studentId: { lastname: 'Abalo', firstname: 'Koffi' },
+          schoolYearId: { _id: 'year-1' },
+          levelId: { _id: 'level-1' },
+        },
+      },
+    ];
+    const invoiceModel = {
+      find: jest.fn().mockReturnValue({
+        populate: jest.fn().mockReturnValue({
+          lean: jest.fn().mockReturnValue({
+            exec: jest.fn().mockResolvedValue(invoices),
+          }),
+        }),
+      }),
+    };
+    const service = new ReportsService(
+      {} as any,
+      invoiceModel as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
+
+    const registration = await service.registrationPaidStudents('registration');
+    const tuition = await service.registrationPaidStudents('tuition');
+
+    expect(registration[0]).toMatchObject({
+      amountDue: 1000,
+      amountPaid: 1000,
+      balanceDue: 0,
+    });
+    expect(tuition[0]).toMatchObject({
+      amountDue: 2000,
+      amountPaid: 600,
+      balanceDue: 1400,
+    });
+  });
+
+  it('keeps partial-payment and no-payment filters', async () => {
+    const invoices = [
+      {
+        paidAmount: 500,
+        registrationFee: 1000,
+        tuitionFee: 2000,
+        enrollmentId: { studentId: { lastname: 'Partiel' } },
+      },
+      {
+        paidAmount: 0,
+        registrationFee: 1000,
+        tuitionFee: 2000,
+        enrollmentId: { studentId: { lastname: 'Impayé' } },
+      },
+    ];
+    const invoiceModel = {
+      find: jest.fn().mockReturnValue({
+        populate: jest.fn().mockReturnValue({
+          lean: jest.fn().mockReturnValue({
+            exec: jest.fn().mockResolvedValue(invoices),
+          }),
+        }),
+      }),
+    };
+    const service = new ReportsService(
+      {} as any,
+      invoiceModel as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
+
+    const partial = await service.registrationPaidStudents('partial');
+    const none = await service.registrationPaidStudents('none');
+
+    expect(partial).toHaveLength(1);
+    expect(partial[0]).toMatchObject({
+      amountDue: 3000,
+      amountPaid: 500,
+      balanceDue: 2500,
+    });
+    expect(none).toHaveLength(1);
+    expect(none[0]).toMatchObject({
+      amountDue: 3000,
+      amountPaid: 0,
+      balanceDue: 3000,
+    });
+  });
+
+  it('renders the payment situation PDF in A4 landscape', async () => {
+    const service = new ReportsService(
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {
+        getSchoolName: jest.fn().mockResolvedValue('Complexe scolaire Dunya'),
+      } as any,
+    );
+
+    const pdf = await service.renderRegistrationPaidPdf(
+      [],
+      'registration',
+      '2026 – 2027',
+    );
+    const pdfSource = pdf.toString('latin1');
+
+    expect(pdfSource).toContain('/MediaBox [0 0 841.89 595.28]');
   });
 
   it('builds the open-year nominal roll in alphabetical order with gender totals', async () => {
@@ -165,7 +289,9 @@ describe('ReportsService', () => {
       total: 60,
     });
 
-    expect(pdf.toString('latin1').match(/\/Type \/Page\b/g)?.length).toBeGreaterThan(1);
+    expect(
+      pdf.toString('latin1').match(/\/Type \/Page\b/g)?.length,
+    ).toBeGreaterThan(1);
     expect(pdf.length).toBeGreaterThan(5000);
   });
 });

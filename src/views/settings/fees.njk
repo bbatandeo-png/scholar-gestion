@@ -27,7 +27,7 @@
           <label>Frais inscription<input type="number" name="registrationFee" value="{{ editFee.registrationFee if editFee else '' }}" min="0" required /></label>
           <label>Ecolage<input type="number" name="tuitionFee" value="{{ editFee.tuitionFee if editFee else '' }}" min="0" required /></label>
         </div>
-        <div class="stack" style="gap: 8px; align-items: flex-start;">
+        <div class="stack compact-actions">
           <button type="submit" class="btn-icon icon-save">{% if editFee %}Mettre a jour{% else %}Enregistrer les frais{% endif %}</button>
           {% if editFee %}
             <a class="button secondary" href="/settings/fees">Annuler</a>
@@ -122,11 +122,13 @@
 
       <div style="margin-top:12px">
         <strong>Catégories existantes</strong>
-        <ul class="simple-list muted">
+        <ul class="simple-list category-list muted">
           {% for cat in expenseCategories %}
-            <li id="cat-{{ cat._id }}">
-              <span class="cat-name">{{ cat.name }}</span>{% if cat.description %} — <span class="cat-desc">{{ cat.description }}</span>{% endif %}
-              <button data-id="{{ cat._id }}" data-name="{{ cat.name }}" data-desc="{{ cat.description }}" class="button btn-sm js-edit-cat" style="margin-left:8px">Modifier</button>
+            <li id="cat-{{ cat._id }}" class="category-list-item">
+              <div class="category-item-copy">
+                <span class="cat-name">{{ cat.name }}</span>{% if cat.description %}<span class="cat-desc"> — {{ cat.description }}</span>{% endif %}
+              </div>
+              <button data-id="{{ cat._id }}" data-name="{{ cat.name }}" data-desc="{{ cat.description }}" class="button btn-sm js-edit-cat">Modifier</button>
             </li>
           {% else %}
             <li>Aucune catégorie enregistrée.</li>
@@ -143,7 +145,7 @@
             <label>Nom<input type="text" name="name" value="{{ editCategory.name }}" required /></label>
             <label>Description<input type="text" name="description" value="{{ editCategory.description }}" /></label>
           </div>
-          <div style="display:flex;gap:8px;align-items:center">
+          <div class="compact-actions">
             <button type="submit" class="btn-icon icon-save">Mettre à jour</button>
             <a class="button secondary" href="/settings/fees">Annuler</a>
           </div>
@@ -158,22 +160,24 @@
         </div>
         <a class="button secondary btn-icon icon-export" href="/settings/fees/export">Exporter Excel</a>
       </div>
-      <table>
-        <thead><tr><th>Annee</th><th>Niveau</th><th>Inscription</th><th>Ecolage</th><th>Actions</th></tr></thead>
-        <tbody>
-          {% for item in feeSchedules %}
-            <tr>
-              <td>{{ item.schoolYearId.label if item.schoolYearId }}</td>
-              <td>{{ item.levelId.label if item.levelId }}</td>
-              <td>{{ item.registrationFee }}</td>
-              <td>{{ item.tuitionFee }}</td>
-              <td><a class="button btn-sm" href="/settings/fees/{{ item._id }}/edit">Modifier</a></td>
-            </tr>
-          {% else %}
-            <tr><td colspan="5">Aucun frais configure.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      <div class="table-shell">
+        <table>
+          <thead><tr><th>Annee</th><th>Niveau</th><th>Inscription</th><th>Ecolage</th><th>Actions</th></tr></thead>
+          <tbody>
+            {% for item in feeSchedules %}
+              <tr>
+                <td>{{ item.schoolYearId.label if item.schoolYearId }}</td>
+                <td>{{ item.levelId.label if item.levelId }}</td>
+                <td>{{ item.registrationFee }}</td>
+                <td>{{ item.tuitionFee }}</td>
+                <td><a class="button btn-sm" href="/settings/fees/{{ item._id }}/edit">Modifier</a></td>
+              </tr>
+            {% else %}
+              <tr><td colspan="5">Aucun frais configure.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
   </section>
   <script>
@@ -196,7 +200,7 @@
             <label>Nom<input type="text" name="name" value="${(name||'').replace(/"/g,'&quot;')}" required /></label>
             <label>Description<input type="text" name="description" value="${(desc||'').replace(/"/g,'&quot;')}" /></label>
           </div>
-          <div style="display:flex;gap:8px;align-items:center">
+          <div class="compact-actions">
             <button type="submit" class="btn-icon icon-save">Mettre à jour</button>
             <button type="button" id="inline-cancel" class="button secondary">Annuler</button>
           </div>
@@ -227,9 +231,10 @@
             // update UI
             li.querySelector('.cat-name').textContent = name;
             const descSpan = li.querySelector('.cat-desc');
+            const copy = li.querySelector('.category-item-copy');
             if (description) {
-              if (descSpan) descSpan.textContent = description;
-              else { const span = document.createElement('span'); span.className='cat-desc'; span.textContent = ' — ' + description; li.insertBefore(span, form); }
+              if (descSpan) descSpan.textContent = ' — ' + description;
+              else if (copy) { const span = document.createElement('span'); span.className='cat-desc'; span.textContent = ' — ' + description; copy.appendChild(span); }
             } else if (descSpan) {
               descSpan.remove();
             }

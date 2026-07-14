@@ -86,7 +86,7 @@
                 <td>{{ item.schoolYearId.label if item.schoolYearId }}</td>
                 <td>{{ item.levelId.label if item.levelId }}</td>
                 <td>{% set value = item.status %}{% include "partials/status-badge.njk" %}</td>
-                <td>
+                <td class="table-button-group">
                   <a class="button secondary btn-sm btn-icon icon-view" href="/enrollments/{{ item._id }}">Voir</a>
                   <a class="button btn-sm" href="/enrollments/{{ item._id }}">Modifier</a>
                 </td>

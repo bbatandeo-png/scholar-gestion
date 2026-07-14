@@ -5,12 +5,32 @@ import { Role } from '../common/enums/domain.enums';
 import { AuthenticatedGuard } from '../common/guards/authenticated.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { buildExcelBuffer } from '../common/utils/excel.util';
-import { ReportsService } from './reports.service';
+import { RegistrationPaidFilter, ReportsService } from './reports.service';
 
 @Controller('/reports')
 @UseGuards(AuthenticatedGuard, RolesGuard)
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
+
+  private normalizePaymentFilter(filter?: string): RegistrationPaidFilter {
+    return ['tuition', 'partial', 'none'].includes(filter ?? '')
+      ? (filter as RegistrationPaidFilter)
+      : 'registration';
+  }
+
+  private selectReportSchoolYear(schoolYears: any[], schoolYearId?: string) {
+    const requestedYear = schoolYearId
+      ? schoolYears.find(
+          (year: any) => String(year._id) === String(schoolYearId),
+        )
+      : undefined;
+
+    return (
+      requestedYear ??
+      schoolYears.find((year: any) => year.status === 'open') ??
+      schoolYears[0]
+    );
+  }
 
   @Get('/nominal-roll/pdf')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT, Role.AUDITEUR)
@@ -110,32 +130,28 @@ export class ReportsController {
     @Query('levelId') levelId?: string,
     @Query('schoolYearId') schoolYearId?: string,
   ) {
-    const normalizedFilter = [
-      'registration',
-      'tuition',
-      'full',
-      'partial',
-      'none',
-    ].includes(filter ?? '')
-      ? (filter as 'registration' | 'tuition' | 'full' | 'partial' | 'none')
-      : 'registration';
-
-    const [report, levels, schoolYears] = await Promise.all([
-      this.reportsService.registrationPaidStudents(
-        normalizedFilter,
-        levelId,
-        schoolYearId,
-      ),
+    const normalizedFilter = this.normalizePaymentFilter(filter);
+    const [levels, schoolYears, schoolName] = await Promise.all([
       this.reportsService.listLevels(),
       this.reportsService.listSchoolYears(),
+      this.reportsService.getSchoolName(),
     ]);
+    const selectedYear = this.selectReportSchoolYear(schoolYears, schoolYearId);
+    const effectiveSchoolYearId = selectedYear ? String(selectedYear._id) : '';
+    const report = await this.reportsService.registrationPaidStudents(
+      normalizedFilter,
+      levelId,
+      effectiveSchoolYearId,
+    );
 
     return {
-      title: "Eleves ayant paye l'inscription",
+      title: 'Situation des paiements scolaires',
       report,
       filter: normalizedFilter,
       levelId: levelId || '',
-      schoolYearId: schoolYearId || '',
+      schoolYearId: effectiveSchoolYearId,
+      schoolYearLabel: selectedYear?.label || 'Non précisée',
+      schoolName,
       levels,
       schoolYears,
     };
@@ -149,23 +165,19 @@ export class ReportsController {
     @Query('levelId') levelId?: string,
     @Query('schoolYearId') schoolYearId?: string,
   ) {
-    const normalizedFilter = [
-      'registration',
-      'tuition',
-      'full',
-      'partial',
-      'none',
-    ].includes(filter ?? '')
-      ? (filter as 'registration' | 'tuition' | 'full' | 'partial' | 'none')
-      : 'registration';
+    const normalizedFilter = this.normalizePaymentFilter(filter);
+    const schoolYears = await this.reportsService.listSchoolYears();
+    const selectedYear = this.selectReportSchoolYear(schoolYears, schoolYearId);
+    const effectiveSchoolYearId = selectedYear ? String(selectedYear._id) : '';
     const report = await this.reportsService.registrationPaidStudents(
       normalizedFilter,
       levelId,
-      schoolYearId,
+      effectiveSchoolYearId,
     );
     const pdf = await this.reportsService.renderRegistrationPaidPdf(
       report,
       normalizedFilter,
+      selectedYear?.label || 'Non précisée',
     );
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
