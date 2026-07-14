@@ -1,0 +1,16 @@
+{% extends "layout.njk" %}
+
+{% block content %}
+  <section class="panel auth-form">
+    <h2>Confirmer la deconnexion</h2>
+    <p class="muted">Voulez-vous vraiment quitter votre session ?</p>
+
+    <div class="actions">
+      <form action="/logout" method="post">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+        <button type="submit" class="button secondary">Se deconnecter</button>
+      </form>
+      <a href="/dashboard" class="button">Annuler</a>
+    </div>
+  </section>
+{% endblock %}

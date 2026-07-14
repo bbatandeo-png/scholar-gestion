@@ -1,4 +1,16 @@
-import { Body, Controller, Get, Param, Post, Put, Query, Render, Req, Res, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Put,
+  Query,
+  Render,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import { ForbiddenException } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { StudentsService } from '../students/students.service';
@@ -24,9 +36,18 @@ export class EnrollmentsController {
   ) {}
 
   @Get()
-  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT, Role.COMPTABILITE, Role.AUDITEUR)
+  @Roles(
+    Role.SUPER_ADMIN,
+    Role.DIRECTION,
+    Role.SECRETARIAT,
+    Role.COMPTABILITE,
+    Role.AUDITEUR,
+  )
   @Render('enrollments/index')
-  async index(@Query('page') pageParam?: string, @Query('pageSize') pageSizeParam?: string) {
+  async index(
+    @Query('page') pageParam?: string,
+    @Query('pageSize') pageSizeParam?: string,
+  ) {
     const page = Math.max(1, Number(pageParam ?? 1));
     const pageSize = Math.min(100, Math.max(5, Number(pageSizeParam ?? 20)));
     const result = await this.enrollmentsService.listPaginated(page, pageSize);
@@ -34,7 +55,6 @@ export class EnrollmentsController {
     return {
       title: 'Inscriptions',
       enrollments: result.items,
-      students: await this.studentsService.list(),
       schoolYears: await this.schoolYearsService.list(),
       levels: await this.levelsService.list(),
       pagination: {
@@ -51,13 +71,20 @@ export class EnrollmentsController {
   }
 
   @Get('/export')
-  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT, Role.COMPTABILITE, Role.AUDITEUR)
+  @Roles(
+    Role.SUPER_ADMIN,
+    Role.DIRECTION,
+    Role.SECRETARIAT,
+    Role.COMPTABILITE,
+    Role.AUDITEUR,
+  )
   async export(@Res() res: Response) {
     const enrollments = await this.enrollmentsService.list();
     const buffer = buildExcelBuffer(
       'Inscriptions',
       enrollments.map((item: any) => ({
-        eleve: `${item.studentId?.lastname ?? ''} ${item.studentId?.firstname ?? ''}`.trim(),
+        eleve:
+          `${item.studentId?.lastname ?? ''} ${item.studentId?.firstname ?? ''}`.trim(),
         matricule: item.studentId?.matricule ?? '',
         annee: item.schoolYearId?.label ?? '',
         niveau: item.levelId?.label ?? '',
@@ -67,21 +94,40 @@ export class EnrollmentsController {
       })),
     );
 
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename="inscriptions.xlsx"');
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="inscriptions.xlsx"',
+    );
     return res.send(buffer);
   }
 
   @Post()
   @Roles(Role.SUPER_ADMIN, Role.SECRETARIAT)
-  async create(@Body() dto: CreateEnrollmentDto, @Req() req: Request, @Res() res: Response) {
-    const result = await this.enrollmentsService.createEnrollment(dto, req.session.user?.id);
+  async create(
+    @Body() dto: CreateEnrollmentDto,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const result = await this.enrollmentsService.createEnrollment(
+      dto,
+      req.session.user?.id,
+    );
     setFlash(req, 'success', 'Inscription creee');
     return res.redirect(`/enrollments/${result.enrollmentId}`);
   }
 
   @Get('/:id')
-  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT, Role.COMPTABILITE, Role.AUDITEUR)
+  @Roles(
+    Role.SUPER_ADMIN,
+    Role.DIRECTION,
+    Role.SECRETARIAT,
+    Role.COMPTABILITE,
+    Role.AUDITEUR,
+  )
   @Render('enrollments/detail')
   async detail(@Param('id') id: string): Promise<{
     title: string;
@@ -104,8 +150,17 @@ export class EnrollmentsController {
 
   @Put('/:id')
   @Roles(Role.SUPER_ADMIN, Role.SECRETARIAT)
-  async update(@Param('id') id: string, @Body() dto: CreateEnrollmentDto, @Req() req: Request, @Res() res: Response) {
-    await this.enrollmentsService.updateEnrollment(id, dto, req.session.user?.id);
+  async update(
+    @Param('id') id: string,
+    @Body() dto: CreateEnrollmentDto,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    await this.enrollmentsService.updateEnrollment(
+      id,
+      dto,
+      req.session.user?.id,
+    );
     setFlash(req, 'success', 'Inscription mise a jour');
     return res.redirect(req.get('referer') || `/enrollments/${id}`);
   }
@@ -114,7 +169,13 @@ export class EnrollmentsController {
   @Roles(Role.SUPER_ADMIN, Role.COMPTABILITE)
   async updateFinancialDetails(
     @Param('id') id: string,
-    @Body() dto: { registrationFee?: string; discountAmount?: string; paidAmount?: string; reason?: string },
+    @Body()
+    dto: {
+      registrationFee?: string;
+      discountAmount?: string;
+      paidAmount?: string;
+      reason?: string;
+    },
     @Req() req: Request,
     @Res() res: Response,
   ) {
@@ -126,9 +187,16 @@ export class EnrollmentsController {
     await this.enrollmentsService.updateFinancialDetails(
       id,
       {
-        registrationFee: dto.registrationFee !== undefined ? Number(dto.registrationFee) : undefined,
-        discountAmount: dto.discountAmount !== undefined ? Number(dto.discountAmount) : undefined,
-        paidAmount: dto.paidAmount !== undefined ? Number(dto.paidAmount) : undefined,
+        registrationFee:
+          dto.registrationFee !== undefined
+            ? Number(dto.registrationFee)
+            : undefined,
+        discountAmount:
+          dto.discountAmount !== undefined
+            ? Number(dto.discountAmount)
+            : undefined,
+        paidAmount:
+          dto.paidAmount !== undefined ? Number(dto.paidAmount) : undefined,
         reason: dto.reason,
       },
       req.session.user?.id,

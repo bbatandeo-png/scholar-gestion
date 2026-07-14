@@ -106,6 +106,32 @@ export class StudentsController {
     return res.send(buffer);
   }
 
+  @Get('/autocomplete')
+  @Roles(
+    Role.SUPER_ADMIN,
+    Role.DIRECTION,
+    Role.SECRETARIAT,
+    Role.COMPTABILITE,
+    Role.AUDITEUR,
+  )
+  async autocomplete(
+    @Query('q') query = '',
+    @Query('limit') limitParam?: string,
+  ) {
+    const limit = Math.min(30, Math.max(1, Number(limitParam ?? 25) || 25));
+    const items = await this.studentsService.autocomplete(query, limit);
+
+    return {
+      items: items.map((student) => ({
+        id: String(student._id),
+        matricule: student.matricule,
+        lastname: student.lastname,
+        firstname: student.firstname,
+        label: `${student.matricule} - ${student.lastname} ${student.firstname}`,
+      })),
+    };
+  }
+
   @Get('/search')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT, Role.AUDITEUR)
   @Render('students/search')

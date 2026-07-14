@@ -61,6 +61,13 @@ export class AuthController {
     }
   }
 
+  @Get('/logout')
+  @UseGuards(AuthenticatedGuard)
+  @Render('auth/logout')
+  logoutPage() {
+    return { title: 'Deconnexion' };
+  }
+
   @Post('/logout')
   @UseGuards(AuthenticatedGuard)
   @Redirect('/login')

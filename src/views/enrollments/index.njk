@@ -7,11 +7,22 @@
         <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
         <div class="form-grid">
           <label>Eleve
-            <select name="studentId" id="studentIdSelect">
-              {% for student in students %}
-                <option value="{{ student._id }}">{{ student.matricule }} - {{ student.lastname }} {{ student.firstname }}</option>
-              {% endfor %}
-            </select>
+            <div class="student-autocomplete" id="studentAutocomplete">
+              <input
+                type="search"
+                id="studentSearchInput"
+                placeholder="Nom, prenoms ou matricule (3 caracteres min.)"
+                autocomplete="off"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-controls="studentSearchResults"
+                aria-expanded="false"
+                required
+              />
+              <input type="hidden" name="studentId" id="studentIdSelect" />
+              <div id="studentSearchStatus" class="autocomplete-status muted" aria-live="polite"></div>
+              <div id="studentSearchResults" class="autocomplete-results" role="listbox" hidden></div>
+            </div>
           </label>
           <label>Annee
             <select name="schoolYearId">
@@ -105,12 +116,144 @@
   <script>
     (() => {
       const select = document.getElementById('studentIdSelect');
+      const form = select?.closest('form');
+      const searchInput = document.getElementById('studentSearchInput');
+      const searchResults = document.getElementById('studentSearchResults');
+      const searchStatus = document.getElementById('studentSearchStatus');
       const container = document.getElementById('studentFinancialStatus');
       const badge = document.getElementById('studentFinancialBadge');
 
-      if (!select || !container || !badge) {
+      if (!select || !form || !searchInput || !searchResults || !searchStatus || !container || !badge) {
         return;
       }
+
+      let debounceTimer;
+      let requestController;
+      let activeIndex = -1;
+      let currentItems = [];
+
+      const closeResults = () => {
+        searchResults.hidden = true;
+        searchInput.setAttribute('aria-expanded', 'false');
+        searchInput.removeAttribute('aria-activedescendant');
+        activeIndex = -1;
+      };
+
+      const setActiveResult = (index) => {
+        const options = Array.from(searchResults.querySelectorAll('[role="option"]'));
+        options.forEach((option) => option.classList.remove('is-active'));
+        if (!options.length) return;
+        activeIndex = Math.max(0, Math.min(index, options.length - 1));
+        const activeOption = options[activeIndex];
+        activeOption.classList.add('is-active');
+        activeOption.scrollIntoView({ block: 'nearest' });
+        searchInput.setAttribute('aria-activedescendant', activeOption.id);
+      };
+
+      const chooseStudent = (student) => {
+        select.value = student.id;
+        searchInput.value = student.label;
+        searchInput.setCustomValidity('');
+        searchStatus.textContent = '';
+        closeResults();
+        select.dispatchEvent(new Event('change'));
+      };
+
+      const renderResults = (items) => {
+        searchStatus.classList.remove('is-loading');
+        currentItems = items;
+        searchResults.replaceChildren();
+        activeIndex = -1;
+
+        if (!items.length) {
+          searchStatus.textContent = 'Aucun eleve trouve.';
+          closeResults();
+          return;
+        }
+
+        items.forEach((student, index) => {
+          const option = document.createElement('button');
+          option.type = 'button';
+          option.id = `student-option-${index}`;
+          option.className = 'autocomplete-option';
+          option.setAttribute('role', 'option');
+          option.textContent = student.label;
+          option.addEventListener('mousedown', (event) => event.preventDefault());
+          option.addEventListener('click', () => chooseStudent(student));
+          searchResults.appendChild(option);
+        });
+
+        searchStatus.textContent = `${items.length} resultat${items.length > 1 ? 's' : ''}.`;
+        searchResults.hidden = false;
+        searchInput.setAttribute('aria-expanded', 'true');
+      };
+
+      const searchStudents = async () => {
+        const query = searchInput.value.trim();
+        if (query.length < 3) {
+          requestController?.abort();
+          searchStatus.classList.remove('is-loading');
+          searchStatus.textContent = query.length
+            ? 'Saisissez au moins 3 caracteres.'
+            : '';
+          closeResults();
+          return;
+        }
+
+        requestController?.abort();
+        requestController = new AbortController();
+        searchStatus.textContent = 'Recherche en cours...';
+        searchStatus.classList.add('is-loading');
+        closeResults();
+
+        try {
+          const response = await fetch(
+            `/students/autocomplete?q=${encodeURIComponent(query)}&limit=25`,
+            { headers: { Accept: 'application/json' }, signal: requestController.signal },
+          );
+          if (!response.ok) throw new Error('Recherche indisponible');
+          const payload = await response.json();
+          renderResults(Array.isArray(payload.items) ? payload.items : []);
+        } catch (error) {
+          if (error.name !== 'AbortError') {
+            searchStatus.classList.remove('is-loading');
+            searchStatus.textContent = 'Impossible de rechercher les eleves.';
+            closeResults();
+          }
+        }
+      };
+
+      searchInput.addEventListener('input', () => {
+        select.value = '';
+        searchInput.setCustomValidity('');
+        renderEmpty('Selectionne un eleve pour voir son etat financier.');
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(searchStudents, 400);
+      });
+
+      searchInput.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowDown' && !searchResults.hidden) {
+          event.preventDefault();
+          setActiveResult(activeIndex + 1);
+        } else if (event.key === 'ArrowUp' && !searchResults.hidden) {
+          event.preventDefault();
+          setActiveResult(activeIndex <= 0 ? currentItems.length - 1 : activeIndex - 1);
+        } else if (event.key === 'Enter' && activeIndex >= 0 && currentItems[activeIndex]) {
+          event.preventDefault();
+          chooseStudent(currentItems[activeIndex]);
+        } else if (event.key === 'Escape') {
+          closeResults();
+        }
+      });
+
+      searchInput.addEventListener('blur', () => setTimeout(closeResults, 150));
+      form.addEventListener('submit', (event) => {
+        if (!select.value) {
+          event.preventDefault();
+          searchInput.setCustomValidity('Selectionnez un eleve dans les resultats.');
+          searchInput.reportValidity();
+        }
+      });
 
       const renderEmpty = (message) => {
         badge.textContent = 'En attente';
@@ -217,7 +360,6 @@
       };
 
       select.addEventListener('change', loadStatus);
-      loadStatus();
     })();
   </script>
 {% endblock %}

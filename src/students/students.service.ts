@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Connection, Model } from 'mongoose';
 import { GuardiansService } from '../guardians/guardians.service';
@@ -8,8 +13,18 @@ import { SettingsService } from '../settings/settings.service';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
 import { Student, StudentDocument } from './schemas/student.schema';
-import { Enrollment, EnrollmentDocument } from '../enrollments/schemas/enrollment.schema';
+import {
+  Enrollment,
+  EnrollmentDocument,
+} from '../enrollments/schemas/enrollment.schema';
 import { Level, LevelDocument } from '../levels/schemas/level.schema';
+
+export type StudentAutocompleteResult = {
+  _id: unknown;
+  matricule: string;
+  lastname: string;
+  firstname: string;
+};
 
 @Injectable()
 export class StudentsService {
@@ -29,6 +44,27 @@ export class StudentsService {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
+  private buildAccentInsensitivePattern(value: string) {
+    const accentGroups: Record<string, string> = {
+      a: 'aàáâãäå',
+      c: 'cç',
+      e: 'eèéêë',
+      i: 'iìíîï',
+      n: 'nñ',
+      o: 'oòóôõö',
+      u: 'uùúûü',
+      y: 'yýÿ',
+    };
+    const normalized = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+    return Array.from(normalized)
+      .map((character) => {
+        const group = accentGroups[character.toLowerCase()];
+        return group ? `[${group}]` : this.escapeRegExp(character);
+      })
+      .join('');
+  }
+
   private async generateMatriculeCandidate() {
     const rule = await this.settingsService.getStudentMatriculeRule();
     const basePrefix = `${rule.prefix}${rule.separator}`;
@@ -41,7 +77,9 @@ export class StudentsService {
 
     let nextNumber = rule.startAt;
     for (const student of existing) {
-      const match = String(student.matricule).match(new RegExp(prefixPattern, 'i'));
+      const match = String(student.matricule).match(
+        new RegExp(prefixPattern, 'i'),
+      );
       if (!match) {
         continue;
       }
@@ -52,7 +90,9 @@ export class StudentsService {
     return `${basePrefix}${String(nextNumber).padStart(rule.padding, '0')}`;
   }
 
-  private normalizeGuardians(guardians: CreateStudentDto['guardians'] | UpdateStudentDto['guardians']) {
+  private normalizeGuardians(
+    guardians: CreateStudentDto['guardians'] | UpdateStudentDto['guardians'],
+  ) {
     const allowedTypes = new Set(Object.values(GuardianType));
 
     return (guardians ?? [])
@@ -83,10 +123,11 @@ export class StudentsService {
           address: item.address?.trim() || undefined,
         };
       })
-      .filter((item) =>
-        allowedTypes.has(item.type as GuardianType)
-        && item.lastname.length > 0
-        && item.firstname.length > 0,
+      .filter(
+        (item) =>
+          allowedTypes.has(item.type as GuardianType) &&
+          item.lastname.length > 0 &&
+          item.firstname.length > 0,
       );
   }
 
@@ -111,11 +152,80 @@ export class StudentsService {
       .exec();
   }
 
+  async autocomplete(query: string, limit = 25) {
+    const normalizedQuery = query.trim().replace(/\s+/g, ' ');
+    if (normalizedQuery.length < 3) {
+      return [];
+    }
+
+    const safeLimit = Math.min(30, Math.max(1, Number(limit) || 25));
+    const searchPattern = this.buildAccentInsensitivePattern(normalizedQuery);
+    const containsPattern = new RegExp(searchPattern, 'i');
+    const startsWithPattern = new RegExp(`^${searchPattern}`, 'i');
+
+    return this.studentModel
+      .aggregate<StudentAutocompleteResult>([
+        {
+          $match: {
+            $or: [
+              { matricule: containsPattern },
+              { lastname: containsPattern },
+              { firstname: containsPattern },
+            ],
+          },
+        },
+        {
+          $addFields: {
+            searchRank: {
+              $switch: {
+                branches: [
+                  {
+                    case: {
+                      $regexMatch: {
+                        input: '$matricule',
+                        regex: startsWithPattern,
+                      },
+                    },
+                    then: 0,
+                  },
+                  {
+                    case: {
+                      $regexMatch: {
+                        input: '$lastname',
+                        regex: startsWithPattern,
+                      },
+                    },
+                    then: 1,
+                  },
+                  {
+                    case: {
+                      $regexMatch: {
+                        input: '$firstname',
+                        regex: startsWithPattern,
+                      },
+                    },
+                    then: 2,
+                  },
+                ],
+                default: 3,
+              },
+            },
+          },
+        },
+        { $sort: { searchRank: 1, lastname: 1, firstname: 1, matricule: 1 } },
+        { $limit: safeLimit },
+        { $project: { matricule: 1, lastname: 1, firstname: 1 } },
+      ])
+      .exec();
+  }
+
   async search(query?: string) {
     if (!query) {
       return this.studentModel
         .find()
-        .select('matricule lastname firstname gender birthDate birthPlace district status')
+        .select(
+          'matricule lastname firstname gender birthDate birthPlace district status',
+        )
         .sort({ lastname: 1, firstname: 1 })
         .lean()
         .exec();
@@ -131,13 +241,19 @@ export class StudentsService {
           { district: regex },
         ],
       })
-      .select('matricule lastname firstname gender birthDate birthPlace district status')
+      .select(
+        'matricule lastname firstname gender birthDate birthPlace district status',
+      )
       .sort({ lastname: 1, firstname: 1 })
       .lean()
       .exec();
   }
 
-  async searchPaginated(query: string | undefined, page: number, pageSize: number) {
+  async searchPaginated(
+    query: string | undefined,
+    page: number,
+    pageSize: number,
+  ) {
     const criteria = query
       ? {
           $or: [
@@ -154,7 +270,9 @@ export class StudentsService {
     const [items, total] = await Promise.all([
       this.studentModel
         .find(criteria)
-        .select('matricule lastname firstname gender birthDate birthPlace district status')
+        .select(
+          'matricule lastname firstname gender birthDate birthPlace district status',
+        )
         .sort({ lastname: 1, firstname: 1 })
         .skip(skip)
         .limit(pageSize)
@@ -199,12 +317,17 @@ export class StudentsService {
 
   async create(dto: CreateStudentDto) {
     const normalizedGuardians = this.normalizeGuardians(dto.guardians);
-    const hasGuardianContact = normalizedGuardians.some((guardian) => Boolean(guardian.phone));
+    const hasGuardianContact = normalizedGuardians.some((guardian) =>
+      Boolean(guardian.phone),
+    );
     if (!hasGuardianContact) {
-      throw new BadRequestException('Au moins un contact parent ou tuteur est obligatoire');
+      throw new BadRequestException(
+        'Au moins un contact parent ou tuteur est obligatoire',
+      );
     }
 
-    const matricule = dto.matricule?.trim() || (await this.generateUniqueMatricule());
+    const matricule =
+      dto.matricule?.trim() || (await this.generateUniqueMatricule());
 
     const duplicate = await this.studentModel.findOne({
       $or: [
@@ -265,7 +388,11 @@ export class StudentsService {
 
       if (dto.guardians) {
         const normalizedGuardians = this.normalizeGuardians(dto.guardians);
-        await this.guardiansService.replaceForStudent(id, normalizedGuardians, session);
+        await this.guardiansService.replaceForStudent(
+          id,
+          normalizedGuardians,
+          session,
+        );
       }
 
       return student;
