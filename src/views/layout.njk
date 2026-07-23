@@ -9,43 +9,111 @@
   <body>
     <div class="app-shell">
       <aside class="sidebar">
-        <div>
+        <div class="sidebar-brand">
           <p class="eyebrow">Complexe scolaire</p>
           <h1>Scolar-Gestion</h1>
+          <p class="sidebar-subtitle">Gestion administrative, scolaire et financière</p>
         </div>
         <nav class="nav-links">
           {% set role = currentUser.role if currentUser else '' %}
-          <a href="/dashboard" class="{% if currentPath == '/dashboard' %}is-active{% endif %}">Dashboard</a>
+
+          <div class="nav-group">
+            <a href="/dashboard" class="nav-link {% if currentPath == '/dashboard' %}is-active{% endif %}">
+              <span class="nav-icon">◈</span>
+              <span>Tableau de bord</span>
+            </a>
+          </div>
+
           {% if role == 'super_admin' or role == 'direction' or role == 'secretariat' or role == 'auditeur' %}
-            <a href="/students" class="{% if currentPath and currentPath.startsWith('/students') %}is-active{% endif %}">Eleves</a>
-            <a href="/students/search" class="{% if currentPath == '/students/search' %}is-active{% endif %}">Recherche ancien eleve</a>
+            <div class="nav-group">
+              <details class="nav-details" {% if currentPath and (currentPath.startsWith('/students') or currentPath == '/students/search') %}open{% endif %}>
+                <summary>Gestion scolaire</summary>
+                <div class="nav-submenu">
+                  <a href="/students" class="{% if currentPath and currentPath.startsWith('/students') and currentPath != '/students/search' %}is-active{% endif %}">Élèves</a>
+                  <a href="/students/search" class="{% if currentPath == '/students/search' %}is-active{% endif %}">Recherche ancien élève</a>
+                </div>
+              </details>
+            </div>
           {% endif %}
+
           {% if role == 'super_admin' or role == 'direction' or role == 'secretariat' or role == 'comptabilite' or role == 'auditeur' %}
-            <a href="/enrollments" class="{% if currentPath and currentPath.startsWith('/enrollments') %}is-active{% endif %}">Inscription et paiement</a>
+            <div class="nav-group">
+              <details class="nav-details" {% if currentPath and currentPath.startsWith('/enrollments') %}open{% endif %}>
+                <summary>Admissions & paiements</summary>
+                <div class="nav-submenu">
+                  <a href="/enrollments" class="{% if currentPath and currentPath.startsWith('/enrollments') %}is-active{% endif %}">Inscriptions et paiements</a>
+                </div>
+              </details>
+            </div>
           {% endif %}
+
           {% if role == 'super_admin' or role == 'direction' or role == 'comptabilite' %}
-            <a href="/expenses" class="{% if currentPath and currentPath.startsWith('/expenses') %}is-active{% endif %}">Dépenses</a>
+            <div class="nav-group">
+              <details class="nav-details" {% if currentPath and (currentPath.startsWith('/expenses') or currentPath.startsWith('/arrears')) %}open{% endif %}>
+                <summary>Finances</summary>
+                <div class="nav-submenu">
+                  <a href="/expenses" class="{% if currentPath and currentPath.startsWith('/expenses') %}is-active{% endif %}">Dépenses</a>
+                  <a href="/arrears" class="{% if currentPath and currentPath.startsWith('/arrears') %}is-active{% endif %}">Impayés</a>
+                </div>
+              </details>
+            </div>
           {% endif %}
-          {% if role == 'super_admin' or role == 'direction' or role == 'comptabilite' or role == 'auditeur' %}
-            <a href="/arrears" class="{% if currentPath and currentPath.startsWith('/arrears') %}is-active{% endif %}">Impayes</a>
-          {% endif %}
+
           {% if role == 'super_admin' or role == 'direction' or role == 'auditeur' %}
-            <a href="/promotions" class="{% if currentPath and currentPath.startsWith('/promotions') %}is-active{% endif %}">Promotions</a>
+            <div class="nav-group">
+              <details class="nav-details" {% if currentPath and currentPath.startsWith('/promotions') %}open{% endif %}>
+                <summary>Organisation</summary>
+                <div class="nav-submenu">
+                  <a href="/promotions" class="{% if currentPath and currentPath.startsWith('/promotions') %}is-active{% endif %}">Promotions</a>
+                </div>
+              </details>
+            </div>
           {% endif %}
+
           {% if role == 'super_admin' or role == 'direction' %}
-            <a href="/settings/school-years" class="{% if currentPath and currentPath.startsWith('/settings/school-years') %}is-active{% endif %}">Annees scolaires</a>
-            <a href="/settings/levels" class="{% if currentPath and currentPath.startsWith('/settings/levels') %}is-active{% endif %}">Niveaux</a>
-            <a href="/settings/fees" class="{% if currentPath and currentPath.startsWith('/settings/fees') %}is-active{% endif %}">Frais</a>
+            <div class="nav-group">
+              <details class="nav-details" {% if currentPath and (currentPath.startsWith('/settings/school-years') or currentPath.startsWith('/settings/levels') or currentPath.startsWith('/settings/fees')) %}open{% endif %}>
+                <summary>Paramètres</summary>
+                <div class="nav-submenu">
+                  <a href="/settings/school-years" class="{% if currentPath and currentPath.startsWith('/settings/school-years') %}is-active{% endif %}">Années scolaires</a>
+                  <a href="/settings/levels" class="{% if currentPath and currentPath.startsWith('/settings/levels') %}is-active{% endif %}">Niveaux</a>
+                  <a href="/settings/fees" class="{% if currentPath and currentPath.startsWith('/settings/fees') %}is-active{% endif %}">Frais</a>
+                </div>
+              </details>
+            </div>
           {% endif %}
+
           {% if role == 'super_admin' %}
-            <a href="/users" class="{% if currentPath and currentPath.startsWith('/users') %}is-active{% endif %}">Utilisateurs</a>
+            <div class="nav-group">
+              <details class="nav-details" {% if currentPath and currentPath.startsWith('/users') %}open{% endif %}>
+                <summary>Administration</summary>
+                <div class="nav-submenu">
+                  <a href="/users" class="{% if currentPath and currentPath.startsWith('/users') %}is-active{% endif %}">Utilisateurs</a>
+                </div>
+              </details>
+            </div>
           {% endif %}
+
           {% if role == 'comptabilite' %}
-            <a href="/reports/revenue" class="{% if currentPath and currentPath.startsWith('/reports') %}is-active{% endif %}">Rapports</a>
-            <a href="/reports/registration-paid" class="{% if currentPath and currentPath.startsWith('/reports/registration-paid') %}is-active{% endif %}">Inscriptions payées</a>
+            <div class="nav-group">
+              <details class="nav-details" {% if currentPath and currentPath.startsWith('/reports') %}open{% endif %}>
+                <summary>Rapports & indicateurs</summary>
+                <div class="nav-submenu">
+                  <a href="/reports/revenue" class="{% if currentPath and currentPath.startsWith('/reports') %}is-active{% endif %}">Rapports</a>
+                  <a href="/reports/registration-paid" class="{% if currentPath and currentPath.startsWith('/reports/registration-paid') %}is-active{% endif %}">Inscriptions payées</a>
+                </div>
+              </details>
+            </div>
           {% elif role == 'super_admin' or role == 'direction' or role == 'auditeur' %}
-            <a href="/reports/students-by-level" class="{% if currentPath and currentPath.startsWith('/reports') %}is-active{% endif %}">Rapports</a>
-            <a href="/reports/registration-paid" class="{% if currentPath and currentPath.startsWith('/reports/registration-paid') %}is-active{% endif %}">Inscriptions payées</a>
+            <div class="nav-group">
+              <details class="nav-details" {% if currentPath and currentPath.startsWith('/reports') %}open{% endif %}>
+                <summary>Rapports & indicateurs</summary>
+                <div class="nav-submenu">
+                  <a href="/reports/students-by-level" class="{% if currentPath and currentPath.startsWith('/reports') %}is-active{% endif %}">Rapports</a>
+                  <a href="/reports/registration-paid" class="{% if currentPath and currentPath.startsWith('/reports/registration-paid') %}is-active{% endif %}">Inscriptions payées</a>
+                </div>
+              </details>
+            </div>
           {% endif %}
         </nav>
       </aside>
