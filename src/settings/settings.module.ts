@@ -11,7 +11,7 @@ import { SettingsService } from './settings.service';
   imports: [
     MongooseModule.forFeature([{ name: Setting.name, schema: SettingSchema }]),
     forwardRef(() => BillingModule),
-    LevelsModule,
+    forwardRef(() => LevelsModule),
     SchoolYearsModule,
   ],
   controllers: [SettingsController],
