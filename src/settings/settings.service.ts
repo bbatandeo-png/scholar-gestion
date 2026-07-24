@@ -1,7 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { PaymentAllocationRule, ReceiptMode, SettingKey } from '../common/enums/domain.enums';
+import { ClientSession, Model } from 'mongoose';
+import {
+  PaymentAllocationRule,
+  ReceiptMode,
+  SettingKey,
+} from '../common/enums/domain.enums';
 import { Setting, SettingDocument } from './schemas/setting.schema';
 
 export type StudentMatriculeRule = {
@@ -21,7 +25,8 @@ const DEFAULT_STUDENT_MATRICULE_RULE: StudentMatriculeRule = {
 @Injectable()
 export class SettingsService {
   constructor(
-    @InjectModel(Setting.name) private readonly settingModel: Model<SettingDocument>,
+    @InjectModel(Setting.name)
+    private readonly settingModel: Model<SettingDocument>,
   ) {}
 
   private parseStudentMatriculeRule(value?: string): StudentMatriculeRule {
@@ -46,19 +51,37 @@ export class SettingsService {
     }
   }
 
-  async getPaymentAllocationRule() {
+  async getPaymentAllocationRule(schoolYearId?: string) {
     const setting = await this.settingModel
-      .findOne({ key: SettingKey.PAYMENT_ALLOCATION_RULE })
+      .findOne({
+        key: SettingKey.PAYMENT_ALLOCATION_RULE,
+        ...(schoolYearId
+          ? { schoolYearId }
+          : { schoolYearId: { $exists: false } }),
+      })
       .lean()
       .exec();
 
-    return (setting?.value as PaymentAllocationRule | undefined) ?? PaymentAllocationRule.ARREARS_FIRST;
+    if (!setting && schoolYearId) {
+      return this.getPaymentAllocationRule();
+    }
+    return (
+      (setting?.value as PaymentAllocationRule | undefined) ??
+      PaymentAllocationRule.ARREARS_FIRST
+    );
   }
 
-  async setPaymentAllocationRule(value: PaymentAllocationRule) {
+  async setPaymentAllocationRule(
+    value: PaymentAllocationRule,
+    schoolYearId?: string,
+  ) {
+    const criteria = {
+      key: SettingKey.PAYMENT_ALLOCATION_RULE,
+      ...(schoolYearId ? { schoolYearId } : {}),
+    };
     return this.settingModel.findOneAndUpdate(
-      { key: SettingKey.PAYMENT_ALLOCATION_RULE },
-      { key: SettingKey.PAYMENT_ALLOCATION_RULE, value },
+      criteria,
+      { ...criteria, value },
       { upsert: true, new: true, setDefaultsOnInsert: true },
     );
   }
@@ -77,7 +100,10 @@ export class SettingsService {
 
     return this.settingModel.findOneAndUpdate(
       { key: SettingKey.STUDENT_MATRICULE_RULE },
-      { key: SettingKey.STUDENT_MATRICULE_RULE, value: JSON.stringify(normalized) },
+      {
+        key: SettingKey.STUDENT_MATRICULE_RULE,
+        value: JSON.stringify(normalized),
+      },
       { upsert: true, new: true, setDefaultsOnInsert: true },
     );
   }
@@ -99,20 +125,72 @@ export class SettingsService {
     );
   }
 
-  async getReceiptMode() {
+  async getReceiptMode(schoolYearId?: string) {
     const setting = await this.settingModel
-      .findOne({ key: SettingKey.RECEIPT_MODE })
+      .findOne({
+        key: SettingKey.RECEIPT_MODE,
+        ...(schoolYearId
+          ? { schoolYearId }
+          : { schoolYearId: { $exists: false } }),
+      })
       .lean()
       .exec();
 
-    return (setting?.value as ReceiptMode | undefined) ?? ReceiptMode.TUITION_ONLY;
+    if (!setting && schoolYearId) {
+      return this.getReceiptMode();
+    }
+    return (
+      (setting?.value as ReceiptMode | undefined) ?? ReceiptMode.TUITION_ONLY
+    );
   }
 
-  async setReceiptMode(value: ReceiptMode) {
+  async setReceiptMode(value: ReceiptMode, schoolYearId?: string) {
+    const criteria = {
+      key: SettingKey.RECEIPT_MODE,
+      ...(schoolYearId ? { schoolYearId } : {}),
+    };
     return this.settingModel.findOneAndUpdate(
-      { key: SettingKey.RECEIPT_MODE },
-      { key: SettingKey.RECEIPT_MODE, value },
+      criteria,
+      { ...criteria, value },
       { upsert: true, new: true, setDefaultsOnInsert: true },
     );
+  }
+
+  async copyAnnualSettings(
+    sourceSchoolYearId: string,
+    targetSchoolYearId: string,
+    session?: ClientSession,
+  ) {
+    const annualKeys = [
+      SettingKey.PAYMENT_ALLOCATION_RULE,
+      SettingKey.RECEIPT_MODE,
+    ];
+    for (const key of annualKeys) {
+      const source = await this.settingModel
+        .findOne({ key, schoolYearId: sourceSchoolYearId })
+        .session(session ?? null)
+        .lean()
+        .exec();
+      const fallback =
+        source ??
+        (await this.settingModel
+          .findOne({ key, schoolYearId: { $exists: false } })
+          .session(session ?? null)
+          .lean()
+          .exec());
+      if (fallback) {
+        await this.settingModel.updateOne(
+          { key, schoolYearId: targetSchoolYearId },
+          {
+            $setOnInsert: {
+              key,
+              schoolYearId: targetSchoolYearId,
+              value: fallback.value,
+            },
+          },
+          { upsert: true, session },
+        );
+      }
+    }
   }
 }

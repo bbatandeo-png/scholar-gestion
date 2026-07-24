@@ -6,6 +6,8 @@ import { Invoice } from '../billing/schemas/invoice.schema';
 import { Enrollment } from '../enrollments/schemas/enrollment.schema';
 import { Student } from '../students/schemas/student.schema';
 import { Expense } from '../expenses/schemas/expense.schema';
+import { Payment } from '../payments/schemas/payment.schema';
+import { ArrearCarryForward } from '../arrears/schemas/arrear-carry-forward.schema';
 
 type DashboardInvoiceAmounts = {
   paidAmount?: number;
@@ -28,6 +30,9 @@ export class DashboardService {
     @InjectModel(Invoice.name) private readonly invoiceModel: Model<Invoice>,
     @InjectModel(Arrear.name) private readonly arrearModel: Model<Arrear>,
     @InjectModel(Expense.name) private readonly expenseModel: Model<Expense>,
+    @InjectModel(Payment.name) private readonly paymentModel: Model<Payment>,
+    @InjectModel(ArrearCarryForward.name)
+    private readonly carryForwardModel: Model<ArrearCarryForward>,
   ) {}
 
   calculateFinancialSummary(
@@ -70,11 +75,6 @@ export class DashboardService {
         sum + Math.min(Math.max(paidAmount - registrationFee, 0), netTuitionFee)
       );
     }, 0);
-    const availableBalance = tuitionRevenue - totalExpenses;
-    const recoveryRate =
-      tuitionExpected === 0
-        ? 0
-        : Math.round((tuitionRevenue / tuitionExpected) * 100);
 
     return {
       revenue,
@@ -83,41 +83,109 @@ export class DashboardService {
       tuitionExpected,
       totalBalance,
       totalExpenses,
-      availableBalance,
-      recoveryRate,
+      availableBalance: tuitionRevenue - totalExpenses,
+      recoveryRate:
+        tuitionExpected === 0
+          ? 0
+          : Math.round((tuitionRevenue / tuitionExpected) * 100),
     };
   }
 
-  async getSummary() {
+  async getSummary(schoolYearId: string) {
+    const carriedArrearIds = await this.carryForwardModel
+      .find({ targetSchoolYearId: schoolYearId })
+      .distinct('arrearId')
+      .exec();
     const [
-      totalStudents,
+      studentIds,
       activeStudents,
       archivedStudents,
       invoices,
       arrearsOpen,
       expenses,
+      payments,
     ] = await Promise.all([
-      this.studentModel.countDocuments(),
-      this.studentModel.countDocuments({ status: 'active' }),
-      this.studentModel.countDocuments({ status: 'archived' }),
-      this.invoiceModel.find().lean().exec(),
+      this.enrollmentModel.distinct('studentId', { schoolYearId }).exec(),
+      this.enrollmentModel.countDocuments({ schoolYearId, status: 'active' }),
+      this.enrollmentModel.countDocuments({
+        schoolYearId,
+        finalDecision: 'archived',
+      }),
+      this.invoiceModel.find({ schoolYearId }).lean().exec(),
       this.arrearModel.countDocuments({
+        $or: [
+          { sourceSchoolYearId: schoolYearId },
+          { _id: { $in: carriedArrearIds } },
+        ],
         status: { $in: ['open', 'partially_paid'] },
       }),
-      this.expenseModel.find().lean().exec(),
+      this.expenseModel
+        .find({ schoolYearId, isCancelled: { $ne: true } })
+        .lean()
+        .exec(),
+      this.paymentModel.find({ schoolYearId }).lean().exec(),
     ]);
 
-    const financialSummary = this.calculateFinancialSummary(invoices, expenses);
+    const totalStudents = studentIds.length;
+    const revenue = payments.reduce(
+      (sum, payment: any) => sum + (payment.amount ?? 0),
+      0,
+    );
+    const totalDue = invoices.reduce(
+      (sum, invoice: any) => sum + (invoice.totalDue ?? 0),
+      0,
+    );
+    const totalBalance = invoices.reduce(
+      (sum, invoice: any) => sum + (invoice.balanceDue ?? 0),
+      0,
+    );
+    const totalExpenses = expenses.reduce(
+      (sum, expense: any) => sum + (expense.amount ?? 0),
+      0,
+    );
+    const currentPaidByInvoice = new Map<string, number>();
+    for (const payment of payments as any[]) {
+      const currentAmount = (payment.allocation ?? [])
+        .filter((item: any) => item.type === 'current_fees')
+        .reduce((sum: number, item: any) => sum + Number(item.amount ?? 0), 0);
+      const key = String(payment.invoiceId);
+      currentPaidByInvoice.set(
+        key,
+        (currentPaidByInvoice.get(key) ?? 0) + currentAmount,
+      );
+    }
+    const registrationRevenue = invoices.reduce((sum, invoice: any) => {
+      const currentPaid = currentPaidByInvoice.get(String(invoice._id)) ?? 0;
+      return sum + Math.min(currentPaid, invoice.registrationFee ?? 0);
+    }, 0);
+    const tuitionRevenue = invoices.reduce((sum, invoice: any) => {
+      const paidAmount = currentPaidByInvoice.get(String(invoice._id)) ?? 0;
+      const registrationFee = invoice.registrationFee ?? 0;
+      return (
+        sum +
+        Math.max(
+          Math.min(paidAmount - registrationFee, invoice.tuitionFee ?? 0),
+          0,
+        )
+      );
+    }, 0);
+    const availableBalance = tuitionRevenue - totalExpenses;
+    const recoveryRate =
+      totalDue === 0 ? 0 : Math.round((revenue / totalDue) * 100);
 
     return {
       totalStudents,
-      ...financialSummary,
+      revenue,
+      registrationRevenue,
+      tuitionRevenue,
+      totalBalance,
+      totalExpenses,
+      availableBalance,
+      recoveryRate,
       activeStudents,
       archivedStudents,
       arrearsOpen,
-      enrollmentsActive: await this.enrollmentModel.countDocuments({
-        status: 'active',
-      }),
+      enrollmentsActive: activeStudents,
     };
   }
 }

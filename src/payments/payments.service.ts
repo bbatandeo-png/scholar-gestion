@@ -56,10 +56,39 @@ export class PaymentsService {
         throw new BadRequestException('Le montant depasse le solde restant');
       }
 
-      const rule = await this.settingsService.getPaymentAllocationRule();
+      const rule = await this.settingsService.getPaymentAllocationRule(
+        String(invoice.schoolYearId),
+      );
       const enrollmentId = String(invoice.enrollmentId);
       const enrollmentArrears =
         await this.arrearsService.findByTargetEnrollment(enrollmentId, session);
+      const previousPayments = await this.paymentModel
+        .find({ invoiceId: dto.invoiceId })
+        .session(session ?? null)
+        .lean()
+        .exec();
+      const currentFeesPaidBefore = previousPayments.reduce(
+        (sum, payment: any) =>
+          sum +
+          (payment.allocation ?? [])
+            .filter((item: any) => item.type === 'current_fees')
+            .reduce(
+              (allocationSum: number, item: any) =>
+                allocationSum + Number(item.amount ?? 0),
+              0,
+            ),
+        0,
+      );
+      const currentFeesDue = Math.max(
+        Number(invoice.registrationFee) +
+          Number(invoice.tuitionFee) -
+          Number(invoice.discountAmount),
+        0,
+      );
+      const currentFeesRemaining = Math.max(
+        currentFeesDue - currentFeesPaidBefore,
+        0,
+      );
 
       let arrearsApplied = 0;
       let currentFeesApplied = 0;
@@ -85,7 +114,11 @@ export class PaymentsService {
         );
       }
 
-      currentFeesApplied = remaining;
+      currentFeesApplied =
+        rule === PaymentAllocationRule.CURRENT_FEES_FIRST
+          ? Math.min(remaining, currentFeesRemaining)
+          : remaining;
+      remaining -= currentFeesApplied;
       if (currentFeesApplied > 0) {
         allocation.push({ type: 'current_fees', amount: currentFeesApplied });
       }
@@ -94,7 +127,7 @@ export class PaymentsService {
         rule === PaymentAllocationRule.CURRENT_FEES_FIRST &&
         enrollmentArrears.length > 0
       ) {
-        const leftoverForArrears = Math.max(dto.amount - currentFeesApplied, 0);
+        const leftoverForArrears = remaining;
         if (leftoverForArrears > 0) {
           const result = await this.arrearsService.applyPaymentAllocations(
             enrollmentArrears.map((item) => String(item._id)),
@@ -113,6 +146,7 @@ export class PaymentsService {
 
       const updatedInvoice = await this.billingService.createOrUpdateInvoice(
         {
+          schoolYearId: String(invoice.schoolYearId),
           enrollmentId,
           registrationFee: invoice.registrationFee,
           tuitionFee: invoice.tuitionFee,
@@ -126,6 +160,7 @@ export class PaymentsService {
       const payment = await this.paymentModel.create(
         [
           {
+            schoolYearId: invoice.schoolYearId,
             invoiceId: dto.invoiceId,
             amount: dto.amount,
             method: dto.method,
@@ -139,19 +174,23 @@ export class PaymentsService {
         { session },
       );
 
-      await this.auditService.log({
-        actorId,
-        action: AuditAction.PAYMENT_CREATED,
-        entityType: 'Payment',
-        entityId: String(payment[0]._id),
-        details: {
-          invoiceId: dto.invoiceId,
-          amount: dto.amount,
-          arrearsApplied,
-          currentFeesApplied,
-          receiptNumber: payment[0].receiptNumber,
+      await this.auditService.log(
+        {
+          schoolYearId: String(invoice.schoolYearId),
+          actorId,
+          action: AuditAction.PAYMENT_CREATED,
+          entityType: 'Payment',
+          entityId: String(payment[0]._id),
+          details: {
+            invoiceId: dto.invoiceId,
+            amount: dto.amount,
+            arrearsApplied,
+            currentFeesApplied,
+            receiptNumber: payment[0].receiptNumber,
+          },
         },
-      });
+        session,
+      );
 
       return {
         payment: payment[0],
@@ -179,17 +218,54 @@ export class PaymentsService {
     if (!payment) {
       throw new NotFoundException('Recu introuvable');
     }
-
+    const enrollment = (payment.invoiceId as any)?.enrollmentId;
+    if (enrollment) {
+      if (enrollment.studentSnapshot) {
+        enrollment.studentId = {
+          ...(enrollment.studentId ?? {}),
+          ...enrollment.studentSnapshot,
+        };
+      }
+      if (enrollment.levelSnapshot) {
+        enrollment.levelId = {
+          ...(enrollment.levelId ?? {}),
+          ...enrollment.levelSnapshot,
+        };
+      }
+    }
     return payment;
   }
 
-  async listByInvoiceIds(invoiceIds: string[]) {
+  async findReceiptYear(id: string) {
+    const payment = await this.paymentModel
+      .findById(id)
+      .select('schoolYearId')
+      .lean()
+      .exec();
+    if (!payment) {
+      throw new NotFoundException('Recu introuvable');
+    }
+    return String(payment.schoolYearId);
+  }
+
+  async findReceiptYearByInvoice(invoiceId: string) {
+    const invoice = await this.billingService.findInvoiceById(invoiceId);
+    if (!invoice) {
+      throw new NotFoundException('Facture introuvable');
+    }
+    return String(invoice.schoolYearId);
+  }
+
+  async listByInvoiceIds(invoiceIds: string[], schoolYearId?: string) {
     if (!invoiceIds.length) {
       return [];
     }
 
     return this.paymentModel
-      .find({ invoiceId: { $in: invoiceIds } })
+      .find({
+        invoiceId: { $in: invoiceIds },
+        ...(schoolYearId ? { schoolYearId } : {}),
+      })
       .sort({ paidAt: -1 })
       .lean()
       .exec();
@@ -213,7 +289,6 @@ export class PaymentsService {
       };
     }
 
-    // En mode écolage seul, la part consacrée à l'inscription est exclue des calculs.
     const tuitionPaid = Math.min(
       Math.max(paidAmount - registrationFee, 0),
       netTuitionFee,
@@ -231,7 +306,7 @@ export class PaymentsService {
   ) {
     const receipt = await this.findReceiptById(id);
     const chunks: Buffer[] = [];
-    const doc = new PDFDocument({ margin: 0, size: 'A4' });
+    const doc = new PDFDocument({ margin: 40 });
     doc.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
 
     const storedSchoolName = await this.settingsService.getSchoolName();
@@ -253,114 +328,80 @@ export class PaymentsService {
       .padStart(
         2,
         '0',
-      )}/${receiptDate.getFullYear()} à ${receiptDate.getHours().toString().padStart(2, '0')} h ${receiptDate
+      )} / ${receiptDate.getFullYear()} à ${receiptDate.getHours().toString().padStart(2, '0')}h ${receiptDate
       .getMinutes()
       .toString()
       .padStart(2, '0')}`;
-    const amounts = this.getReceiptAmounts(invoice, receiptMode);
-    const formatAmount = (value: unknown) =>
-      new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 })
-        .format(Number(value ?? 0))
-        .replace(/[\u00a0\u202f]/g, ' ');
 
     return await new Promise<Buffer>((resolve) => {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
 
-      const renderCopy = (top: number) => {
-        const startX = 30;
-        const contentWidth = doc.page.width - startX * 2;
-        const rows: Array<[string, string]> = [
-          ['Référence ou numéro de reçu', String(receipt.receiptNumber ?? '-')],
-          ['Année scolaire', schoolYearLabel],
-          ["Nom et prénoms de l'élève", studentFullName],
-          ['N° matricule', String(student?.matricule ?? '-')],
-          ['Sexe', gender],
-          ['Classe', levelLabel],
-          ["Montant de l'écolage", formatAmount(amounts.tuitionFee)],
-        ];
-
-        if (receiptMode === ReceiptMode.TUITION_AND_REGISTRATION) {
-          rows.push([
-            "Frais d'inscription",
-            formatAmount(amounts.registrationFee),
-          ]);
-        }
-
-        rows.push(
-          ['Nouveau paiement', formatAmount(receipt.amount)],
-          ['Total payé', formatAmount(amounts.totalPaid)],
-          ['Reste à payer', formatAmount(amounts.balanceDue)],
-        );
-
-        doc
-          .font('Helvetica-Bold')
-          .fontSize(14)
-          .text(schoolName.toUpperCase(), startX, top, {
-            width: contentWidth,
-            align: 'center',
-          });
-        doc
-          .font('Helvetica-Bold')
-          .fontSize(11)
-          .text('REÇU DE PAIEMENT DES FRAIS DE SCOLARITÉ', startX, top + 21, {
-            width: contentWidth,
-            align: 'center',
-          });
-
-        const rowHeight = 18;
-        const labelWidth = 205;
-        const valueWidth = contentWidth - labelWidth;
-        let y = top + 45;
-
-        rows.forEach(([label, value]) => {
-          doc.rect(startX, y, labelWidth, rowHeight).stroke('#222222');
-          doc
-            .rect(startX + labelWidth, y, valueWidth, rowHeight)
-            .stroke('#222222');
-          doc
-            .font('Helvetica-Bold')
-            .fontSize(8.5)
-            .text(label, startX + 5, y + 5, {
-              width: labelWidth - 10,
-              lineBreak: false,
-            });
-          doc
-            .font('Helvetica')
-            .fontSize(8.5)
-            .text(value, startX + labelWidth + 5, y + 5, {
-              width: valueWidth - 10,
-              lineBreak: false,
-            });
-          y += rowHeight;
-        });
-
-        doc
-          .font('Helvetica')
-          .fontSize(8.5)
-          .text(`Lomé, le ${formattedDate}`, startX, y + 9, {
-            width: contentWidth,
-            align: 'right',
-          });
-        doc
-          .font('Helvetica-Bold')
-          .fontSize(9)
-          .text("L'économe", startX, y + 30, {
-            width: contentWidth,
-            align: 'right',
-          });
-      };
-
-      renderCopy(22);
-      const cutY = doc.page.height / 2;
+      doc.font('Times-Bold').fontSize(18).text(schoolName, { align: 'center' });
+      doc.moveDown(0.5);
       doc
-        .save()
-        .dash(5, { space: 4 })
-        .strokeColor('#777777')
-        .moveTo(18, cutY)
-        .lineTo(doc.page.width - 18, cutY)
-        .stroke()
-        .restore();
-      renderCopy(cutY + 22);
+        .font('Times-Bold')
+        .fontSize(14)
+        .text('REÇU DE PAIEMENT DES FRAIS DE SCOLARITE', { align: 'center' });
+      doc.moveDown(1);
+
+      const rows = [
+        ['Référence ou Numéro de reçu', receipt.receiptNumber ?? '-'],
+        ['Année scolaire', schoolYearLabel],
+        ['Nom et prénoms de l’élève', studentFullName],
+        ['N° Matricule', student?.matricule ?? '-'],
+        ['Sexe', gender],
+        ['Classe', levelLabel],
+      ];
+
+      if (receiptMode === ReceiptMode.TUITION_AND_REGISTRATION) {
+        rows.push(["Frais d'inscription", invoice?.registrationFee ?? '-']);
+      }
+
+      rows.push(['Montant de l’écolage', invoice?.tuitionFee ?? '-']);
+      rows.push(['Nouveau paiement', receipt.amount ?? '-']);
+      rows.push(['Total payé', invoice?.paidAmount ?? '-']);
+      rows.push(['Reste à payer', invoice?.balanceDue ?? '-']);
+
+      const rowHeight = 22;
+      const startX = doc.page.margins.left;
+      const labelWidth = 190;
+      const valueWidth =
+        doc.page.width -
+        doc.page.margins.left -
+        doc.page.margins.right -
+        labelWidth;
+      let y = doc.y;
+
+      rows.forEach(([label, value], index) => {
+        doc.rect(startX, y, labelWidth, rowHeight).stroke('#000000');
+        doc
+          .rect(startX + labelWidth, y, valueWidth, rowHeight)
+          .stroke('#000000');
+
+        doc
+          .font('Times-Bold')
+          .fontSize(11)
+          .text(label, startX + 6, y + 6, {
+            width: labelWidth - 12,
+            align: 'left',
+          });
+        doc
+          .font('Times-Roman')
+          .fontSize(11)
+          .text(String(value), startX + labelWidth + 6, y + 6, {
+            width: valueWidth - 12,
+            align: 'left',
+          });
+
+        y += rowHeight;
+      });
+
+      doc.y = y + 10;
+      doc
+        .font('Times-Roman')
+        .text(`Lomé, le ${formattedDate}`, { align: 'right' });
+      doc.moveDown(2);
+      doc.font('Times-Roman').text('L’économe', { align: 'right' });
 
       doc.end();
     });

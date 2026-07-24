@@ -8,6 +8,7 @@ declare module 'express-session' {
       type: 'success' | 'error';
       message: string;
     };
+    selectedSchoolYearId?: string;
   }
 }
 

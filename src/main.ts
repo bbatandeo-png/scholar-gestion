@@ -14,6 +14,7 @@ import { AppModule } from './app.module';
 import { FeeScheduleNotFoundFilter } from './common/filters/fee-schedule-not-found.filter';
 import { SessionUser } from './common/types/session-user.type';
 import { runSeed, shouldRunSeed } from './scripts/seed';
+import { SchoolYearsService } from './school-years/school-years.service';
 
 function resolveExistingPath(candidates: string[]) {
   for (const candidate of candidates) {
@@ -27,11 +28,14 @@ function resolveExistingPath(candidates: string[]) {
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
-  const mongoUri = process.env.MONGODB_URI ?? 'mongodb://127.0.0.1:27017/schoolar';
+  const mongoUri =
+    process.env.MONGODB_URI ?? 'mongodb://127.0.0.1:27017/schoolar';
   const isTest = process.env.NODE_ENV === 'test';
 
   const isPkgRuntime = Boolean((process as any).pkg);
-  const runtimeRoot = isPkgRuntime ? path.dirname(process.execPath) : process.cwd();
+  const runtimeRoot = isPkgRuntime
+    ? path.dirname(process.execPath)
+    : process.cwd();
   const viewsDir = resolveExistingPath([
     path.join(runtimeRoot, 'views'),
     path.join(process.cwd(), 'dist', 'views'),
@@ -57,7 +61,8 @@ async function bootstrap() {
       return '';
     }
 
-    const date = value instanceof Date ? value : new Date(value as string | number);
+    const date =
+      value instanceof Date ? value : new Date(value as string | number);
     if (Number.isNaN(date.getTime())) {
       return '';
     }
@@ -73,7 +78,8 @@ async function bootstrap() {
       return '';
     }
 
-    const date = value instanceof Date ? value : new Date(value as string | number);
+    const date =
+      value instanceof Date ? value : new Date(value as string | number);
     if (Number.isNaN(date.getTime())) {
       return '';
     }
@@ -109,14 +115,55 @@ async function bootstrap() {
     app.use(csurf());
   }
 
-  app.use((req, res, next) => {
+  const schoolYearsService = app.get(SchoolYearsService);
+  app.use(async (req, res, next) => {
     const flash = req.session?.flash;
     const user = req.session?.user as SessionUser | undefined;
 
     res.locals.currentUser = user;
     res.locals.flash = flash;
     res.locals.currentPath = req.path;
-    res.locals.csrfToken = typeof req.csrfToken === 'function' ? req.csrfToken() : '';
+    res.locals.csrfToken =
+      typeof req.csrfToken === 'function' ? req.csrfToken() : '';
+
+    if (user) {
+      try {
+        const [schoolYears, openSchoolYear, selectedSchoolYear] =
+          await Promise.all([
+            schoolYearsService.list(),
+            schoolYearsService.findOpen(),
+            schoolYearsService.resolveSelected(
+              req.session.selectedSchoolYearId,
+            ),
+          ]);
+        res.locals.schoolYearContext = {
+          years: schoolYears,
+          open: openSchoolYear,
+          selected: selectedSchoolYear,
+          isHistorical:
+            Boolean(openSchoolYear) &&
+            String(openSchoolYear?._id) !== String(selectedSchoolYear?._id),
+        };
+        if (
+          res.locals.schoolYearContext.isHistorical &&
+          !['GET', 'HEAD', 'OPTIONS'].includes(req.method) &&
+          !['/settings/school-years/select', '/logout'].includes(req.path)
+        ) {
+          req.session.flash = {
+            type: 'error',
+            message: 'Cette annee historique est disponible en lecture seule',
+          };
+          return res.redirect(req.get('referer') || '/dashboard');
+        }
+      } catch {
+        res.locals.schoolYearContext = {
+          years: [],
+          open: null,
+          selected: null,
+          isHistorical: false,
+        };
+      }
+    }
 
     if (req.session) {
       delete (req.session as any).flash;

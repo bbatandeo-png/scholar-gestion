@@ -46,6 +46,7 @@ describe('ReportsService', () => {
       {} as any,
       {} as any,
       {} as any,
+      {} as any,
     );
 
     const result = await service.registrationPaidStudents(
@@ -89,6 +90,7 @@ describe('ReportsService', () => {
     const service = new ReportsService(
       {} as any,
       invoiceModel as any,
+      {} as any,
       {} as any,
       {} as any,
       {} as any,
@@ -141,6 +143,7 @@ describe('ReportsService', () => {
       {} as any,
       {} as any,
       {} as any,
+      {} as any,
     );
 
     const partial = await service.registrationPaidStudents('partial');
@@ -162,6 +165,7 @@ describe('ReportsService', () => {
 
   it('renders the payment situation PDF in A4 landscape', async () => {
     const service = new ReportsService(
+      {} as any,
       {} as any,
       {} as any,
       {} as any,
@@ -242,6 +246,7 @@ describe('ReportsService', () => {
       {} as any,
       levelModel as any,
       schoolYearModel as any,
+      {} as any,
       settingsService as any,
     );
 
@@ -267,6 +272,7 @@ describe('ReportsService', () => {
 
   it('paginates a long nominal roll PDF without losing the A4 table', async () => {
     const service = new ReportsService(
+      {} as any,
       {} as any,
       {} as any,
       {} as any,

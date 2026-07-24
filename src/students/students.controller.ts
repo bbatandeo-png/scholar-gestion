@@ -52,20 +52,24 @@ export class StudentsController {
   @Get()
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT, Role.AUDITEUR)
   @Render('students/index')
-  async index(@Query() query: SearchStudentsDto) {
+  async index(@Query() query: SearchStudentsDto, @Req() req: Request) {
+    const year = await this.schoolYearsService.resolveSelected(
+      req.session.selectedSchoolYearId,
+    );
     const page = Math.max(1, Number(query.page ?? 1));
     const pageSize = Math.min(100, Math.max(5, Number(query.pageSize ?? 20)));
-    const [result, levels, openSchoolYear] = await Promise.all([
-      this.studentsService.searchPaginated(query.q, page, pageSize),
-      this.levelsService.list(),
-      this.schoolYearsService.findOpen(),
-    ]);
+    const result = await this.studentsService.searchPaginated(
+      query.q,
+      page,
+      pageSize,
+      String(year._id),
+    );
 
     return {
       title: 'Eleves',
       students: result.items,
-      levels,
-      openSchoolYear,
+      levels: await this.levelsService.listForSchoolYear(String(year._id)),
+      openSchoolYear: year,
       query: query.q ?? '',
       pagination: {
         page: result.page,
@@ -82,8 +86,18 @@ export class StudentsController {
 
   @Get('/export')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT, Role.AUDITEUR)
-  async export(@Query() query: SearchStudentsDto, @Res() res: Response) {
-    const students = await this.studentsService.search(query.q);
+  async export(
+    @Query() query: SearchStudentsDto,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const year = await this.schoolYearsService.resolveSelected(
+      req.session.selectedSchoolYearId,
+    );
+    const students = await this.studentsService.search(
+      query.q,
+      String(year._id),
+    );
     const buffer = buildExcelBuffer(
       'Eleves',
       students.map((student: any) => ({
@@ -255,7 +269,10 @@ export class StudentsController {
     Role.AUDITEUR,
   )
   @Render('students/detail')
-  async detail(@Param('id') id: string) {
+  async detail(@Param('id') id: string, @Req() req: Request) {
+    const selectedYear = await this.schoolYearsService.resolveSelected(
+      req.session.selectedSchoolYearId,
+    );
     const detail = await this.studentsService.detail(id);
     const guardians = detail.guardians ?? [];
     const fatherGuardian =
@@ -296,8 +313,11 @@ export class StudentsController {
       };
     });
 
-    const currentEnrollment =
-      history.find((item: any) => item.status === 'active') ?? history[0];
+    const currentEnrollment = history.find(
+      (item: any) =>
+        String(item.schoolYearId?._id ?? item.schoolYearId) ===
+        String(selectedYear._id),
+    );
 
     return {
       title: 'Detail eleve',
@@ -308,8 +328,11 @@ export class StudentsController {
       history,
       paymentHistory,
       currentEnrollment,
-      schoolYears: await this.schoolYearsService.list(),
-      levels: await this.levelsService.list(),
+      selectedYear,
+      schoolYears: [selectedYear],
+      levels: await this.levelsService.listForSchoolYear(
+        String(selectedYear._id),
+      ),
     };
   }
 
@@ -321,20 +344,21 @@ export class StudentsController {
     Role.COMPTABILITE,
     Role.AUDITEUR,
   )
-  async financialStatus(@Param('id') id: string) {
+  async financialStatus(@Param('id') id: string, @Req() req: Request) {
+    const selectedYear = await this.schoolYearsService.resolveSelected(
+      req.session.selectedSchoolYearId,
+    );
     const detail = await this.studentsService.detail(id);
-    const history = await this.enrollmentsService.findStudentHistory(id);
+    const history = await this.enrollmentsService.findStudentHistory(
+      id,
+      String(selectedYear._id),
+    );
     const invoices = await Promise.all(
       history.map((item: any) =>
         this.billingService.findInvoiceByEnrollment(String(item._id)),
       ),
     );
-    const openArrears = await this.enrollmentsService.previewOpenArrears(id);
-
-    const currentEnrollment =
-      history.find((item: any) => item.status === 'active') ??
-      history[0] ??
-      null;
+    const currentEnrollment = history[0] ?? null;
     const currentInvoice = currentEnrollment
       ? (invoices.find(
           (invoice: any, index: number) =>
@@ -342,21 +366,15 @@ export class StudentsController {
         ) ?? null)
       : null;
 
-    const totalOutstandingInvoices = invoices.reduce(
-      (sum: number, invoice: any) => sum + Number(invoice?.balanceDue ?? 0),
-      0,
-    );
-    const totalOpenArrears = openArrears.reduce(
-      (sum: number, item: any) => sum + Number(item.amountRemaining ?? 0),
-      0,
-    );
-    const totalDue = totalOutstandingInvoices + totalOpenArrears;
+    const totalOutstandingInvoices = Number(currentInvoice?.balanceDue ?? 0);
+    const totalOpenArrears = Number(currentInvoice?.arrearsAmount ?? 0);
+    const totalDue = totalOutstandingInvoices;
 
     return {
       student: detail.student,
       currentEnrollment,
       currentInvoice,
-      openArrearsCount: openArrears.length,
+      openArrearsCount: totalOpenArrears > 0 ? 1 : 0,
       openArrearsAmount: totalOpenArrears,
       outstandingInvoicesAmount: totalOutstandingInvoices,
       totalDue,
@@ -381,6 +399,7 @@ export class StudentsController {
   @Roles(Role.SUPER_ADMIN, Role.SECRETARIAT)
   @Render('students/reenroll')
   async reenrollForm(@Param('id') id: string) {
+    const openYear = await this.schoolYearsService.requireOpen();
     const detail = await this.studentsService.detail(id);
     const history = await this.enrollmentsService.findStudentHistory(id);
     const openArrears = await this.enrollmentsService.previewOpenArrears(id);
@@ -389,8 +408,8 @@ export class StudentsController {
       ...detail,
       history,
       openArrears,
-      schoolYears: await this.schoolYearsService.list(),
-      levels: await this.levelsService.list(),
+      schoolYears: [openYear],
+      levels: await this.levelsService.listForSchoolYear(String(openYear._id)),
     };
   }
 
@@ -402,8 +421,9 @@ export class StudentsController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
+    const open = await this.schoolYearsService.requireOpen();
     const result = await this.enrollmentsService.reenrollStudent(id, {
-      targetSchoolYearId: dto.targetSchoolYearId,
+      targetSchoolYearId: String(open._id),
       targetLevelId: dto.targetLevelId,
       carryOverArrears: dto.carryOverArrears !== 'false',
       reason: dto.reason,

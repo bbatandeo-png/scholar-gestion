@@ -6,7 +6,20 @@ export type PaymentDocument = HydratedDocument<Payment>;
 
 @Schema({ timestamps: true, collection: 'payments' })
 export class Payment {
-  @Prop({ type: SchemaTypes.ObjectId, required: true, ref: 'Invoice', index: true })
+  @Prop({
+    type: SchemaTypes.ObjectId,
+    required: true,
+    ref: 'SchoolYear',
+    index: true,
+  })
+  schoolYearId: string;
+
+  @Prop({
+    type: SchemaTypes.ObjectId,
+    required: true,
+    ref: 'Invoice',
+    index: true,
+  })
   invoiceId: string;
 
   @Prop({ required: true, min: 0.01 })
@@ -32,3 +45,4 @@ export class Payment {
 }
 
 export const PaymentSchema = SchemaFactory.createForClass(Payment);
+PaymentSchema.index({ schoolYearId: 1, paidAt: -1 });

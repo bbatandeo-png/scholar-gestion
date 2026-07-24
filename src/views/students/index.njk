@@ -1,4 +1,4 @@
-﻿{% extends "layout.njk" %}
+{% extends "layout.njk" %}
 {% block content %}
   <section class="panel">
     <div class="topbar">
@@ -11,8 +11,8 @@
 
       <div class="topbar-actions student-list-actions">
         <form method="get" action="/students" class="inline-form" id="main-search">
-          <label class="field-inline">
-            <input class="search-field" type="search" name="q" value="{{ query }}" placeholder="Rechercher par nom, prénom ou matricule" />
+          <label class="search-controls">
+            <input type="search" name="q" value="{{ query }}" placeholder="Rechercher par nom, prénom ou matricule" />
             <button type="submit" class="button btn-icon icon-search">Rechercher</button>
             <button type="button" id="toggle-advanced" class="button secondary">Filtres</button>
           </label>

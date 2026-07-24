@@ -7,6 +7,8 @@ describe('DashboardService financial summary', () => {
     {} as any,
     {} as any,
     {} as any,
+    {} as any,
+    {} as any,
   );
 
   it('calcule le taux de recouvrement uniquement sur l ecolage', () => {

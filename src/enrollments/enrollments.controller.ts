@@ -45,18 +45,28 @@ export class EnrollmentsController {
   )
   @Render('enrollments/index')
   async index(
+    @Req() req: Request,
     @Query('page') pageParam?: string,
     @Query('pageSize') pageSizeParam?: string,
   ) {
+    const selectedYear = await this.schoolYearsService.resolveSelected(
+      req.session.selectedSchoolYearId,
+    );
+    const schoolYearId = String(selectedYear._id);
     const page = Math.max(1, Number(pageParam ?? 1));
     const pageSize = Math.min(100, Math.max(5, Number(pageSizeParam ?? 20)));
-    const result = await this.enrollmentsService.listPaginated(page, pageSize);
+    const result = await this.enrollmentsService.listPaginated(
+      schoolYearId,
+      page,
+      pageSize,
+    );
 
     return {
       title: 'Inscriptions',
       enrollments: result.items,
-      schoolYears: await this.schoolYearsService.list(),
-      levels: await this.levelsService.list(),
+      students: await this.studentsService.list(),
+      selectedYear,
+      levels: await this.levelsService.listForSchoolYear(schoolYearId),
       pagination: {
         page: result.page,
         pageSize: result.pageSize,
@@ -78,8 +88,11 @@ export class EnrollmentsController {
     Role.COMPTABILITE,
     Role.AUDITEUR,
   )
-  async export(@Res() res: Response) {
-    const enrollments = await this.enrollmentsService.list();
+  async export(@Req() req: Request, @Res() res: Response) {
+    const year = await this.schoolYearsService.resolveSelected(
+      req.session.selectedSchoolYearId,
+    );
+    const enrollments = await this.enrollmentsService.list(String(year._id));
     const buffer = buildExcelBuffer(
       'Inscriptions',
       enrollments.map((item: any) => ({
@@ -112,8 +125,9 @@ export class EnrollmentsController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
+    const open = await this.schoolYearsService.requireOpen();
     const result = await this.enrollmentsService.createEnrollment(
-      dto,
+      { ...dto, schoolYearId: String(open._id) },
       req.session.user?.id,
     );
     setFlash(req, 'success', 'Inscription creee');
@@ -129,7 +143,10 @@ export class EnrollmentsController {
     Role.AUDITEUR,
   )
   @Render('enrollments/detail')
-  async detail(@Param('id') id: string): Promise<{
+  async detail(
+    @Param('id') id: string,
+    @Req() req: Request,
+  ): Promise<{
     title: string;
     enrollment: any;
     invoice: any;
@@ -139,12 +156,24 @@ export class EnrollmentsController {
     levels: any[];
   }> {
     const detail = await this.enrollmentsService.findById(id);
+    const selected = await this.schoolYearsService.resolveSelected(
+      req.session.selectedSchoolYearId,
+    );
+    if (
+      String(
+        detail.enrollment.schoolYearId?._id ?? detail.enrollment.schoolYearId,
+      ) !== String(selected._id)
+    ) {
+      throw new ForbiddenException(
+        'Cette inscription appartient a une autre annee scolaire',
+      );
+    }
     return {
       title: 'Detail inscription',
       ...detail,
       students: await this.studentsService.list(),
-      schoolYears: await this.schoolYearsService.list(),
-      levels: await this.levelsService.list(),
+      schoolYears: [selected],
+      levels: await this.levelsService.listForSchoolYear(String(selected._id)),
     };
   }
 

@@ -8,18 +8,24 @@
   </head>
   <body>
     <div class="app-shell">
-      <aside class="sidebar">
-        <div class="sidebar-header">
-          <div class="sidebar-brand">
-            <p class="eyebrow">Complexe scolaire</p>
-            <h1>Scolar-Gestion</h1>
-            <p class="sidebar-subtitle">Gestion administrative, scolaire et financière</p>
-          </div>
-          <button type="button" class="sidebar-toggle" aria-label="Afficher ou masquer le menu" aria-expanded="true">
-            ☰
-          </button>
+      <button
+        type="button"
+        class="mobile-nav-toggle"
+        aria-controls="main-navigation"
+        aria-expanded="false"
+        aria-label="Ouvrir le menu principal"
+      >
+        <span aria-hidden="true">☰</span>
+        <span>Menu</span>
+      </button>
+      <div class="sidebar-backdrop" aria-hidden="true"></div>
+      <aside class="sidebar" id="main-navigation">
+        <div class="sidebar-brand">
+          <p class="eyebrow">Complexe scolaire</p>
+          <h1>Scolar-Gestion</h1>
+          <p class="sidebar-subtitle">Gestion administrative, scolaire et financière</p>
         </div>
-        <nav class="nav-links" aria-label="Navigation principale">
+        <nav class="nav-links">
           {% set role = currentUser.role if currentUser else '' %}
 
           <div class="nav-group">
@@ -31,7 +37,7 @@
 
           {% if role == 'super_admin' or role == 'direction' or role == 'secretariat' or role == 'auditeur' %}
             <div class="nav-group">
-              <details class="nav-details" {% if currentPath and currentPath.startsWith('/students') %}open{% endif %}>
+              <details class="nav-details" {% if currentPath and (currentPath.startsWith('/students') or currentPath == '/students/search') %}open{% endif %}>
                 <summary>Gestion scolaire</summary>
                 <div class="nav-submenu">
                   <a href="/students" class="{% if currentPath and currentPath.startsWith('/students') and currentPath != '/students/search' %}is-active{% endif %}">Élèves</a>
@@ -106,7 +112,7 @@
               <details class="nav-details" {% if currentPath and currentPath.startsWith('/reports') %}open{% endif %}>
                 <summary>Rapports & indicateurs</summary>
                 <div class="nav-submenu">
-                  <a href="/reports/revenue" class="{% if currentPath == '/reports/revenue' %}is-active{% endif %}">Rapports</a>
+                  <a href="/reports/revenue" class="{% if currentPath and currentPath.startsWith('/reports') %}is-active{% endif %}">Rapports</a>
                   <a href="/reports/registration-paid" class="{% if currentPath and currentPath.startsWith('/reports/registration-paid') %}is-active{% endif %}">Inscriptions payées</a>
                 </div>
               </details>
@@ -116,7 +122,7 @@
               <details class="nav-details" {% if currentPath and currentPath.startsWith('/reports') %}open{% endif %}>
                 <summary>Rapports & indicateurs</summary>
                 <div class="nav-submenu">
-                  <a href="/reports/students-by-level" class="{% if currentPath == '/reports/students-by-level' %}is-active{% endif %}">Rapports</a>
+                  <a href="/reports/students-by-level" class="{% if currentPath and currentPath.startsWith('/reports') %}is-active{% endif %}">Rapports</a>
                   <a href="/reports/registration-paid" class="{% if currentPath and currentPath.startsWith('/reports/registration-paid') %}is-active{% endif %}">Inscriptions payées</a>
                 </div>
               </details>
@@ -143,6 +149,22 @@
           </div>
           <div class="topbar-actions">
             {% if currentUser %}
+              {% if schoolYearContext and schoolYearContext.years %}
+                <form action="/settings/school-years/select" method="post" class="inline-form">
+                  <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+                  <input type="hidden" name="returnTo" value="{{ currentPath }}" />
+                  <label>
+                    <span class="sr-only">Année scolaire consultée</span>
+                    <select name="schoolYearId" onchange="this.form.submit()">
+                      {% for year in schoolYearContext.years %}
+                        <option value="{{ year._id }}" {% if schoolYearContext.selected and (year._id | string) == (schoolYearContext.selected._id | string) %}selected{% endif %}>
+                          {{ year.label }}{% if year.status == 'open' %} — active{% endif %}
+                        </option>
+                      {% endfor %}
+                    </select>
+                  </label>
+                </form>
+              {% endif %}
               <span class="badge badge-neutral">{{ currentUser.role }}</span>
               <form action="/logout" method="post">
                 <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
@@ -158,43 +180,59 @@
           <div class="flash {{ flash.type }}">{{ flash.message }}</div>
         {% endif %}
 
+        {% if schoolYearContext and schoolYearContext.isHistorical %}
+          <div class="notice notice-info">
+            Consultation de l’année historique <strong>{{ schoolYearContext.selected.label }}</strong> — lecture seule.
+          </div>
+        {% endif %}
+
         {% block content %}{% endblock %}
       </main>
     </div>
     <script>
       (() => {
+        const body = document.body;
+        const navToggle = document.querySelector('.mobile-nav-toggle');
+        const navBackdrop = document.querySelector('.sidebar-backdrop');
         const sidebar = document.querySelector('.sidebar');
-        const toggle = document.querySelector('.sidebar-toggle');
-        const mediaQuery = window.matchMedia('(max-width: 980px)');
 
-        const applySidebarState = () => {
-          if (!sidebar || !toggle) {
-            return;
-          }
-
-          if (mediaQuery.matches) {
-            sidebar.classList.add('is-collapsed');
-            sidebar.classList.remove('is-open');
-            toggle.setAttribute('aria-expanded', 'false');
-          } else {
-            sidebar.classList.remove('is-collapsed');
-            sidebar.classList.add('is-open');
-            toggle.setAttribute('aria-expanded', 'true');
-          }
+        const setNavigationOpen = (open) => {
+          body.classList.toggle('nav-open', open);
+          navToggle?.setAttribute('aria-expanded', String(open));
+          navToggle?.setAttribute(
+            'aria-label',
+            open ? 'Fermer le menu principal' : 'Ouvrir le menu principal',
+          );
         };
 
-        toggle?.addEventListener('click', () => {
-          if (!mediaQuery.matches) {
-            return;
+        navToggle?.addEventListener('click', () => {
+          setNavigationOpen(!body.classList.contains('nav-open'));
+        });
+        navBackdrop?.addEventListener('click', () => setNavigationOpen(false));
+        sidebar?.addEventListener('click', (event) => {
+          if (event.target.closest('a') && window.matchMedia('(max-width: 980px)').matches) {
+            setNavigationOpen(false);
           }
-
-          const collapsed = sidebar.classList.toggle('is-collapsed');
-          toggle.setAttribute('aria-expanded', String(!collapsed));
+        });
+        document.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape') {
+            setNavigationOpen(false);
+          }
+        });
+        window.addEventListener('resize', () => {
+          if (!window.matchMedia('(max-width: 980px)').matches) {
+            setNavigationOpen(false);
+          }
         });
 
-        mediaQuery.addEventListener?.('change', applySidebarState);
-        window.addEventListener('resize', applySidebarState);
-        applySidebarState();
+        document.querySelectorAll('table').forEach((table) => {
+          if (!table.parentElement?.classList.contains('table-shell')) {
+            const shell = document.createElement('div');
+            shell.className = 'table-shell';
+            table.parentNode.insertBefore(shell, table);
+            shell.appendChild(table);
+          }
+        });
 
         const tables = document.querySelectorAll('table.js-sortable');
 

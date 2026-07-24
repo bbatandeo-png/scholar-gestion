@@ -6,7 +6,20 @@ export type InvoiceDocument = HydratedDocument<Invoice>;
 
 @Schema({ timestamps: true, collection: 'invoices' })
 export class Invoice {
-  @Prop({ type: SchemaTypes.ObjectId, required: true, ref: 'Enrollment', unique: true })
+  @Prop({
+    type: SchemaTypes.ObjectId,
+    required: true,
+    ref: 'SchoolYear',
+    index: true,
+  })
+  schoolYearId: string;
+
+  @Prop({
+    type: SchemaTypes.ObjectId,
+    required: true,
+    ref: 'Enrollment',
+    unique: true,
+  })
   enrollmentId: string;
 
   @Prop({ required: true, min: 0 })
@@ -30,8 +43,13 @@ export class Invoice {
   @Prop({ required: true, min: 0 })
   balanceDue: number;
 
-  @Prop({ required: true, enum: Object.values(InvoiceStatus), default: InvoiceStatus.UNPAID })
+  @Prop({
+    required: true,
+    enum: Object.values(InvoiceStatus),
+    default: InvoiceStatus.UNPAID,
+  })
   status: InvoiceStatus;
 }
 
 export const InvoiceSchema = SchemaFactory.createForClass(Invoice);
+InvoiceSchema.index({ schoolYearId: 1, status: 1 });

@@ -3,14 +3,32 @@ import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Model } from 'mongoose';
 import { ArrearStatus } from '../common/enums/domain.enums';
 import { Arrear, ArrearDocument } from './schemas/arrear.schema';
+import {
+  ArrearCarryForward,
+  ArrearCarryForwardDocument,
+} from './schemas/arrear-carry-forward.schema';
 
 @Injectable()
 export class ArrearsService {
-  constructor(@InjectModel(Arrear.name) private readonly arrearModel: Model<ArrearDocument>) {}
+  constructor(
+    @InjectModel(Arrear.name)
+    private readonly arrearModel: Model<ArrearDocument>,
+    @InjectModel(ArrearCarryForward.name)
+    private readonly carryForwardModel: Model<ArrearCarryForwardDocument>,
+  ) {}
 
-  async list() {
+  async list(schoolYearId: string) {
+    const carriedIds = await this.carryForwardModel
+      .find({ targetSchoolYearId: schoolYearId })
+      .distinct('arrearId')
+      .exec();
     return this.arrearModel
-      .find()
+      .find({
+        $or: [
+          { sourceSchoolYearId: schoolYearId },
+          { _id: { $in: carriedIds } },
+        ],
+      })
       .populate({ path: 'studentId', select: 'matricule lastname firstname' })
       .populate({ path: 'sourceEnrollmentId', select: 'schoolYearId levelId' })
       .populate({ path: 'targetEnrollmentId', select: 'schoolYearId levelId' })
@@ -19,20 +37,33 @@ export class ArrearsService {
       .exec();
   }
 
-  async listPaginated(page: number, pageSize: number) {
+  async listPaginated(schoolYearId: string, page: number, pageSize: number) {
     const skip = (page - 1) * pageSize;
+    const carriedIds = await this.carryForwardModel
+      .find({ targetSchoolYearId: schoolYearId })
+      .distinct('arrearId')
+      .exec();
+    const criteria = {
+      $or: [{ sourceSchoolYearId: schoolYearId }, { _id: { $in: carriedIds } }],
+    };
     const [items, total] = await Promise.all([
       this.arrearModel
-        .find()
+        .find(criteria)
         .populate({ path: 'studentId', select: 'matricule lastname firstname' })
-        .populate({ path: 'sourceEnrollmentId', select: 'schoolYearId levelId' })
-        .populate({ path: 'targetEnrollmentId', select: 'schoolYearId levelId' })
+        .populate({
+          path: 'sourceEnrollmentId',
+          select: 'schoolYearId levelId',
+        })
+        .populate({
+          path: 'targetEnrollmentId',
+          select: 'schoolYearId levelId',
+        })
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(pageSize)
         .lean()
         .exec(),
-      this.arrearModel.countDocuments(),
+      this.arrearModel.countDocuments(criteria),
     ]);
 
     return {
@@ -44,13 +75,21 @@ export class ArrearsService {
     };
   }
 
-  async findOpenByStudent(studentId: string, session?: ClientSession) {
+  async findOpenByStudent(
+    studentId: string,
+    beforeSchoolYearId?: string,
+    session?: ClientSession,
+  ) {
+    const criteria: Record<string, any> = {
+      studentId,
+      status: { $in: [ArrearStatus.OPEN, ArrearStatus.PARTIALLY_PAID] },
+      amountRemaining: { $gt: 0 },
+    };
+    if (beforeSchoolYearId) {
+      criteria.sourceSchoolYearId = { $ne: beforeSchoolYearId };
+    }
     return this.arrearModel
-      .find({
-        studentId,
-        status: { $in: [ArrearStatus.OPEN, ArrearStatus.PARTIALLY_PAID] },
-        amountRemaining: { $gt: 0 },
-      })
+      .find(criteria)
       .session(session ?? null)
       .lean()
       .exec();
@@ -68,12 +107,15 @@ export class ArrearsService {
       .exec();
   }
 
-  async createFromOutstanding(payload: {
-    studentId: string;
-    sourceEnrollmentId: string;
-    sourceSchoolYearId: string;
-    amount: number;
-  }, session?: ClientSession) {
+  async createFromOutstanding(
+    payload: {
+      studentId: string;
+      sourceEnrollmentId: string;
+      sourceSchoolYearId: string;
+      amount: number;
+    },
+    session?: ClientSession,
+  ) {
     if (payload.amount <= 0) {
       return null;
     }
@@ -81,7 +123,6 @@ export class ArrearsService {
     const existing = await this.arrearModel
       .findOne({
         sourceEnrollmentId: payload.sourceEnrollmentId,
-        targetEnrollmentId: { $exists: false },
         status: { $in: [ArrearStatus.OPEN, ArrearStatus.PARTIALLY_PAID] },
       })
       .session(session ?? null)
@@ -112,26 +153,35 @@ export class ArrearsService {
     targetSchoolYearId: string,
     session?: ClientSession,
   ) {
-    const arrears = await this.findOpenByStudent(studentId, session);
+    const arrears = await this.findOpenByStudent(
+      studentId,
+      targetSchoolYearId,
+      session,
+    );
     let carriedAmount = 0;
     const linkedIds: string[] = [];
 
     for (const arrear of arrears) {
-      const updated = await this.arrearModel
-        .findByIdAndUpdate(
-          arrear._id,
-          {
-            targetEnrollmentId,
+      const carry = await this.carryForwardModel.findOneAndUpdate(
+        { arrearId: arrear._id, targetEnrollmentId },
+        {
+          $setOnInsert: {
+            arrearId: arrear._id,
+            sourceSchoolYearId: arrear.sourceSchoolYearId,
             targetSchoolYearId,
+            targetEnrollmentId,
+            amountCarried: arrear.amountRemaining,
           },
-          { new: true, session },
-        )
-        .exec();
-
-      if (updated) {
-        carriedAmount += updated.amountRemaining;
-        linkedIds.push(String(updated._id));
-      }
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true, session },
+      );
+      await this.arrearModel.updateOne(
+        { _id: arrear._id },
+        { $set: { targetEnrollmentId, targetSchoolYearId } },
+        { session },
+      );
+      carriedAmount += carry.amountCarried;
+      linkedIds.push(String(arrear._id));
     }
 
     return { carriedAmount, linkedIds };
@@ -145,7 +195,10 @@ export class ArrearsService {
     let remaining = amount;
     const allocations: Array<{ arrearId: string; amount: number }> = [];
 
-    const arrears = await this.arrearModel.find({ _id: { $in: arrearIds } }).session(session ?? null).exec();
+    const arrears = await this.arrearModel
+      .find({ _id: { $in: arrearIds } })
+      .session(session ?? null)
+      .exec();
     for (const arrear of arrears) {
       if (remaining <= 0) {
         break;
@@ -154,7 +207,9 @@ export class ArrearsService {
       const applied = Math.min(arrear.amountRemaining, remaining);
       arrear.amountRemaining -= applied;
       arrear.status =
-        arrear.amountRemaining === 0 ? ArrearStatus.PAID : ArrearStatus.PARTIALLY_PAID;
+        arrear.amountRemaining === 0
+          ? ArrearStatus.PAID
+          : ArrearStatus.PARTIALLY_PAID;
       await arrear.save({ session });
       allocations.push({ arrearId: String(arrear._id), amount: applied });
       remaining -= applied;

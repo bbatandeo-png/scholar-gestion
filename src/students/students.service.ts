@@ -143,9 +143,15 @@ export class StudentsService {
     return candidate;
   }
 
-  async list() {
+  async list(schoolYearId?: string) {
+    const enrollmentCriteria = schoolYearId ? { schoolYearId } : {};
+    const studentIds = schoolYearId
+      ? await this.enrollmentModel
+          .distinct('studentId', enrollmentCriteria)
+          .exec()
+      : undefined;
     return this.studentModel
-      .find()
+      .find(studentIds ? { _id: { $in: studentIds } } : {})
       .select('matricule lastname firstname status')
       .sort({ lastname: 1, firstname: 1 })
       .lean()
@@ -219,21 +225,29 @@ export class StudentsService {
       .exec();
   }
 
-  async search(query?: string) {
+  async search(query?: string, schoolYearId?: string) {
+    const studentIds = schoolYearId
+      ? await this.enrollmentModel
+          .distinct('studentId', { schoolYearId })
+          .exec()
+      : undefined;
+    const yearCriteria = studentIds ? { _id: { $in: studentIds } } : {};
     if (!query) {
-      return this.studentModel
-        .find()
+      const students = await this.studentModel
+        .find(yearCriteria)
         .select(
           'matricule lastname firstname gender birthDate birthPlace district status',
         )
         .sort({ lastname: 1, firstname: 1 })
         .lean()
         .exec();
+      return this.applyYearSnapshots(students, schoolYearId);
     }
 
     const regex = new RegExp(query.trim(), 'i');
-    return this.studentModel
+    const students = await this.studentModel
       .find({
+        ...yearCriteria,
         $or: [
           { matricule: regex },
           { lastname: regex },
@@ -247,14 +261,45 @@ export class StudentsService {
       .sort({ lastname: 1, firstname: 1 })
       .lean()
       .exec();
+    return this.applyYearSnapshots(students, schoolYearId);
+  }
+
+  private async applyYearSnapshots(students: any[], schoolYearId?: string) {
+    if (!schoolYearId || !students.length) {
+      return students;
+    }
+    const enrollments = await this.enrollmentModel
+      .find({
+        schoolYearId,
+        studentId: { $in: students.map((student) => student._id) },
+      })
+      .select('studentId studentSnapshot')
+      .lean()
+      .exec();
+    const snapshots = new Map(
+      enrollments.map((enrollment: any) => [
+        String(enrollment.studentId),
+        enrollment.studentSnapshot,
+      ]),
+    );
+    return students.map((student: any) => ({
+      ...student,
+      ...(snapshots.get(String(student._id)) ?? {}),
+    }));
   }
 
   async searchPaginated(
     query: string | undefined,
     page: number,
     pageSize: number,
+    schoolYearId?: string,
   ) {
-    const criteria = query
+    const studentIds = schoolYearId
+      ? await this.enrollmentModel
+          .distinct('studentId', { schoolYearId })
+          .exec()
+      : undefined;
+    const searchCriteria = query
       ? {
           $or: [
             { matricule: new RegExp(query.trim(), 'i') },
@@ -264,6 +309,10 @@ export class StudentsService {
           ],
         }
       : {};
+    const criteria = {
+      ...searchCriteria,
+      ...(studentIds ? { _id: { $in: studentIds } } : {}),
+    };
 
     const skip = (page - 1) * pageSize;
 
@@ -285,14 +334,23 @@ export class StudentsService {
     const studentsWithLevel = await Promise.all(
       items.map(async (student: any) => {
         const enrollment: any = await this.enrollmentModel
-          .findOne({ studentId: student._id })
+          .findOne({
+            studentId: student._id,
+            ...(schoolYearId ? { schoolYearId } : {}),
+          })
           .populate('levelId')
           .lean()
           .exec();
 
         return {
           ...student,
-          currentLevel: enrollment?.levelId?.label || '-',
+          ...(schoolYearId && enrollment?.studentSnapshot
+            ? enrollment.studentSnapshot
+            : {}),
+          currentLevel:
+            enrollment?.levelSnapshot?.label ||
+            enrollment?.levelId?.label ||
+            '-',
         };
       }),
     );

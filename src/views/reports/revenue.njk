@@ -4,18 +4,18 @@
     <div class="panel-heading">
       <div>
         <h2>Recettes</h2>
-        <p class="muted">Export Excel de la synthèse financière globale.</p>
+        <p class="muted">Synthèse financière de l’année scolaire consultée.</p>
       </div>
       <a class="button secondary btn-icon icon-export" href="/reports/revenue/export">Exporter Excel</a>
     </div>
     <div class="report-metrics">
       <article class="report-metric">
-        <span>Recettes frais d'inscription</span>
-        <strong>{{ report.registrationRevenue or 0 }}</strong>
+        <span>Frais courants encaissés</span>
+        <strong>{{ report.currentFeesCollected or 0 }}</strong>
       </article>
       <article class="report-metric">
-        <span>Recettes écolage</span>
-        <strong>{{ report.tuitionRevenue or 0 }}</strong>
+        <span>Impayés encaissés</span>
+        <strong>{{ report.arrearsCollected or 0 }}</strong>
       </article>
       <article class="report-metric">
         <span>Encaisse</span>

@@ -1,11 +1,21 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import PDFDocument from 'pdfkit';
 import { Expense, ExpenseDocument } from './schemas/expense.schema';
-import { ExpenseCategory, ExpenseCategoryDocument } from './schemas/expense-category.schema';
+import {
+  ExpenseCategory,
+  ExpenseCategoryDocument,
+} from './schemas/expense-category.schema';
 import { SettingsService } from '../settings/settings.service';
-import { SchoolYear, SchoolYearDocument } from '../school-years/schemas/school-year.schema';
+import {
+  SchoolYear,
+  SchoolYearDocument,
+} from '../school-years/schemas/school-year.schema';
 import { SchoolYearStatus } from '../common/enums/domain.enums';
 
 type PdfDocumentInstance = InstanceType<typeof PDFDocument>;
@@ -13,9 +23,12 @@ type PdfDocumentInstance = InstanceType<typeof PDFDocument>;
 @Injectable()
 export class ExpensesService {
   constructor(
-    @InjectModel(Expense.name) private readonly expenseModel: Model<ExpenseDocument>,
-    @InjectModel(ExpenseCategory.name) private readonly categoryModel: Model<ExpenseCategoryDocument>,
-    @InjectModel(SchoolYear.name) private readonly schoolYearModel: Model<SchoolYearDocument>,
+    @InjectModel(Expense.name)
+    private readonly expenseModel: Model<ExpenseDocument>,
+    @InjectModel(ExpenseCategory.name)
+    private readonly categoryModel: Model<ExpenseCategoryDocument>,
+    @InjectModel(SchoolYear.name)
+    private readonly schoolYearModel: Model<SchoolYearDocument>,
     private readonly settingsService: SettingsService,
   ) {}
 
@@ -33,11 +46,23 @@ export class ExpensesService {
       throw new BadRequestException('Le nom de la categorie est obligatoire');
     }
 
-    return this.categoryModel.create({ name: dto.name.trim(), description: dto.description?.trim() });
+    return this.categoryModel.create({
+      name: dto.name.trim(),
+      description: dto.description?.trim(),
+    });
   }
 
-  async updateCategory(id: string, dto: { name: string; description?: string }) {
-    const category = await this.categoryModel.findByIdAndUpdate(id, { name: dto.name.trim(), description: dto.description?.trim() }, { new: true }).exec();
+  async updateCategory(
+    id: string,
+    dto: { name: string; description?: string },
+  ) {
+    const category = await this.categoryModel
+      .findByIdAndUpdate(
+        id,
+        { name: dto.name.trim(), description: dto.description?.trim() },
+        { new: true },
+      )
+      .exec();
     if (!category) {
       throw new NotFoundException('Categorie introuvable');
     }
@@ -45,19 +70,28 @@ export class ExpensesService {
   }
 
   async deleteCategory(id: string) {
+    const used = await this.expenseModel.exists({ categoryId: id });
+    if (used) {
+      throw new BadRequestException(
+        'Cette categorie est utilisee par des depenses et ne peut pas etre supprimee',
+      );
+    }
     const category = await this.categoryModel.findByIdAndDelete(id).exec();
     if (!category) {
       throw new NotFoundException('Categorie introuvable');
     }
-    await this.expenseModel.deleteMany({ categoryId: id }).exec();
     return category;
   }
 
-  async list(query?: string, categoryId?: string) {
-    const criteria: Record<string, unknown> = {};
+  async list(schoolYearId: string, query?: string, categoryId?: string) {
+    const criteria: Record<string, unknown> = { schoolYearId };
     if (query) {
       const regex = new RegExp(query.trim(), 'i');
-      criteria.$or = [{ label: regex }, { beneficiary: regex }, { orderNumber: regex }];
+      criteria.$or = [
+        { label: regex },
+        { beneficiary: regex },
+        { orderNumber: regex },
+      ];
     }
     if (categoryId) {
       criteria.categoryId = categoryId;
@@ -71,7 +105,16 @@ export class ExpensesService {
       .exec();
   }
 
-  async create(dto: { expenseDate: string; label: string; amount: number; beneficiary: string; categoryId: string }) {
+  async create(
+    schoolYearId: string,
+    dto: {
+      expenseDate: string;
+      label: string;
+      amount: number;
+      beneficiary: string;
+      categoryId: string;
+    },
+  ) {
     if (!dto.label?.trim()) {
       throw new BadRequestException('Le libelle est obligatoire');
     }
@@ -85,12 +128,16 @@ export class ExpensesService {
       throw new BadRequestException('Le montant doit etre superieur a zero');
     }
 
-    const category = await this.categoryModel.findById(dto.categoryId).lean().exec();
+    const category = await this.categoryModel
+      .findById(dto.categoryId)
+      .lean()
+      .exec();
     if (!category) {
       throw new BadRequestException('Categorie inexistante');
     }
 
     return this.expenseModel.create({
+      schoolYearId,
       orderNumber: this.generateOrderNumber(),
       expenseDate: new Date(dto.expenseDate),
       label: dto.label.trim(),
@@ -100,8 +147,12 @@ export class ExpensesService {
     });
   }
 
-  async findById(id: string) {
-    const expense = await this.expenseModel.findById(id).populate('categoryId').lean().exec();
+  async findById(id: string, schoolYearId?: string) {
+    const expense = await this.expenseModel
+      .findOne({ _id: id, ...(schoolYearId ? { schoolYearId } : {}) })
+      .populate('categoryId')
+      .lean()
+      .exec();
     if (!expense) {
       throw new NotFoundException('Depense introuvable');
     }
@@ -116,7 +167,18 @@ export class ExpensesService {
     return category;
   }
 
-  async update(id: string, dto: { expenseDate: string; label: string; amount: number; beneficiary: string; categoryId: string; modificationReason?: string }) {
+  async update(
+    schoolYearId: string,
+    id: string,
+    dto: {
+      expenseDate: string;
+      label: string;
+      amount: number;
+      beneficiary: string;
+      categoryId: string;
+      modificationReason?: string;
+    },
+  ) {
     const updatePayload: any = {
       expenseDate: new Date(dto.expenseDate),
       label: dto.label.trim(),
@@ -130,15 +192,31 @@ export class ExpensesService {
       updatePayload.modifiedAt = new Date();
     }
 
-    const expense = await this.expenseModel.findByIdAndUpdate(id, updatePayload, { new: true }).exec();
+    const expense = await this.expenseModel
+      .findOneAndUpdate({ _id: id, schoolYearId }, updatePayload, { new: true })
+      .exec();
     if (!expense) {
       throw new NotFoundException('Depense introuvable');
     }
     return expense;
   }
 
-  async delete(id: string) {
-    const expense = await this.expenseModel.findByIdAndDelete(id).exec();
+  async delete(
+    schoolYearId: string,
+    id: string,
+    reason = 'Annulation demandee',
+  ) {
+    const expense = await this.expenseModel
+      .findOneAndUpdate(
+        { _id: id, schoolYearId },
+        {
+          isCancelled: true,
+          cancelledAt: new Date(),
+          cancellationReason: reason,
+        },
+        { new: true },
+      )
+      .exec();
     if (!expense) {
       throw new NotFoundException('Depense introuvable');
     }
@@ -146,37 +224,59 @@ export class ExpensesService {
   }
 
   private async findOpenSchoolYearLabel() {
-    const schoolYear = await this.schoolYearModel.findOne({ status: SchoolYearStatus.OPEN }).lean().exec();
+    const schoolYear = await this.schoolYearModel
+      .findOne({ status: SchoolYearStatus.OPEN })
+      .lean()
+      .exec();
     if (!schoolYear) {
       return undefined;
     }
 
-    return schoolYear.label ?? `${new Date(schoolYear.startDate).getFullYear()} – ${new Date(schoolYear.endDate).getFullYear()}`;
+    return (
+      schoolYear.label ??
+      `${new Date(schoolYear.startDate).getFullYear()} – ${new Date(schoolYear.endDate).getFullYear()}`
+    );
   }
 
-  private renderPdfHeader(doc: PdfDocumentInstance, schoolName: string, schoolYearLabel?: string) {
+  private renderPdfHeader(
+    doc: PdfDocumentInstance,
+    schoolName: string,
+    schoolYearLabel?: string,
+  ) {
     const trimmedName = schoolName.trim();
     const [firstWord, ...restWords] = trimmedName.split(' ');
     const secondLine = restWords.join(' ');
 
     if (firstWord) {
-      doc.font('Times-Bold').fontSize(20).text(firstWord.toUpperCase(), { align: 'center' });
+      doc
+        .font('Times-Bold')
+        .fontSize(20)
+        .text(firstWord.toUpperCase(), { align: 'center' });
     }
     if (secondLine) {
-      doc.font('Times-Bold').fontSize(20).text(secondLine.toUpperCase(), { align: 'center' });
+      doc
+        .font('Times-Bold')
+        .fontSize(20)
+        .text(secondLine.toUpperCase(), { align: 'center' });
     }
 
     if (schoolYearLabel) {
       doc.moveDown(0.2);
-      doc.font('Times-Roman').fontSize(10).text(`Année scolaire : ${schoolYearLabel}`, { align: 'center' });
+      doc
+        .font('Times-Roman')
+        .fontSize(10)
+        .text(`Année scolaire : ${schoolYearLabel}`, { align: 'center' });
     }
 
     doc.moveDown(1);
   }
 
-  async renderPdf(expenses: any[], categoryName?: string) {
+  async renderPdf(
+    expenses: any[],
+    categoryName?: string,
+    schoolYearLabel?: string,
+  ) {
     const schoolName = await this.settingsService.getSchoolName();
-    const schoolYearLabel = await this.findOpenSchoolYearLabel();
     const chunks: Buffer[] = [];
     const doc = new PDFDocument({ margin: 40, size: 'A4' });
     doc.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
@@ -188,12 +288,27 @@ export class ExpensesService {
       doc.font('Times-Bold').fontSize(18).text('Dépenses', { align: 'center' });
       doc.moveDown(0.5);
       if (categoryName) {
-        doc.font('Times-Roman').fontSize(10).text(`Catégorie : ${categoryName}`, { align: 'left' });
+        doc
+          .font('Times-Roman')
+          .fontSize(10)
+          .text(`Catégorie : ${categoryName}`, { align: 'left' });
       }
-      doc.font('Times-Roman').fontSize(10).text(`Date : ${new Date().toLocaleDateString('fr-FR')}`, { align: 'right' });
+      doc
+        .font('Times-Roman')
+        .fontSize(10)
+        .text(`Date : ${new Date().toLocaleDateString('fr-FR')}`, {
+          align: 'right',
+        });
       doc.moveDown(1);
 
-      const headers = ['N°', 'Date', 'Libellé', 'Montant', 'Bénéficiaire', 'Catégorie'];
+      const headers = [
+        'N°',
+        'Date',
+        'Libellé',
+        'Montant',
+        'Bénéficiaire',
+        'Catégorie',
+      ];
       const columnWidths = [60, 60, 170, 70, 100, 55];
       const rowHeight = 20;
       const startX = doc.page.margins.left;
@@ -205,7 +320,9 @@ export class ExpensesService {
 
         doc.font('Times-Bold').fontSize(10).fillColor('#000');
         headers.forEach((header, index) => {
-          doc.rect(x, y, columnWidths[index], rowHeight).fillAndStroke('#F0F0F0', '#000000');
+          doc
+            .rect(x, y, columnWidths[index], rowHeight)
+            .fillAndStroke('#F0F0F0', '#000000');
           doc.fillColor('#000').text(header, x + 4, y + 5, {
             width: columnWidths[index] - 8,
             align: index >= 3 ? 'right' : 'left',
@@ -259,13 +376,24 @@ export class ExpensesService {
       });
 
       doc.moveDown(0.5);
-      doc.font('Times-Bold').fontSize(10).text(`Total des dépenses : ${totalAmount.toFixed(2)} FCFA`, { align: 'right' });
+      doc
+        .font('Times-Bold')
+        .fontSize(10)
+        .text(`Total des dépenses : ${totalAmount.toFixed(2)} FCFA`, {
+          align: 'right',
+        });
       doc.end();
     });
   }
 
-  async getTotals() {
+  async getTotals(schoolYearId: string) {
     const [result] = await this.expenseModel.aggregate([
+      {
+        $match: {
+          schoolYearId: new Types.ObjectId(schoolYearId),
+          isCancelled: { $ne: true },
+        },
+      },
       { $group: { _id: null, total: { $sum: '$amount' } } },
     ]);
 

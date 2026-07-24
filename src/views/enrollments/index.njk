@@ -1,35 +1,21 @@
-﻿{% extends "layout.njk" %}
+{% extends "layout.njk" %}
 {% block content %}
   <section class="enrollment-layout">
-    <div class="panel">
+    {% if not schoolYearContext.isHistorical %}<div class="panel">
       <h2>Creer une inscription</h2>
       <form method="post" action="/enrollments" class="stack">
         <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
         <div class="form-grid">
           <label>Eleve
-            <div class="student-autocomplete" id="studentAutocomplete">
-              <input
-                type="search"
-                id="studentSearchInput"
-                placeholder="Nom, prenoms ou matricule (3 caracteres min.)"
-                autocomplete="off"
-                role="combobox"
-                aria-autocomplete="list"
-                aria-controls="studentSearchResults"
-                aria-expanded="false"
-                required
-              />
-              <input type="hidden" name="studentId" id="studentIdSelect" />
-              <div id="studentSearchStatus" class="autocomplete-status muted" aria-live="polite"></div>
-              <div id="studentSearchResults" class="autocomplete-results" role="listbox" hidden></div>
-            </div>
-          </label>
-          <label>Annee
-            <select name="schoolYearId">
-              {% for year in schoolYears %}
-                <option value="{{ year._id }}">{{ year.label }}</option>
+            <select name="studentId" id="studentIdSelect">
+              {% for student in students %}
+                <option value="{{ student._id }}">{{ student.matricule }} - {{ student.lastname }} {{ student.firstname }}</option>
               {% endfor %}
             </select>
+          </label>
+          <label>Annee
+            <input value="{{ selectedYear.label }}" disabled />
+            <input type="hidden" name="schoolYearId" value="{{ selectedYear._id }}" />
           </label>
           <label>Niveau
             <select name="levelId">
@@ -52,7 +38,7 @@
         </div>
         <button type="submit" class="btn-lg btn-icon icon-save">Creer l inscription</button>
       </form>
-    </div>
+    </div>{% endif %}
 
     <div class="panel status-panel">
       <div class="panel-heading">
@@ -82,9 +68,9 @@
           <tbody>
             {% for item in enrollments %}
               <tr>
-                <td>{{ item.studentId.lastname if item.studentId }} {{ item.studentId.firstname if item.studentId }}</td>
+                <td>{{ item.studentSnapshot.lastname if item.studentSnapshot else item.studentId.lastname }} {{ item.studentSnapshot.firstname if item.studentSnapshot else item.studentId.firstname }}</td>
                 <td>{{ item.schoolYearId.label if item.schoolYearId }}</td>
-                <td>{{ item.levelId.label if item.levelId }}</td>
+                <td>{{ item.levelSnapshot.label if item.levelSnapshot else item.levelId.label }}</td>
                 <td>{% set value = item.status %}{% include "partials/status-badge.njk" %}</td>
                 <td class="table-button-group">
                   <a class="button secondary btn-sm btn-icon icon-view" href="/enrollments/{{ item._id }}">Voir</a>
@@ -360,6 +346,7 @@
       };
 
       select.addEventListener('change', loadStatus);
+      loadStatus();
     })();
   </script>
 {% endblock %}

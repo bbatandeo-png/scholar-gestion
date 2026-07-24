@@ -14,6 +14,8 @@ import {
 import { SettingsModule } from '../settings/settings.module';
 import { ReportsController } from './reports.controller';
 import { ReportsService } from './reports.service';
+import { SchoolYearsModule } from '../school-years/school-years.module';
+import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
 
 @Module({
   imports: [
@@ -23,10 +25,12 @@ import { ReportsService } from './reports.service';
       { name: Student.name, schema: StudentSchema },
       { name: Level.name, schema: LevelSchema },
       { name: SchoolYear.name, schema: SchoolYearSchema },
+      { name: Payment.name, schema: PaymentSchema },
     ]),
     SettingsModule,
+    SchoolYearsModule,
   ],
-	controllers: [ReportsController],
-	providers: [ReportsService],
+  controllers: [ReportsController],
+  providers: [ReportsService],
 })
 export class ReportsModule {}

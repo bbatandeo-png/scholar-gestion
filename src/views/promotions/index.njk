@@ -2,6 +2,11 @@
 {% block content %}
   <section class="panel">
     <h2>Preparation du passage annuel</h2>
+    {% if openSchoolYear %}
+      <div class="notice notice-info">
+        L’année {{ openSchoolYear.label }} est encore ouverte. Sa clôture doit être effectuée manuellement dans les paramètres avant l’activation de la suivante.
+      </div>
+    {% endif %}
     <form method="post" action="/promotions/prepare" class="stack">
       <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
       <div class="form-grid">

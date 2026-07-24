@@ -3,11 +3,16 @@ import { IsEnum, IsNotEmpty, IsNumber, IsString, Min } from 'class-validator';
 import { Body, Controller, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { Roles } from '../common/decorators/roles.decorator';
-import { PaymentAllocationRule, ReceiptMode, Role } from '../common/enums/domain.enums';
+import {
+  PaymentAllocationRule,
+  ReceiptMode,
+  Role,
+} from '../common/enums/domain.enums';
 import { AuthenticatedGuard } from '../common/guards/authenticated.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { setFlash } from '../common/utils/flash.util';
 import { SettingsService, StudentMatriculeRule } from './settings.service';
+import { SchoolYearsService } from '../school-years/school-years.service';
 
 class UpdatePaymentRuleDto {
   @IsEnum(PaymentAllocationRule)
@@ -46,7 +51,10 @@ class UpdateReceiptModeDto {
 @Controller('/settings')
 @UseGuards(AuthenticatedGuard, RolesGuard)
 export class SettingsController {
-  constructor(private readonly settingsService: SettingsService) {}
+  constructor(
+    private readonly settingsService: SettingsService,
+    private readonly schoolYearsService: SchoolYearsService,
+  ) {}
 
   @Post('/payment-allocation')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION)
@@ -55,7 +63,11 @@ export class SettingsController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    await this.settingsService.setPaymentAllocationRule(dto.value);
+    const year = await this.schoolYearsService.requireOpen();
+    await this.settingsService.setPaymentAllocationRule(
+      dto.value,
+      String(year._id),
+    );
     setFlash(req, 'success', 'Regle d imputation mise a jour');
     return res.redirect('/settings/fees');
   }
@@ -79,7 +91,8 @@ export class SettingsController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    await this.settingsService.setReceiptMode(dto.value);
+    const year = await this.schoolYearsService.requireOpen();
+    await this.settingsService.setReceiptMode(dto.value, String(year._id));
     setFlash(req, 'success', 'Mode de recu mis a jour');
     return res.redirect('/settings/fees');
   }

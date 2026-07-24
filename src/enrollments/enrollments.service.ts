@@ -1,4 +1,11 @@
-import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, forwardRef } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Inject,
+  Injectable,
+  NotFoundException,
+  forwardRef,
+} from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Connection, Model } from 'mongoose';
 import { ArrearsService } from '../arrears/arrears.service';
@@ -47,16 +54,31 @@ function buildAuditDetailsSummary(details?: Record<string, unknown>) {
     items.push(`Motif : ${String(details.reason)}`);
   }
 
-  if (details.registrationFeeBefore !== undefined && details.registrationFeeAfter !== undefined) {
-    items.push(`Frais d'inscription : ${String(details.registrationFeeBefore)} → ${String(details.registrationFeeAfter)}`);
+  if (
+    details.registrationFeeBefore !== undefined &&
+    details.registrationFeeAfter !== undefined
+  ) {
+    items.push(
+      `Frais d'inscription : ${String(details.registrationFeeBefore)} → ${String(details.registrationFeeAfter)}`,
+    );
   }
 
-  if (details.discountAmountBefore !== undefined && details.discountAmountAfter !== undefined) {
-    items.push(`Remise : ${String(details.discountAmountBefore)} → ${String(details.discountAmountAfter)}`);
+  if (
+    details.discountAmountBefore !== undefined &&
+    details.discountAmountAfter !== undefined
+  ) {
+    items.push(
+      `Remise : ${String(details.discountAmountBefore)} → ${String(details.discountAmountAfter)}`,
+    );
   }
 
-  if (details.paidAmountBefore !== undefined && details.paidAmountAfter !== undefined) {
-    items.push(`Montant payé : ${String(details.paidAmountBefore)} → ${String(details.paidAmountAfter)}`);
+  if (
+    details.paidAmountBefore !== undefined &&
+    details.paidAmountAfter !== undefined
+  ) {
+    items.push(
+      `Montant payé : ${String(details.paidAmountBefore)} → ${String(details.paidAmountAfter)}`,
+    );
   }
 
   if (details.arrearsAmount !== undefined) {
@@ -82,9 +104,9 @@ export class EnrollmentsService {
     private readonly usersService: UsersService,
   ) {}
 
-  async list() {
+  async list(schoolYearId: string) {
     return this.enrollmentModel
-      .find()
+      .find({ schoolYearId })
       .populate({ path: 'studentId', select: 'matricule lastname firstname' })
       .populate({ path: 'schoolYearId', select: 'label' })
       .populate({ path: 'levelId', select: 'label' })
@@ -93,11 +115,11 @@ export class EnrollmentsService {
       .exec();
   }
 
-  async listPaginated(page: number, pageSize: number) {
+  async listPaginated(schoolYearId: string, page: number, pageSize: number) {
     const skip = (page - 1) * pageSize;
     const [items, total] = await Promise.all([
       this.enrollmentModel
-        .find()
+        .find({ schoolYearId })
         .populate({ path: 'studentId', select: 'matricule lastname firstname' })
         .populate({ path: 'schoolYearId', select: 'label' })
         .populate({ path: 'levelId', select: 'label' })
@@ -106,7 +128,7 @@ export class EnrollmentsService {
         .limit(pageSize)
         .lean()
         .exec(),
-      this.enrollmentModel.countDocuments(),
+      this.enrollmentModel.countDocuments({ schoolYearId }),
     ]);
 
     return {
@@ -118,7 +140,9 @@ export class EnrollmentsService {
     };
   }
 
-  async findById(id: string): Promise<{ enrollment: any; invoice: any; auditLogs: any[] }> {
+  async findById(
+    id: string,
+  ): Promise<{ enrollment: any; invoice: any; auditLogs: any[] }> {
     const enrollment = await this.enrollmentModel
       .findById(id)
       .populate('studentId')
@@ -143,23 +167,33 @@ export class EnrollmentsService {
     );
 
     const actorIds = Array.from(
-      new Set(logs.map((log) => log.actorId).filter((actorId): actorId is string => Boolean(actorId))),
+      new Set(
+        logs
+          .map((log) => log.actorId)
+          .filter((actorId): actorId is string => Boolean(actorId)),
+      ),
     );
-    const users = actorIds.length ? await this.usersService.findByIds(actorIds) : [];
+    const users = actorIds.length
+      ? await this.usersService.findByIds(actorIds)
+      : [];
     const userById = new Map(users.map((user) => [String(user._id), user]));
 
     return logs.map((log) => ({
       ...log,
       actor: log.actorId ? userById.get(String(log.actorId)) : null,
-      actorName: log.actorId ? userById.get(String(log.actorId))?.name ?? 'Utilisateur inconnu' : 'Système',
+      actorName: log.actorId
+        ? (userById.get(String(log.actorId))?.name ?? 'Utilisateur inconnu')
+        : 'Système',
       actionLabel: getAuditActionLabel(log.action),
-      detailsSummary: buildAuditDetailsSummary(log.details as Record<string, unknown> | undefined),
+      detailsSummary: buildAuditDetailsSummary(
+        log.details as Record<string, unknown> | undefined,
+      ),
     }));
   }
 
-  async findStudentHistory(studentId: string) {
+  async findStudentHistory(studentId: string, schoolYearId?: string) {
     return this.enrollmentModel
-      .find({ studentId })
+      .find({ studentId, ...(schoolYearId ? { schoolYearId } : {}) })
       .populate('schoolYearId')
       .populate('levelId')
       .sort({ createdAt: -1 })
@@ -181,17 +215,29 @@ export class EnrollmentsService {
       .exec();
 
     for (const enrollment of enrollments) {
-      const invoice = await this.billingService.findInvoiceByEnrollmentForSession(
+      const invoice =
+        await this.billingService.findInvoiceByEnrollmentForSession(
+          String(enrollment._id),
+          session,
+        );
+      const carriedArrears = await this.arrearsService.findByTargetEnrollment(
         String(enrollment._id),
         session,
       );
-      if (invoice && invoice.balanceDue > 0) {
+      const carriedRemaining = carriedArrears.reduce(
+        (sum: number, arrear: any) => sum + Number(arrear.amountRemaining ?? 0),
+        0,
+      );
+      const currentFeesOutstanding = invoice
+        ? Math.max(Number(invoice.balanceDue) - carriedRemaining, 0)
+        : 0;
+      if (invoice && currentFeesOutstanding > 0) {
         await this.arrearsService.createFromOutstanding(
           {
             studentId,
             sourceEnrollmentId: String(enrollment._id),
             sourceSchoolYearId: String(enrollment.schoolYearId),
-            amount: invoice.balanceDue,
+            amount: currentFeesOutstanding,
           },
           session,
         );
@@ -200,22 +246,53 @@ export class EnrollmentsService {
   }
 
   async createEnrollment(dto: CreateEnrollmentDto, actorId?: string) {
+    await this.schoolYearsService.assertWritable(dto.schoolYearId);
+    const [studentSnapshot, levelSnapshot] = await Promise.all([
+      this.studentsService.findById(dto.studentId),
+      this.levelsService.findById(dto.levelId),
+    ]);
+    if (!levelSnapshot) {
+      throw new NotFoundException('Niveau introuvable');
+    }
     return runWithMongoTransactionFallback(this.connection, async (session) => {
       const existing = await this.enrollmentModel
-        .findOne({ studentId: dto.studentId, schoolYearId: dto.schoolYearId, status: EnrollmentStatus.ACTIVE })
+        .findOne({
+          studentId: dto.studentId,
+          schoolYearId: dto.schoolYearId,
+          status: EnrollmentStatus.ACTIVE,
+        })
         .session(session ?? null)
         .exec();
       if (existing) {
-        throw new ConflictException('Double inscription active interdite pour cette annee');
+        throw new ConflictException(
+          'Double inscription active interdite pour cette annee',
+        );
       }
 
-      const feeSchedule = await this.billingService.getFeeSchedule(dto.schoolYearId, dto.levelId);
+      const feeSchedule = await this.billingService.getFeeSchedule(
+        dto.schoolYearId,
+        dto.levelId,
+      );
       const created = await this.enrollmentModel.create(
         [
           {
             studentId: dto.studentId,
             schoolYearId: dto.schoolYearId,
             levelId: dto.levelId,
+            studentSnapshot: {
+              matricule: studentSnapshot.matricule,
+              lastname: studentSnapshot.lastname,
+              firstname: studentSnapshot.firstname,
+              gender: studentSnapshot.gender,
+              birthDate: studentSnapshot.birthDate,
+              birthPlace: studentSnapshot.birthPlace,
+              district: studentSnapshot.district,
+            },
+            levelSnapshot: {
+              code: levelSnapshot.code,
+              label: levelSnapshot.label,
+              sortOrder: levelSnapshot.sortOrder,
+            },
             type: dto.type,
             status: EnrollmentStatus.ACTIVE,
             finalDecision: FinalDecision.PENDING,
@@ -228,7 +305,10 @@ export class EnrollmentsService {
 
       let arrearsAmount = 0;
       if (dto.applyOpenArrears !== 'false') {
-        await this.materializeOutstandingArrearsForStudent(dto.studentId, session);
+        await this.materializeOutstandingArrearsForStudent(
+          dto.studentId,
+          session,
+        );
         const carried = await this.arrearsService.carryForwardToEnrollment(
           dto.studentId,
           String(enrollment._id),
@@ -240,6 +320,7 @@ export class EnrollmentsService {
 
       const invoice = await this.billingService.createOrUpdateInvoice(
         {
+          schoolYearId: dto.schoolYearId,
           enrollmentId: String(enrollment._id),
           registrationFee: feeSchedule.registrationFee,
           tuitionFee: feeSchedule.tuitionFee,
@@ -250,21 +331,25 @@ export class EnrollmentsService {
         session,
       );
 
-      await this.auditService.log({
-        actorId,
-        action:
-          dto.type === EnrollmentType.RE_ENROLLMENT
-            ? AuditAction.REENROLLMENT_CREATED
-            : AuditAction.ENROLLMENT_CREATED,
-        entityType: 'Enrollment',
-        entityId: String(enrollment._id),
-        details: {
-          studentId: dto.studentId,
+      await this.auditService.log(
+        {
           schoolYearId: dto.schoolYearId,
-          levelId: dto.levelId,
-          arrearsAmount,
+          actorId,
+          action:
+            dto.type === EnrollmentType.RE_ENROLLMENT
+              ? AuditAction.REENROLLMENT_CREATED
+              : AuditAction.ENROLLMENT_CREATED,
+          entityType: 'Enrollment',
+          entityId: String(enrollment._id),
+          details: {
+            studentId: dto.studentId,
+            schoolYearId: dto.schoolYearId,
+            levelId: dto.levelId,
+            arrearsAmount,
+          },
         },
-      });
+        session,
+      );
 
       return {
         enrollmentId: String(enrollment._id),
@@ -287,7 +372,9 @@ export class EnrollmentsService {
     await this.studentsService.findById(studentId);
 
     const history = await this.findStudentHistory(studentId);
-    const previousEnrollmentId = history[0]?._id ? String(history[0]._id) : undefined;
+    const previousEnrollmentId = history[0]?._id
+      ? String(history[0]._id)
+      : undefined;
 
     return this.createEnrollment(
       {
@@ -302,27 +389,36 @@ export class EnrollmentsService {
     );
   }
 
-  async updateEnrollment(id: string, dto: Partial<CreateEnrollmentDto>, actorId?: string) {
+  async updateEnrollment(
+    id: string,
+    dto: Partial<CreateEnrollmentDto>,
+    actorId?: string,
+  ) {
     const enrollment = await this.enrollmentModel.findById(id).exec();
     if (!enrollment) {
       throw new NotFoundException('Inscription introuvable');
     }
+    await this.schoolYearsService.assertWritable(
+      String(enrollment.schoolYearId),
+    );
 
     const updated = await this.enrollmentModel
       .findByIdAndUpdate(
         id,
         {
           studentId: dto.studentId ?? enrollment.studentId,
-          schoolYearId: dto.schoolYearId ?? enrollment.schoolYearId,
+          schoolYearId: enrollment.schoolYearId,
           levelId: dto.levelId ?? enrollment.levelId,
           type: dto.type ?? enrollment.type,
-          previousEnrollmentId: dto.previousEnrollmentId ?? enrollment.previousEnrollmentId,
+          previousEnrollmentId:
+            dto.previousEnrollmentId ?? enrollment.previousEnrollmentId,
         },
         { new: true },
       )
       .exec();
 
     await this.auditService.log({
+      schoolYearId: String(enrollment.schoolYearId),
       actorId,
       action: AuditAction.ENROLLMENT_CREATED,
       entityType: 'Enrollment',
@@ -350,15 +446,25 @@ export class EnrollmentsService {
     if (!enrollment) {
       throw new NotFoundException('Inscription introuvable');
     }
+    await this.schoolYearsService.assertWritable(
+      String(enrollment.schoolYearId),
+    );
 
-    const canAuthorizeFinancialUpdate = actorRole === Role.SUPER_ADMIN || actorRole === Role.COMPTABILITE;
+    const canAuthorizeFinancialUpdate =
+      actorRole === Role.SUPER_ADMIN || actorRole === Role.COMPTABILITE;
     if (!canAuthorizeFinancialUpdate) {
-      throw new BadRequestException('Seuls le super administrateur et le comptable peuvent modifier les montants financiers');
+      throw new BadRequestException(
+        'Seuls le super administrateur et le comptable peuvent modifier les montants financiers',
+      );
     }
 
-    const hasFinancialChange = payload.registrationFee !== undefined || payload.discountAmount !== undefined;
+    const hasFinancialChange =
+      payload.registrationFee !== undefined ||
+      payload.discountAmount !== undefined;
     if (hasFinancialChange && !payload.reason?.trim()) {
-      throw new BadRequestException('Un motif est obligatoire pour toute modification des montants financiers');
+      throw new BadRequestException(
+        'Un motif est obligatoire pour toute modification des montants financiers',
+      );
     }
 
     const invoice = await this.billingService.findInvoiceByEnrollment(id);
@@ -367,6 +473,7 @@ export class EnrollmentsService {
     }
 
     const updatedInvoice = await this.billingService.createOrUpdateInvoice({
+      schoolYearId: String(enrollment.schoolYearId),
       enrollmentId: id,
       registrationFee: payload.registrationFee ?? invoice.registrationFee,
       tuitionFee: invoice.tuitionFee,
@@ -376,6 +483,7 @@ export class EnrollmentsService {
     });
 
     await this.auditService.log({
+      schoolYearId: String(enrollment.schoolYearId),
       actorId,
       action: AuditAction.DISCOUNT_APPLIED,
       entityType: 'EnrollmentInvoice',
