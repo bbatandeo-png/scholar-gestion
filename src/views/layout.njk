@@ -8,7 +8,18 @@
   </head>
   <body>
     <div class="app-shell">
-      <aside class="sidebar">
+      <button
+        type="button"
+        class="mobile-nav-toggle"
+        aria-controls="main-navigation"
+        aria-expanded="false"
+        aria-label="Ouvrir le menu principal"
+      >
+        <span aria-hidden="true">☰</span>
+        <span>Menu</span>
+      </button>
+      <div class="sidebar-backdrop" aria-hidden="true"></div>
+      <aside class="sidebar" id="main-navigation">
         <div class="sidebar-brand">
           <p class="eyebrow">Complexe scolaire</p>
           <h1>Scolar-Gestion</h1>
@@ -136,6 +147,22 @@
           </div>
           <div class="topbar-actions">
             {% if currentUser %}
+              {% if schoolYearContext and schoolYearContext.years %}
+                <form action="/settings/school-years/select" method="post" class="inline-form">
+                  <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+                  <input type="hidden" name="returnTo" value="{{ currentPath }}" />
+                  <label>
+                    <span class="sr-only">Année scolaire consultée</span>
+                    <select name="schoolYearId" onchange="this.form.submit()">
+                      {% for year in schoolYearContext.years %}
+                        <option value="{{ year._id }}" {% if schoolYearContext.selected and (year._id | string) == (schoolYearContext.selected._id | string) %}selected{% endif %}>
+                          {{ year.label }}{% if year.status == 'open' %} — active{% endif %}
+                        </option>
+                      {% endfor %}
+                    </select>
+                  </label>
+                </form>
+              {% endif %}
               <span class="badge badge-neutral">{{ currentUser.role }}</span>
               <form action="/logout" method="post">
                 <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
@@ -151,11 +178,60 @@
           <div class="flash {{ flash.type }}">{{ flash.message }}</div>
         {% endif %}
 
+        {% if schoolYearContext and schoolYearContext.isHistorical %}
+          <div class="notice notice-info">
+            Consultation de l’année historique <strong>{{ schoolYearContext.selected.label }}</strong> — lecture seule.
+          </div>
+        {% endif %}
+
         {% block content %}{% endblock %}
       </main>
     </div>
     <script>
       (() => {
+        const body = document.body;
+        const navToggle = document.querySelector('.mobile-nav-toggle');
+        const navBackdrop = document.querySelector('.sidebar-backdrop');
+        const sidebar = document.querySelector('.sidebar');
+
+        const setNavigationOpen = (open) => {
+          body.classList.toggle('nav-open', open);
+          navToggle?.setAttribute('aria-expanded', String(open));
+          navToggle?.setAttribute(
+            'aria-label',
+            open ? 'Fermer le menu principal' : 'Ouvrir le menu principal',
+          );
+        };
+
+        navToggle?.addEventListener('click', () => {
+          setNavigationOpen(!body.classList.contains('nav-open'));
+        });
+        navBackdrop?.addEventListener('click', () => setNavigationOpen(false));
+        sidebar?.addEventListener('click', (event) => {
+          if (event.target.closest('a') && window.matchMedia('(max-width: 980px)').matches) {
+            setNavigationOpen(false);
+          }
+        });
+        document.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape') {
+            setNavigationOpen(false);
+          }
+        });
+        window.addEventListener('resize', () => {
+          if (!window.matchMedia('(max-width: 980px)').matches) {
+            setNavigationOpen(false);
+          }
+        });
+
+        document.querySelectorAll('table').forEach((table) => {
+          if (!table.parentElement?.classList.contains('table-shell')) {
+            const shell = document.createElement('div');
+            shell.className = 'table-shell';
+            table.parentNode.insertBefore(shell, table);
+            shell.appendChild(table);
+          }
+        });
+
         const tables = document.querySelectorAll('table.js-sortable');
 
         tables.forEach((table) => {

@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Param, Post, Render, Req, Res, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Render,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import { Request, Response } from 'express';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/enums/domain.enums';
@@ -23,6 +33,7 @@ export class SchoolYearsController {
     return {
       title: 'Annees scolaires',
       schoolYears: await this.schoolYearsService.list(),
+      openSchoolYear: await this.schoolYearsService.findOpen(),
     };
   }
 
@@ -40,14 +51,24 @@ export class SchoolYearsController {
       })),
     );
 
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename="annees_scolaires.xlsx"');
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="annees_scolaires.xlsx"',
+    );
     return res.send(buffer);
   }
 
   @Post()
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION)
-  async create(@Body() dto: CreateSchoolYearDto, @Req() req: Request, @Res() res: Response) {
+  async create(
+    @Body() dto: CreateSchoolYearDto,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
     await this.schoolYearsService.create(dto);
     setFlash(req, 'success', 'Annee scolaire enregistree');
     return res.redirect('/settings/school-years');
@@ -62,8 +83,35 @@ export class SchoolYearsController {
     @Res() res: Response,
   ) {
     await this.schoolYearsService.updateStatus(id, dto.status);
-    setFlash(req, 'success', 'Statut de l\'annee mis a jour');
+    setFlash(req, 'success', "Statut de l'annee mis a jour");
     return res.redirect('/settings/school-years');
+  }
+
+  @Post('/select')
+  @Roles(
+    Role.SUPER_ADMIN,
+    Role.DIRECTION,
+    Role.SECRETARIAT,
+    Role.COMPTABILITE,
+    Role.AUDITEUR,
+  )
+  async select(
+    @Body('schoolYearId') schoolYearId: string,
+    @Body('returnTo') returnTo: string | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const year = await this.schoolYearsService.findById(schoolYearId);
+    if (!year) {
+      setFlash(req, 'error', 'Annee scolaire introuvable');
+      return res.redirect('/dashboard');
+    }
+    req.session.selectedSchoolYearId = String(year._id);
+    const safeReturnTo =
+      returnTo?.startsWith('/') && !returnTo.startsWith('//')
+        ? returnTo
+        : '/dashboard';
+    return res.redirect(safeReturnTo);
   }
 
   @Get('/:id/edit')

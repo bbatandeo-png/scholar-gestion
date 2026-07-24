@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import PDFDocument from 'pdfkit';
 import { Enrollment } from '../enrollments/schemas/enrollment.schema';
 import { Invoice } from '../billing/schemas/invoice.schema';
@@ -9,42 +9,93 @@ import { Student } from '../students/schemas/student.schema';
 import { SchoolYear } from '../school-years/schemas/school-year.schema';
 import { SettingsService } from '../settings/settings.service';
 import { SchoolYearStatus } from '../common/enums/domain.enums';
+import { Payment } from '../payments/schemas/payment.schema';
 
 type PdfDocumentInstance = InstanceType<typeof PDFDocument>;
-type RegistrationPaidFilter = 'registration' | 'tuition' | 'full' | 'partial' | 'none';
+type RegistrationPaidFilter =
+  | 'registration'
+  | 'tuition'
+  | 'full'
+  | 'partial'
+  | 'none';
 
 @Injectable()
 export class ReportsService {
   constructor(
-    @InjectModel(Enrollment.name) private readonly enrollmentModel: Model<Enrollment>,
+    @InjectModel(Enrollment.name)
+    private readonly enrollmentModel: Model<Enrollment>,
     @InjectModel(Invoice.name) private readonly invoiceModel: Model<Invoice>,
     @InjectModel(Student.name) private readonly studentModel: Model<Student>,
     @InjectModel(Level.name) private readonly levelModel: Model<Level>,
-    @InjectModel(SchoolYear.name) private readonly schoolYearModel: Model<SchoolYear>,
+    @InjectModel(SchoolYear.name)
+    private readonly schoolYearModel: Model<SchoolYear>,
+    @InjectModel(Payment.name) private readonly paymentModel: Model<Payment>,
     private readonly settingsService: SettingsService,
   ) {}
 
-  async studentsByLevel() {
+  private applyEnrollmentSnapshots(invoices: any[]) {
+    return invoices.map((invoice: any) => {
+      const enrollment = invoice.enrollmentId;
+      if (!enrollment) {
+        return invoice;
+      }
+      return {
+        ...invoice,
+        enrollmentId: {
+          ...enrollment,
+          studentId: enrollment.studentSnapshot
+            ? { ...(enrollment.studentId ?? {}), ...enrollment.studentSnapshot }
+            : enrollment.studentId,
+          levelId: enrollment.levelSnapshot
+            ? { ...(enrollment.levelId ?? {}), ...enrollment.levelSnapshot }
+            : enrollment.levelId,
+        },
+      };
+    });
+  }
+
+  async studentsByLevel(schoolYearId: string) {
     return this.enrollmentModel.aggregate([
-      { $match: { status: 'active' } },
+      {
+        $match: {
+          schoolYearId: new Types.ObjectId(schoolYearId),
+          status: 'active',
+        },
+      },
       { $group: { _id: '$levelId', total: { $sum: 1 } } },
     ]);
   }
 
-  async paidStudents() {
-    return this.invoiceModel
-      .find({ status: 'paid' })
-      .populate({ path: 'enrollmentId', populate: [{ path: 'studentId' }, { path: 'schoolYearId' }, { path: 'levelId' }] })
+  async paidStudents(schoolYearId: string) {
+    const invoices = await this.invoiceModel
+      .find({ schoolYearId, status: 'paid' })
+      .populate({
+        path: 'enrollmentId',
+        populate: [
+          { path: 'studentId' },
+          { path: 'schoolYearId' },
+          { path: 'levelId' },
+        ],
+      })
       .lean()
       .exec();
+    return this.applyEnrollmentSnapshots(invoices);
   }
 
-  async unpaidStudents() {
-    return this.invoiceModel
-      .find({ status: { $in: ['unpaid', 'partial'] } })
-      .populate({ path: 'enrollmentId', populate: [{ path: 'studentId' }, { path: 'schoolYearId' }, { path: 'levelId' }] })
+  async unpaidStudents(schoolYearId: string) {
+    const invoices = await this.invoiceModel
+      .find({ schoolYearId, status: { $in: ['unpaid', 'partial'] } })
+      .populate({
+        path: 'enrollmentId',
+        populate: [
+          { path: 'studentId' },
+          { path: 'schoolYearId' },
+          { path: 'levelId' },
+        ],
+      })
       .lean()
       .exec();
+    return this.applyEnrollmentSnapshots(invoices);
   }
 
   async registrationPaidStudents(
@@ -53,8 +104,15 @@ export class ReportsService {
     schoolYearId?: string,
   ) {
     const invoices = await this.invoiceModel
-      .find({})
-      .populate({ path: 'enrollmentId', populate: [{ path: 'studentId' }, { path: 'schoolYearId' }, { path: 'levelId' }] })
+      .find(schoolYearId ? { schoolYearId } : {})
+      .populate({
+        path: 'enrollmentId',
+        populate: [
+          { path: 'studentId' },
+          { path: 'schoolYearId' },
+          { path: 'levelId' },
+        ],
+      })
       .lean()
       .exec();
 
@@ -65,15 +123,18 @@ export class ReportsService {
       return String(value);
     };
 
-    return invoices
+    return this.applyEnrollmentSnapshots(invoices)
       .filter((invoice: any) => {
         const paidAmount = invoice.paidAmount ?? 0;
         const registrationFee = invoice.registrationFee ?? 0;
         const tuitionFee = invoice.tuitionFee ?? 0;
         const totalFee = registrationFee + tuitionFee;
         const enrollment = invoice.enrollmentId;
-        const matchesLevel = !levelId || toEntityId(enrollment?.levelId) === String(levelId);
-        const matchesSchoolYear = !schoolYearId || toEntityId(enrollment?.schoolYearId) === String(schoolYearId);
+        const matchesLevel =
+          !levelId || toEntityId(enrollment?.levelId) === String(levelId);
+        const matchesSchoolYear =
+          !schoolYearId ||
+          toEntityId(enrollment?.schoolYearId) === String(schoolYearId);
 
         if (!matchesLevel || !matchesSchoolYear) {
           return false;
@@ -95,32 +156,47 @@ export class ReportsService {
       .sort((a: any, b: any) => {
         const aStudent = a.enrollmentId?.studentId;
         const bStudent = b.enrollmentId?.studentId;
-        const aName = `${aStudent?.lastname ?? ''} ${aStudent?.firstname ?? ''}`.trim();
-        const bName = `${bStudent?.lastname ?? ''} ${bStudent?.firstname ?? ''}`.trim();
+        const aName =
+          `${aStudent?.lastname ?? ''} ${aStudent?.firstname ?? ''}`.trim();
+        const bName =
+          `${bStudent?.lastname ?? ''} ${bStudent?.firstname ?? ''}`.trim();
         return aName.localeCompare(bName, 'fr');
       });
   }
 
-  async classFinancialSituation() {
+  async classFinancialSituation(schoolYearId: string) {
     const enrollments = await this.enrollmentModel
-      .find({ status: 'active' })
-      .populate([{ path: 'studentId' }, { path: 'levelId' }, { path: 'schoolYearId' }])
+      .find({ schoolYearId, status: 'active' })
+      .populate([
+        { path: 'studentId' },
+        { path: 'levelId' },
+        { path: 'schoolYearId' },
+      ])
       .lean()
       .exec();
 
     const invoices = await this.invoiceModel
       .find({ enrollmentId: { $in: enrollments.map((item: any) => item._id) } })
-      .populate({ path: 'enrollmentId', populate: [{ path: 'studentId' }, { path: 'levelId' }] })
+      .populate({
+        path: 'enrollmentId',
+        populate: [{ path: 'studentId' }, { path: 'levelId' }],
+      })
       .lean()
       .exec();
 
-    const invoiceByEnrollment = new Map(invoices.map((invoice: any) => [String(invoice.enrollmentId?._id ?? invoice.enrollmentId), invoice]));
+    const invoiceByEnrollment = new Map(
+      invoices.map((invoice: any) => [
+        String(invoice.enrollmentId?._id ?? invoice.enrollmentId),
+        invoice,
+      ]),
+    );
 
     return enrollments
       .map((enrollment: any) => {
         const invoice = invoiceByEnrollment.get(String(enrollment._id));
-        const student = enrollment.studentId as any;
-        const level = enrollment.levelId as any;
+        const student = (enrollment.studentSnapshot ??
+          enrollment.studentId) as any;
+        const level = (enrollment.levelSnapshot ?? enrollment.levelId) as any;
         return {
           enrollment,
           student,
@@ -132,7 +208,12 @@ export class ReportsService {
           totalDue: invoice?.totalDue ?? 0,
         };
       })
-      .sort((a, b) => `${a.student?.lastname ?? ''} ${a.student?.firstname ?? ''}`.localeCompare(`${b.student?.lastname ?? ''} ${b.student?.firstname ?? ''}`, 'fr'));
+      .sort((a, b) =>
+        `${a.student?.lastname ?? ''} ${a.student?.firstname ?? ''}`.localeCompare(
+          `${b.student?.lastname ?? ''} ${b.student?.firstname ?? ''}`,
+          'fr',
+        ),
+      );
   }
 
   async listLevels() {
@@ -140,7 +221,9 @@ export class ReportsService {
   }
 
   async listSchoolYears() {
-    return this.schoolYearModel?.find().sort({ startDate: -1 }).lean().exec() ?? [];
+    return (
+      this.schoolYearModel?.find().sort({ startDate: -1 }).lean().exec() ?? []
+    );
   }
 
   async findLevelName(levelId: string) {
@@ -149,60 +232,103 @@ export class ReportsService {
   }
 
   async findOpenSchoolYearLabel() {
-    const schoolYear = await this.schoolYearModel?.findOne({ status: SchoolYearStatus.OPEN }).lean().exec();
+    const schoolYear = await this.schoolYearModel
+      ?.findOne({ status: SchoolYearStatus.OPEN })
+      .lean()
+      .exec();
     if (!schoolYear) {
       return undefined;
     }
-    return schoolYear.label ?? `${new Date(schoolYear.startDate).getFullYear()} – ${new Date(schoolYear.endDate).getFullYear()}`;
+    return (
+      schoolYear.label ??
+      `${new Date(schoolYear.startDate).getFullYear()} – ${new Date(schoolYear.endDate).getFullYear()}`
+    );
   }
 
-  private renderPdfHeader(doc: PdfDocumentInstance, schoolName: string, levelName?: string) {
+  private renderPdfHeader(
+    doc: PdfDocumentInstance,
+    schoolName: string,
+    levelName?: string,
+    schoolYearLabel?: string,
+  ) {
     const trimmedName = (schoolName || '').trim();
     const [firstWord, ...restWords] = trimmedName.split(' ');
     const secondLine = restWords.join(' ');
 
     if (firstWord) {
-      doc.font('Times-Bold').fontSize(20).text(firstWord.toUpperCase(), { align: 'center' });
+      doc
+        .font('Times-Bold')
+        .fontSize(20)
+        .text(firstWord.toUpperCase(), { align: 'center' });
     }
     if (secondLine) {
-      doc.font('Times-Bold').fontSize(20).text(secondLine.toUpperCase(), { align: 'center' });
+      doc
+        .font('Times-Bold')
+        .fontSize(20)
+        .text(secondLine.toUpperCase(), { align: 'center' });
     }
 
     if (levelName) {
       doc.moveDown(0.5);
-      doc.font('Times-Bold').fontSize(12).text(`Niveau : ${levelName}`, { align: 'center' });
+      doc
+        .font('Times-Bold')
+        .fontSize(12)
+        .text(`Niveau : ${levelName}`, { align: 'center' });
+    }
+    if (schoolYearLabel) {
+      doc.moveDown(0.25);
+      doc
+        .font('Times-Roman')
+        .fontSize(10)
+        .text(`Annee scolaire : ${schoolYearLabel}`, { align: 'center' });
     }
 
     doc.moveDown(1);
   }
 
-  async revenue() {
-    const [aggregated] = await this.invoiceModel.aggregate([
-      {
-        $group: {
-          _id: null,
-          collected: { $sum: '$paidAmount' },
-          outstanding: { $sum: '$balanceDue' },
-          totalDue: { $sum: '$totalDue' },
-          registrationRevenue: { $sum: '$registrationFee' },
-          tuitionRevenue: { $sum: '$tuitionFee' },
+  async revenue(schoolYearId: string) {
+    const [aggregation, payments] = await Promise.all([
+      this.invoiceModel.aggregate([
+        { $match: { schoolYearId: new Types.ObjectId(schoolYearId) } },
+        {
+          $group: {
+            _id: null,
+            outstanding: { $sum: '$balanceDue' },
+            totalDue: { $sum: '$totalDue' },
+          },
         },
-      },
+      ]),
+      this.paymentModel.find({ schoolYearId }).lean().exec(),
     ]);
 
+    const aggregated = aggregation[0];
+    let collected = 0;
+    let currentFeesCollected = 0;
+    for (const payment of payments as any[]) {
+      collected += Number(payment.amount ?? 0);
+      currentFeesCollected += (payment.allocation ?? [])
+        .filter((item: any) => item.type === 'current_fees')
+        .reduce((sum: number, item: any) => sum + Number(item.amount ?? 0), 0);
+    }
     return {
-      collected: aggregated?.collected ?? 0,
+      collected,
       outstanding: aggregated?.outstanding ?? 0,
       totalDue: aggregated?.totalDue ?? 0,
-      registrationRevenue: aggregated?.registrationRevenue ?? 0,
-      tuitionRevenue: aggregated?.tuitionRevenue ?? 0,
+      currentFeesCollected,
+      arrearsCollected: Math.max(collected - currentFeesCollected, 0),
     };
   }
 
   async renderRegistrationPaidPdf(
     report: any[],
-    filter: 'registration' | 'tuition' | 'full' | 'partial' | 'none' = 'registration',
+    filter:
+      | 'registration'
+      | 'tuition'
+      | 'full'
+      | 'partial'
+      | 'none' = 'registration',
     levelName?: string,
+    schoolYearLabel?: string,
   ) {
     const schoolName = await this.settingsService.getSchoolName();
     const chunks: Buffer[] = [];
@@ -212,26 +338,39 @@ export class ReportsService {
     return await new Promise<Buffer>((resolve) => {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
 
-      this.renderPdfHeader(doc, schoolName, levelName);
+      this.renderPdfHeader(doc, schoolName, levelName, schoolYearLabel);
 
       const filterLabel =
         filter === 'tuition'
-          ? "Écolage payé"
+          ? 'Écolage payé'
           : filter === 'full'
-          ? "Inscription et écolage payés"
-          : filter === 'partial'
-          ? "Paiement partiel"
-          : filter === 'none'
-          ? "Aucun paiement"
-          : "Inscription payée";
+            ? 'Inscription et écolage payés'
+            : filter === 'partial'
+              ? 'Paiement partiel'
+              : filter === 'none'
+                ? 'Aucun paiement'
+                : 'Inscription payée';
 
       const title = `Liste des élèves - ${filterLabel}`;
       doc.font('Times-Bold').fontSize(18).text(title, { align: 'center' });
       doc.moveDown(0.5);
-      doc.font('Times-Roman').fontSize(10).text(`Date : ${new Date().toLocaleDateString('fr-FR')}`, { align: 'right' });
+      doc
+        .font('Times-Roman')
+        .fontSize(10)
+        .text(`Date : ${new Date().toLocaleDateString('fr-FR')}`, {
+          align: 'right',
+        });
       doc.moveDown(1);
 
-      const headers = ['Élève', 'Matricule', 'Année', 'Niveau', 'Inscription', 'Payé', 'Reste'];
+      const headers = [
+        'Élève',
+        'Matricule',
+        'Année',
+        'Niveau',
+        'Inscription',
+        'Payé',
+        'Reste',
+      ];
       const columnWidths = [140, 60, 50, 80, 65, 65, 65];
       const rowHeight = 18;
       const startX = doc.page.margins.left;
@@ -243,7 +382,9 @@ export class ReportsService {
         doc.font('Times-Bold').fontSize(10).fillColor('#000000');
 
         headers.forEach((text, index) => {
-          doc.rect(x, y, columnWidths[index], rowHeight).fillAndStroke('#F0F0F0', '#000000');
+          doc
+            .rect(x, y, columnWidths[index], rowHeight)
+            .fillAndStroke('#F0F0F0', '#000000');
           doc.fillColor('#000000').text(text, x + 4, y + 4, {
             width: columnWidths[index] - 8,
             align: index >= 4 ? 'right' : 'left',
@@ -275,7 +416,10 @@ export class ReportsService {
       };
 
       if (!report.length) {
-        doc.font('Times-Roman').fontSize(10).text('Aucun résultat pour ce filtre.', { align: 'left' });
+        doc
+          .font('Times-Roman')
+          .fontSize(10)
+          .text('Aucun résultat pour ce filtre.', { align: 'left' });
       } else {
         drawHeader();
         report.forEach((item: any, index: number) => {
@@ -304,9 +448,12 @@ export class ReportsService {
     });
   }
 
-  async renderClassFinancialSituationPdf(report: any[], levelName?: string) {
+  async renderClassFinancialSituationPdf(
+    report: any[],
+    levelName?: string,
+    schoolYearLabel?: string,
+  ) {
     const schoolName = await this.settingsService.getSchoolName();
-    const schoolYearLabel = await this.findOpenSchoolYearLabel();
     const chunks: Buffer[] = [];
     const doc = new PDFDocument({ margin: 40, size: 'A4' });
     doc.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
@@ -314,15 +461,29 @@ export class ReportsService {
     return await new Promise<Buffer>((resolve) => {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
 
-      this.renderPdfHeader(doc, schoolName, levelName);
+      this.renderPdfHeader(doc, schoolName, levelName, schoolYearLabel);
 
       const title = `Situation financière des classes${levelName ? ` - ${levelName}` : ''}`;
       doc.font('Times-Bold').fontSize(18).text(title, { align: 'center' });
       doc.moveDown(0.5);
-      doc.font('Times-Roman').fontSize(10).text(`Date : ${new Date().toLocaleDateString('fr-FR')}`, { align: 'right' });
+      doc
+        .font('Times-Roman')
+        .fontSize(10)
+        .text(`Date : ${new Date().toLocaleDateString('fr-FR')}`, {
+          align: 'right',
+        });
       doc.moveDown(1);
 
-      const headers = ['Matricule', 'Nom', 'Sexe', 'Inscription', 'Écolage', 'Total dû', 'Payé', 'Reste'];
+      const headers = [
+        'Matricule',
+        'Nom',
+        'Sexe',
+        'Inscription',
+        'Écolage',
+        'Total dû',
+        'Payé',
+        'Reste',
+      ];
       const columnWidths = [70, 120, 40, 70, 70, 65, 65, 65];
       const rowHeight = 18;
       const startX = doc.page.margins.left;
@@ -333,7 +494,9 @@ export class ReportsService {
         let x = startX;
         doc.font('Times-Bold').fontSize(10).fillColor('#000000');
         headers.forEach((text, index) => {
-          doc.rect(x, y, columnWidths[index], rowHeight).fillAndStroke('#F0F0F0', '#000000');
+          doc
+            .rect(x, y, columnWidths[index], rowHeight)
+            .fillAndStroke('#F0F0F0', '#000000');
           doc.fillColor('#000000').text(text, x + 4, y + 4, {
             width: columnWidths[index] - 8,
             align: index >= 3 ? 'right' : 'left',

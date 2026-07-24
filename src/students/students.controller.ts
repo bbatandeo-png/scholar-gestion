@@ -26,7 +26,11 @@ import { Role } from '../common/enums/domain.enums';
 import { AuthenticatedGuard } from '../common/guards/authenticated.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { setFlash } from '../common/utils/flash.util';
-import { buildExcelBuffer, pickRowValue, readExcelRows } from '../common/utils/excel.util';
+import {
+  buildExcelBuffer,
+  pickRowValue,
+  readExcelRows,
+} from '../common/utils/excel.util';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { ReenrollStudentDto } from './dto/reenroll-student.dto';
 import { SearchStudentsDto } from './dto/search-students.dto';
@@ -48,10 +52,18 @@ export class StudentsController {
   @Get()
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT, Role.AUDITEUR)
   @Render('students/index')
-  async index(@Query() query: SearchStudentsDto) {
+  async index(@Query() query: SearchStudentsDto, @Req() req: Request) {
+    const year = await this.schoolYearsService.resolveSelected(
+      req.session.selectedSchoolYearId,
+    );
     const page = Math.max(1, Number(query.page ?? 1));
     const pageSize = Math.min(100, Math.max(5, Number(query.pageSize ?? 20)));
-    const result = await this.studentsService.searchPaginated(query.q, page, pageSize);
+    const result = await this.studentsService.searchPaginated(
+      query.q,
+      page,
+      pageSize,
+      String(year._id),
+    );
 
     return {
       title: 'Eleves',
@@ -72,8 +84,18 @@ export class StudentsController {
 
   @Get('/export')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT, Role.AUDITEUR)
-  async export(@Query() query: SearchStudentsDto, @Res() res: Response) {
-    const students = await this.studentsService.search(query.q);
+  async export(
+    @Query() query: SearchStudentsDto,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const year = await this.schoolYearsService.resolveSelected(
+      req.session.selectedSchoolYearId,
+    );
+    const students = await this.studentsService.search(
+      query.q,
+      String(year._id),
+    );
     const buffer = buildExcelBuffer(
       'Eleves',
       students.map((student: any) => ({
@@ -88,7 +110,10 @@ export class StudentsController {
       })),
     );
 
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
     res.setHeader('Content-Disposition', 'attachment; filename="eleves.xlsx"');
     return res.send(buffer);
   }
@@ -99,7 +124,11 @@ export class StudentsController {
   async search(@Query() query: SearchStudentsDto) {
     const page = Math.max(1, Number(query.page ?? 1));
     const pageSize = Math.min(100, Math.max(5, Number(query.pageSize ?? 20)));
-    const result = await this.studentsService.searchPaginated(query.q, page, pageSize);
+    const result = await this.studentsService.searchPaginated(
+      query.q,
+      page,
+      pageSize,
+    );
 
     return {
       title: 'Recherche ancien eleve',
@@ -120,7 +149,11 @@ export class StudentsController {
 
   @Post()
   @Roles(Role.SUPER_ADMIN, Role.SECRETARIAT)
-  async create(@Body() dto: CreateStudentDto, @Req() req: Request, @Res() res: Response) {
+  async create(
+    @Body() dto: CreateStudentDto,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
     try {
       const student = await this.studentsService.create(dto);
       const guardiansCount = Number((student as any).guardiansCount ?? 0);
@@ -130,7 +163,11 @@ export class StudentsController {
         `Dossier eleve cree avec le matricule ${student.matricule}. Responsables enregistres: ${guardiansCount}`,
       );
     } catch (error: any) {
-      setFlash(req, 'error', error?.message ?? 'Impossible de creer le dossier eleve');
+      setFlash(
+        req,
+        'error',
+        error?.message ?? 'Impossible de creer le dossier eleve',
+      );
     }
 
     return res.redirect('/students');
@@ -157,7 +194,10 @@ export class StudentsController {
         matricule: pickRowValue(row, ['matricule', 'code_eleve']),
         lastname: pickRowValue(row, ['lastname', 'nom']),
         firstname: pickRowValue(row, ['firstname', 'prenoms', 'prenom']),
-        gender: (pickRowValue(row, ['gender', 'sexe']) || '').toString().trim().toUpperCase(),
+        gender: (pickRowValue(row, ['gender', 'sexe']) || '')
+          .toString()
+          .trim()
+          .toUpperCase(),
         birthDate: pickRowValue(row, ['birthdate', 'date_naissance']),
         birthPlace: pickRowValue(row, ['birthplace', 'lieu_naissance']),
         district: pickRowValue(row, ['district', 'quartier']),
@@ -184,25 +224,45 @@ export class StudentsController {
       }
     }
 
-    setFlash(req, 'success', `Import eleves termine: ${created} crees, ${skipped} ignores`);
+    setFlash(
+      req,
+      'success',
+      `Import eleves termine: ${created} crees, ${skipped} ignores`,
+    );
     return res.redirect('/students');
   }
 
   @Get('/:id')
-  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT, Role.COMPTABILITE, Role.AUDITEUR)
+  @Roles(
+    Role.SUPER_ADMIN,
+    Role.DIRECTION,
+    Role.SECRETARIAT,
+    Role.COMPTABILITE,
+    Role.AUDITEUR,
+  )
   @Render('students/detail')
-  async detail(@Param('id') id: string) {
+  async detail(@Param('id') id: string, @Req() req: Request) {
+    const selectedYear = await this.schoolYearsService.resolveSelected(
+      req.session.selectedSchoolYearId,
+    );
     const detail = await this.studentsService.detail(id);
     const guardians = detail.guardians ?? [];
-    const fatherGuardian = guardians.find((item: any) => item.type === 'father') ?? null;
-    const motherGuardian = guardians.find((item: any) => item.type === 'mother') ?? null;
-    const tutorGuardian = guardians.find((item: any) => item.type === 'tutor') ?? null;
+    const fatherGuardian =
+      guardians.find((item: any) => item.type === 'father') ?? null;
+    const motherGuardian =
+      guardians.find((item: any) => item.type === 'mother') ?? null;
+    const tutorGuardian =
+      guardians.find((item: any) => item.type === 'tutor') ?? null;
     const history = await this.enrollmentsService.findStudentHistory(id);
     const invoices = await Promise.all(
-      history.map((item: any) => this.billingService.findInvoiceByEnrollment(String(item._id))),
+      history.map((item: any) =>
+        this.billingService.findInvoiceByEnrollment(String(item._id)),
+      ),
     );
     const invoiceById = new Map(
-      invoices.filter(Boolean).map((invoice: any) => [String(invoice._id), invoice]),
+      invoices
+        .filter(Boolean)
+        .map((invoice: any) => [String(invoice._id), invoice]),
     );
     const enrollmentByInvoiceId = new Map(
       invoices
@@ -212,7 +272,9 @@ export class StudentsController {
         .filter(Boolean) as Array<[string, any]>,
     );
 
-    const payments = await this.paymentsService.listByInvoiceIds(Array.from(invoiceById.keys()));
+    const payments = await this.paymentsService.listByInvoiceIds(
+      Array.from(invoiceById.keys()),
+    );
     const paymentHistory = payments.map((payment: any) => {
       const invoice = invoiceById.get(String(payment.invoiceId));
       const enrollment = enrollmentByInvoiceId.get(String(payment.invoiceId));
@@ -223,7 +285,11 @@ export class StudentsController {
       };
     });
 
-    const currentEnrollment = history.find((item: any) => item.status === 'active') ?? history[0];
+    const currentEnrollment = history.find(
+      (item: any) =>
+        String(item.schoolYearId?._id ?? item.schoolYearId) ===
+        String(selectedYear._id),
+    );
 
     return {
       title: 'Detail eleve',
@@ -234,41 +300,53 @@ export class StudentsController {
       history,
       paymentHistory,
       currentEnrollment,
-      schoolYears: await this.schoolYearsService.list(),
-      levels: await this.levelsService.list(),
+      selectedYear,
+      schoolYears: [selectedYear],
+      levels: await this.levelsService.listForSchoolYear(
+        String(selectedYear._id),
+      ),
     };
   }
 
   @Get('/:id/financial-status')
-  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT, Role.COMPTABILITE, Role.AUDITEUR)
-  async financialStatus(@Param('id') id: string) {
-    const detail = await this.studentsService.detail(id);
-    const history = await this.enrollmentsService.findStudentHistory(id);
-    const invoices = await Promise.all(
-      history.map((item: any) => this.billingService.findInvoiceByEnrollment(String(item._id))),
+  @Roles(
+    Role.SUPER_ADMIN,
+    Role.DIRECTION,
+    Role.SECRETARIAT,
+    Role.COMPTABILITE,
+    Role.AUDITEUR,
+  )
+  async financialStatus(@Param('id') id: string, @Req() req: Request) {
+    const selectedYear = await this.schoolYearsService.resolveSelected(
+      req.session.selectedSchoolYearId,
     );
-    const openArrears = await this.enrollmentsService.previewOpenArrears(id);
-
-    const currentEnrollment = history.find((item: any) => item.status === 'active') ?? history[0] ?? null;
+    const detail = await this.studentsService.detail(id);
+    const history = await this.enrollmentsService.findStudentHistory(
+      id,
+      String(selectedYear._id),
+    );
+    const invoices = await Promise.all(
+      history.map((item: any) =>
+        this.billingService.findInvoiceByEnrollment(String(item._id)),
+      ),
+    );
+    const currentEnrollment = history[0] ?? null;
     const currentInvoice = currentEnrollment
-      ? invoices.find((invoice: any, index: number) => String(history[index]?._id) === String(currentEnrollment._id)) ?? null
+      ? (invoices.find(
+          (invoice: any, index: number) =>
+            String(history[index]?._id) === String(currentEnrollment._id),
+        ) ?? null)
       : null;
 
-    const totalOutstandingInvoices = invoices.reduce(
-      (sum: number, invoice: any) => sum + Number(invoice?.balanceDue ?? 0),
-      0,
-    );
-    const totalOpenArrears = openArrears.reduce(
-      (sum: number, item: any) => sum + Number(item.amountRemaining ?? 0),
-      0,
-    );
-    const totalDue = totalOutstandingInvoices + totalOpenArrears;
+    const totalOutstandingInvoices = Number(currentInvoice?.balanceDue ?? 0);
+    const totalOpenArrears = Number(currentInvoice?.arrearsAmount ?? 0);
+    const totalDue = totalOutstandingInvoices;
 
     return {
       student: detail.student,
       currentEnrollment,
       currentInvoice,
-      openArrearsCount: openArrears.length,
+      openArrearsCount: totalOpenArrears > 0 ? 1 : 0,
       openArrearsAmount: totalOpenArrears,
       outstandingInvoicesAmount: totalOutstandingInvoices,
       totalDue,
@@ -293,6 +371,7 @@ export class StudentsController {
   @Roles(Role.SUPER_ADMIN, Role.SECRETARIAT)
   @Render('students/reenroll')
   async reenrollForm(@Param('id') id: string) {
+    const openYear = await this.schoolYearsService.requireOpen();
     const detail = await this.studentsService.detail(id);
     const history = await this.enrollmentsService.findStudentHistory(id);
     const openArrears = await this.enrollmentsService.previewOpenArrears(id);
@@ -301,8 +380,8 @@ export class StudentsController {
       ...detail,
       history,
       openArrears,
-      schoolYears: await this.schoolYearsService.list(),
-      levels: await this.levelsService.list(),
+      schoolYears: [openYear],
+      levels: await this.levelsService.listForSchoolYear(String(openYear._id)),
     };
   }
 
@@ -314,8 +393,9 @@ export class StudentsController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
+    const open = await this.schoolYearsService.requireOpen();
     const result = await this.enrollmentsService.reenrollStudent(id, {
-      targetSchoolYearId: dto.targetSchoolYearId,
+      targetSchoolYearId: String(open._id),
       targetLevelId: dto.targetLevelId,
       carryOverArrears: dto.carryOverArrears !== 'false',
       reason: dto.reason,

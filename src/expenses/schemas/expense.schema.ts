@@ -5,6 +5,14 @@ export type ExpenseDocument = HydratedDocument<Expense>;
 
 @Schema({ timestamps: true, collection: 'expenses' })
 export class Expense {
+  @Prop({
+    type: SchemaTypes.ObjectId,
+    required: true,
+    ref: 'SchoolYear',
+    index: true,
+  })
+  schoolYearId: string;
+
   @Prop({ required: true, trim: true })
   orderNumber: string;
 
@@ -20,7 +28,12 @@ export class Expense {
   @Prop({ required: true, trim: true })
   beneficiary: string;
 
-  @Prop({ type: SchemaTypes.ObjectId, required: true, ref: 'ExpenseCategory', index: true })
+  @Prop({
+    type: SchemaTypes.ObjectId,
+    required: true,
+    ref: 'ExpenseCategory',
+    index: true,
+  })
   categoryId: string;
 
   @Prop({ trim: true })
@@ -28,6 +41,16 @@ export class Expense {
 
   @Prop()
   modifiedAt?: Date;
+
+  @Prop({ default: false, index: true })
+  isCancelled: boolean;
+
+  @Prop()
+  cancelledAt?: Date;
+
+  @Prop({ trim: true })
+  cancellationReason?: string;
 }
 
 export const ExpenseSchema = SchemaFactory.createForClass(Expense);
+ExpenseSchema.index({ schoolYearId: 1, expenseDate: -1 });

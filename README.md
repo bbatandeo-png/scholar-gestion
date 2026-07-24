@@ -4,6 +4,8 @@ Application web de gestion administrative et financiere pour un complexe scolair
 
 ## Regles metier critiques
 
+- Une seule annee scolaire peut etre ouverte en base.
+- L'annee consultee est conservee dans la session utilisateur ; une annee historique est en lecture seule.
 - Un eleve ne peut avoir qu'une seule inscription active par annee scolaire.
 - Toute creation d'eleve doit etre precedee d'une recherche anti-doublon.
 - La reinscription d'un ancien eleve doit reutiliser le dossier existant.
@@ -12,6 +14,47 @@ Application web de gestion administrative et financiere pour un complexe scolair
 - Aucun enregistrement financier n'est supprime physiquement.
 - Les paiements sont fractionnables, traces et associes a un recu unique.
 - Les operations sensibles sont journalisees dans `audit_logs`.
+
+## Migration multi-annees
+
+Analyser les donnees existantes sans les modifier :
+
+```bash
+npm run migrate:multi-year
+```
+
+Appliquer la migration :
+
+```bash
+npm run migrate:multi-year -- --apply
+```
+
+Une depense dont la date ne correspond a aucune annee est automatiquement rattachee
+a l'unique annee scolaire active. Une annee peut toujours etre fournie explicitement
+pour une reprise exceptionnelle :
+
+```bash
+npm run migrate:multi-year -- --apply --expense-year=<ID_ANNEE>
+```
+
+La migration est idempotente. Elle annualise directement factures, paiements et depenses,
+cree les associations annuelles de niveaux et materialise l'historique des reports d'impayes.
+Elle s'arrete avant toute ecriture si une depense ne peut pas etre rattachee sans hypothese.
+
+## Changement d'annee
+
+Une nouvelle annee est creee en `draft`. La page Promotions prepare toutes les decisions de
+l'annee ouverte. Sa validation :
+
+- copie la configuration annuelle des niveaux, frais et parametres financiers ;
+- promeut automatiquement vers le niveau suivant ;
+- maintient les redoublants au meme niveau ;
+- conserve les eleves sortis ou archives sans nouvelle inscription ;
+- reporte les soldes ouverts sans effacer leur origine ;
+- ferme l'annee source et ouvre la cible dans la meme transaction.
+
+Le selecteur d'annee de l'en-tete permet de revenir sur une ancienne annee sans relancer la
+promotion et sans modifier les donnees historiques.
 
 ## Modules principaux
 
@@ -137,6 +180,10 @@ Services :
 
 - application NestJS sur `http://localhost:3000`
 - MongoDB sur `mongodb://localhost:27017`
+
+Le service Docker configure MongoDB en replica set mono-noeud (`rs0`), requis pour que
+l'activation d'une nouvelle annee soit entierement transactionnelle. Une installation MongoDB
+locale doit egalement utiliser un replica set pour ce workflow.
 
 ## Workflows metier implementes
 

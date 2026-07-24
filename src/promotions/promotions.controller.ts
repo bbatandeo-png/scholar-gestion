@@ -47,6 +47,7 @@ export class PromotionsController {
     return {
       title: 'Promotions annuelles',
       schoolYears: await this.schoolYearsService.list(),
+      openSchoolYear: await this.schoolYearsService.findOpen(),
       levels: await this.levelsService.list(),
     };
   }
@@ -77,29 +78,49 @@ export class PromotionsController {
       throw new BadRequestException('Fichier Excel requis');
     }
 
-    const [schoolYears, levels, candidates, students, rows] = await Promise.all([
-      this.schoolYearsService.list(),
-      this.levelsService.list(),
-      this.promotionsService.prepare(dto.sourceSchoolYearId),
-      this.studentModel.find().lean().exec(),
-      Promise.resolve(readExcelRows(file.buffer)),
-    ]);
-
-    const levelByLabel = new Map(levels.map((item: any) => [String(item.label).toLowerCase(), item]));
-    const studentByMatricule = new Map(students.map((item: any) => [String(item.matricule).toLowerCase(), item]));
-    const candidateByStudentId = new Map(
-      candidates.map((item: any) => [String(item.studentId?._id ?? item.studentId), item]),
+    const [schoolYears, levels, candidates, students, rows] = await Promise.all(
+      [
+        this.schoolYearsService.list(),
+        this.levelsService.list(),
+        this.promotionsService.prepare(dto.sourceSchoolYearId),
+        this.studentModel.find().lean().exec(),
+        Promise.resolve(readExcelRows(file.buffer)),
+      ],
     );
 
-    const importedByEnrollmentId = new Map<string, { decision: string; targetLevelId: string }>();
+    const levelByLabel = new Map(
+      levels.map((item: any) => [String(item.label).toLowerCase(), item]),
+    );
+    const studentByMatricule = new Map(
+      students.map((item: any) => [String(item.matricule).toLowerCase(), item]),
+    );
+    const candidateByStudentId = new Map(
+      candidates.map((item: any) => [
+        String(item.studentId?._id ?? item.studentId),
+        item,
+      ]),
+    );
+
+    const importedByEnrollmentId = new Map<
+      string,
+      { decision: string; targetLevelId: string }
+    >();
 
     for (const row of rows) {
-      const matricule = pickRowValue(row, ['matricule', 'code_eleve']).toLowerCase();
+      const matricule = pickRowValue(row, [
+        'matricule',
+        'code_eleve',
+      ]).toLowerCase();
       const decision = pickRowValue(row, ['decision']);
-      const targetLevel = pickRowValue(row, ['niveau_cible', 'target_level']).toLowerCase();
+      const targetLevel = pickRowValue(row, [
+        'niveau_cible',
+        'target_level',
+      ]).toLowerCase();
 
       const student = studentByMatricule.get(matricule);
-      const candidate = student ? candidateByStudentId.get(String(student._id)) : undefined;
+      const candidate = student
+        ? candidateByStudentId.get(String(student._id))
+        : undefined;
       const level = levelByLabel.get(targetLevel);
 
       if (!candidate || !level || !decision) {
@@ -134,9 +155,14 @@ export class PromotionsController {
 
   @Post('/validate')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION)
-  async validate(@Body() dto: ValidatePromotionsDto, @Req() req: Request, @Res() res: Response) {
+  async validate(
+    @Body() dto: ValidatePromotionsDto,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
     await this.promotionsService.validate(dto, req.session.user?.id);
-    setFlash(req, 'success', 'Promotion annuelle validee');
-    return res.redirect('/promotions');
+    req.session.selectedSchoolYearId = dto.targetSchoolYearId;
+    setFlash(req, 'success', 'Promotion terminee et nouvelle annee activee');
+    return res.redirect('/dashboard');
   }
 }

@@ -7,22 +7,33 @@ services:
       - "3000:3000"
     environment:
       PORT: 3000
-      MONGODB_URI: mongodb://mongo:27017/scolar-gestion
+      MONGODB_URI: mongodb://mongo:27017/scolar-gestion?replicaSet=rs0
       SESSION_SECRET: change-me
       ADMIN_NAME: Super Admin
       ADMIN_EMAIL: admin@scolar-gestion.local
       ADMIN_PASSWORD: Admin123!
     depends_on:
-      - mongo
+      mongo:
+        condition: service_healthy
 
   mongo:
     image: mongo:7
     container_name: scolar-gestion-mongo
     restart: unless-stopped
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
     ports:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mongosh --quiet --eval \"try { quit(rs.status().ok ? 0 : 1) } catch (e) { quit(rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]}).ok ? 0 : 1) }\"",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
 volumes:
   mongo_data:

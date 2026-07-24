@@ -3,7 +3,7 @@
   <section class="panel">
     <h2>Synthese eleve</h2>
     {% if currentEnrollment %}
-      <p><strong>Niveau actuel:</strong> {{ currentEnrollment.levelId.label if currentEnrollment.levelId }} - {{ currentEnrollment.schoolYearId.label if currentEnrollment.schoolYearId }}</p>
+      <p><strong>Niveau actuel:</strong> {{ currentEnrollment.levelSnapshot.label if currentEnrollment.levelSnapshot else currentEnrollment.levelId.label }} - {{ currentEnrollment.schoolYearId.label if currentEnrollment.schoolYearId }}</p>
       <p><strong>Statut inscription:</strong> {% set value = currentEnrollment.status %}{% include "partials/status-badge.njk" %}</p>
     {% else %}
       <p>Aucune inscription active ou historique disponible.</p>
@@ -95,7 +95,7 @@
         {% for item in history %}
           <tr>
             <td>{{ item.schoolYearId.label if item.schoolYearId }}</td>
-            <td>{{ item.levelId.label if item.levelId }}</td>
+            <td>{{ item.levelSnapshot.label if item.levelSnapshot else item.levelId.label }}</td>
             <td>{{ item.type }}</td>
             <td>{% set value = item.status %}{% include "partials/status-badge.njk" %}</td>
           </tr>

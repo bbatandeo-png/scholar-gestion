@@ -43,20 +43,29 @@ export class BillingController {
   @Get()
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION)
   @Render('settings/fees')
-  async index(@Query('editCategoryId') editCategoryId?: string) {
+  async index(
+    @Req() req: Request,
+    @Query('editCategoryId') editCategoryId?: string,
+  ) {
+    const year = await this.schoolYearsService.resolveSelected(
+      req.session.selectedSchoolYearId,
+    );
+    const schoolYearId = String(year._id);
     const [matriculeRule, schoolName, receiptMode] = await Promise.all([
       this.settingsService.getStudentMatriculeRule(),
       this.settingsService.getSchoolName(),
-      this.settingsService.getReceiptMode(),
+      this.settingsService.getReceiptMode(schoolYearId),
     ]);
     const categories = await this.expensesService.listCategories();
-    const editCategory = editCategoryId ? await this.expensesService.findCategoryById(editCategoryId) : undefined;
+    const editCategory = editCategoryId
+      ? await this.expensesService.findCategoryById(editCategoryId)
+      : undefined;
 
     return {
       title: 'Frais par niveau',
-      feeSchedules: await this.billingService.listFeeSchedules(),
-      schoolYears: await this.schoolYearsService.list(),
-      levels: await this.levelsService.list(),
+      feeSchedules: await this.billingService.listFeeSchedules(schoolYearId),
+      schoolYears: [year],
+      levels: await this.levelsService.listForSchoolYear(schoolYearId),
       expenseCategories: categories,
       matriculeRule,
       schoolName,
@@ -68,7 +77,11 @@ export class BillingController {
 
   @Post('/expense-categories')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION)
-  async createExpenseCategory(@Body() dto: { name: string; description?: string }, @Req() req: Request, @Res() res: Response) {
+  async createExpenseCategory(
+    @Body() dto: { name: string; description?: string },
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
     await this.expensesService.createCategory(dto as any);
     setFlash(req, 'success', 'Catégorie enregistrée');
     return res.redirect('/settings/fees');
@@ -76,7 +89,12 @@ export class BillingController {
 
   @Post('/expense-categories/:id')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION)
-  async updateExpenseCategory(@Param('id') id: string, @Body() dto: { name: string; description?: string }, @Req() req: Request, @Res() res: Response) {
+  async updateExpenseCategory(
+    @Param('id') id: string,
+    @Body() dto: { name: string; description?: string },
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
     await this.expensesService.updateCategory(id, dto as any);
     setFlash(req, 'success', 'Catégorie modifiée');
     return res.redirect('/settings/fees');
@@ -84,8 +102,13 @@ export class BillingController {
 
   @Get('/export')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION)
-  async export(@Res() res: Response) {
-    const feeSchedules = await this.billingService.listFeeSchedules();
+  async export(@Req() req: Request, @Res() res: Response) {
+    const year = await this.schoolYearsService.resolveSelected(
+      req.session.selectedSchoolYearId,
+    );
+    const feeSchedules = await this.billingService.listFeeSchedules(
+      String(year._id),
+    );
     const buffer = buildExcelBuffer(
       'Frais',
       feeSchedules.map((item: any) => ({
@@ -96,15 +119,27 @@ export class BillingController {
       })),
     );
 
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
     res.setHeader('Content-Disposition', 'attachment; filename="frais.xlsx"');
     return res.send(buffer);
   }
 
   @Post()
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION)
-  async upsert(@Body() dto: UpsertFeeScheduleDto, @Req() req: Request, @Res() res: Response) {
-    await this.billingService.upsertFeeSchedule(dto);
+  async upsert(
+    @Body() dto: UpsertFeeScheduleDto,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const year = await this.schoolYearsService.requireOpen();
+    await this.billingService.upsertFeeSchedule({
+      ...dto,
+      schoolYearId: String(year._id),
+    });
+    await this.levelsService.enableForSchoolYear(String(year._id), dto.levelId);
     setFlash(req, 'success', 'Frais enregistres');
     return res.redirect('/settings/fees');
   }
@@ -121,27 +156,41 @@ export class BillingController {
       throw new BadRequestException('Fichier Excel requis');
     }
 
-    const [rows, schoolYears, levels] = await Promise.all([
+    const openYear = await this.schoolYearsService.requireOpen();
+    const [rows, levels] = await Promise.all([
       Promise.resolve(readExcelRows(file.buffer)),
-      this.schoolYearsService.list(),
-      this.levelsService.list(),
+      this.levelsService.listForSchoolYear(String(openYear._id)),
     ]);
 
-    const yearByLabel = new Map(schoolYears.map((item: any) => [String(item.label).toLowerCase(), item]));
-    const levelByLabel = new Map(levels.map((item: any) => [String(item.label).toLowerCase(), item]));
+    const levelByLabel = new Map(
+      levels.map((item: any) => [String(item.label).toLowerCase(), item]),
+    );
 
     let imported = 0;
     let skipped = 0;
 
     for (const row of rows) {
-      const yearLabel = pickRowValue(row, ['annee', 'school_year']).toLowerCase();
+      const yearLabel = pickRowValue(row, [
+        'annee',
+        'school_year',
+      ]).toLowerCase();
       const levelLabel = pickRowValue(row, ['niveau', 'level']).toLowerCase();
-      const registrationFee = Number(pickRowValue(row, ['frais_inscription', 'registration_fee']));
+      const registrationFee = Number(
+        pickRowValue(row, ['frais_inscription', 'registration_fee']),
+      );
       const tuitionFee = Number(pickRowValue(row, ['ecolage', 'tuition_fee']));
 
-      const year = yearByLabel.get(yearLabel);
+      const year =
+        yearLabel === String(openYear.label).toLowerCase()
+          ? openYear
+          : undefined;
       const level = levelByLabel.get(levelLabel);
-      if (!year || !level || Number.isNaN(registrationFee) || Number.isNaN(tuitionFee)) {
+      if (
+        !year ||
+        !level ||
+        Number.isNaN(registrationFee) ||
+        Number.isNaN(tuitionFee)
+      ) {
         skipped += 1;
         continue;
       }
@@ -155,21 +204,37 @@ export class BillingController {
       imported += 1;
     }
 
-    setFlash(req, 'success', `Import frais termine: ${imported} lignes importees, ${skipped} ignorees`);
+    setFlash(
+      req,
+      'success',
+      `Import frais termine: ${imported} lignes importees, ${skipped} ignorees`,
+    );
     return res.redirect('/settings/fees');
   }
 
   @Get('/:id/edit')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION)
   @Render('settings/fees')
-  async edit(@Param('id') id: string) {
-    const [feeSchedules, schoolYears, levels, matriculeRule, schoolName, receiptMode, editFee] = await Promise.all([
-      this.billingService.listFeeSchedules(),
-      this.schoolYearsService.list(),
-      this.levelsService.list(),
+  async edit(@Param('id') id: string, @Req() req: Request) {
+    const year = await this.schoolYearsService.resolveSelected(
+      req.session.selectedSchoolYearId,
+    );
+    const schoolYearId = String(year._id);
+    const [
+      feeSchedules,
+      schoolYears,
+      levels,
+      matriculeRule,
+      schoolName,
+      receiptMode,
+      editFee,
+    ] = await Promise.all([
+      this.billingService.listFeeSchedules(schoolYearId),
+      Promise.resolve([year]),
+      this.levelsService.listForSchoolYear(schoolYearId),
       this.settingsService.getStudentMatriculeRule(),
       this.settingsService.getSchoolName(),
-      this.settingsService.getReceiptMode(),
+      this.settingsService.getReceiptMode(schoolYearId),
       this.billingService.findFeeScheduleById(id),
     ]);
 
@@ -194,7 +259,9 @@ export class BillingController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
+    const year = await this.schoolYearsService.requireOpen();
     await this.billingService.updateFeeSchedule(id, {
+      schoolYearId: String(year._id),
       registrationFee: dto.registrationFee,
       tuitionFee: dto.tuitionFee,
     });

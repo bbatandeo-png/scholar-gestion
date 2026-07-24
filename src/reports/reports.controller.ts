@@ -1,31 +1,54 @@
-import { Controller, Get, Query, Render, Res, UseGuards } from '@nestjs/common';
-import { Response } from 'express';
+import {
+  Controller,
+  Get,
+  Query,
+  Render,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
+import { Request, Response } from 'express';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/enums/domain.enums';
 import { AuthenticatedGuard } from '../common/guards/authenticated.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { buildExcelBuffer } from '../common/utils/excel.util';
 import { ReportsService } from './reports.service';
+import { SchoolYearsService } from '../school-years/school-years.service';
 
 @Controller('/reports')
 @UseGuards(AuthenticatedGuard, RolesGuard)
 export class ReportsController {
-  constructor(private readonly reportsService: ReportsService) {}
+  constructor(
+    private readonly reportsService: ReportsService,
+    private readonly schoolYearsService: SchoolYearsService,
+  ) {}
+
+  private async selectedYearId(req: Request) {
+    const year = await this.schoolYearsService.resolveSelected(
+      req.session.selectedSchoolYearId,
+    );
+    return String(year._id);
+  }
 
   @Get('/students-by-level')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.AUDITEUR)
   @Render('reports/students-by-level')
-  async studentsByLevel() {
+  async studentsByLevel(@Req() req: Request) {
     return {
       title: 'Rapport eleves par niveau',
-      report: await this.reportsService.studentsByLevel(),
+      report: await this.reportsService.studentsByLevel(
+        await this.selectedYearId(req),
+      ),
     };
   }
 
   @Get('/students-by-level/export')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.AUDITEUR)
-  async studentsByLevelExport(@Res() res: Response) {
-    const report = await this.reportsService.studentsByLevel();
+  async studentsByLevelExport(@Req() req: Request, @Res() res: Response) {
+    const report = await this.reportsService.studentsByLevel(
+      await this.selectedYearId(req),
+    );
     const buffer = buildExcelBuffer(
       'Eleves_par_niveau',
       report.map((item: any) => ({
@@ -34,29 +57,40 @@ export class ReportsController {
       })),
     );
 
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename="eleves_par_niveau.xlsx"');
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="eleves_par_niveau.xlsx"',
+    );
     return res.send(buffer);
   }
 
   @Get('/paid-students')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.COMPTABILITE, Role.AUDITEUR)
   @Render('reports/paid-students')
-  async paidStudents() {
+  async paidStudents(@Req() req: Request) {
     return {
       title: 'Eleves soldes',
-      report: await this.reportsService.paidStudents(),
+      report: await this.reportsService.paidStudents(
+        await this.selectedYearId(req),
+      ),
     };
   }
 
   @Get('/paid-students/export')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.COMPTABILITE, Role.AUDITEUR)
-  async paidStudentsExport(@Res() res: Response) {
-    const report = await this.reportsService.paidStudents();
+  async paidStudentsExport(@Req() req: Request, @Res() res: Response) {
+    const report = await this.reportsService.paidStudents(
+      await this.selectedYearId(req),
+    );
     const buffer = buildExcelBuffer(
       'Eleves_soldes',
       report.map((item: any) => ({
-        eleve: `${item.enrollmentId?.studentId?.lastname ?? ''} ${item.enrollmentId?.studentId?.firstname ?? ''}`.trim(),
+        eleve:
+          `${item.enrollmentId?.studentId?.lastname ?? ''} ${item.enrollmentId?.studentId?.firstname ?? ''}`.trim(),
         matricule: item.enrollmentId?.studentId?.matricule ?? '',
         annee: item.enrollmentId?.schoolYearId?.label ?? '',
         niveau: item.enrollmentId?.levelId?.label ?? '',
@@ -66,8 +100,14 @@ export class ReportsController {
       })),
     );
 
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename="eleves_soldes.xlsx"');
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="eleves_soldes.xlsx"',
+    );
     return res.send(buffer);
   }
 
@@ -75,26 +115,40 @@ export class ReportsController {
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.COMPTABILITE, Role.AUDITEUR)
   @Render('reports/registration-paid-students')
   async registrationPaidStudents(
+    @Req() req: Request,
     @Query('filter') filter?: string,
     @Query('levelId') levelId?: string,
     @Query('schoolYearId') schoolYearId?: string,
   ) {
-    const normalizedFilter = ['registration', 'tuition', 'full', 'partial', 'none'].includes(filter ?? '')
+    const normalizedFilter = [
+      'registration',
+      'tuition',
+      'full',
+      'partial',
+      'none',
+    ].includes(filter ?? '')
       ? (filter as 'registration' | 'tuition' | 'full' | 'partial' | 'none')
       : 'registration';
+    const selectedSchoolYearId = await this.selectedYearId(req);
+    const selectedYear =
+      await this.schoolYearsService.findById(selectedSchoolYearId);
 
     const [report, levels, schoolYears] = await Promise.all([
-      this.reportsService.registrationPaidStudents(normalizedFilter, levelId, schoolYearId),
+      this.reportsService.registrationPaidStudents(
+        normalizedFilter,
+        levelId,
+        selectedSchoolYearId,
+      ),
       this.reportsService.listLevels(),
-      this.reportsService.listSchoolYears(),
+      Promise.resolve(selectedYear ? [selectedYear] : []),
     ]);
 
     return {
-      title: 'Eleves ayant paye l\'inscription',
+      title: "Eleves ayant paye l'inscription",
       report,
       filter: normalizedFilter,
       levelId: levelId || '',
-      schoolYearId: schoolYearId || '',
+      schoolYearId: selectedSchoolYearId,
       levels,
       schoolYears,
     };
@@ -103,39 +157,65 @@ export class ReportsController {
   @Get('/registration-paid/pdf')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.COMPTABILITE, Role.AUDITEUR)
   async registrationPaidStudentsPdf(
+    @Req() req: Request,
     @Res() res: Response,
     @Query('filter') filter?: string,
     @Query('levelId') levelId?: string,
     @Query('schoolYearId') schoolYearId?: string,
   ) {
-    const normalizedFilter = ['registration', 'tuition', 'full', 'partial', 'none'].includes(filter ?? '')
+    const normalizedFilter = [
+      'registration',
+      'tuition',
+      'full',
+      'partial',
+      'none',
+    ].includes(filter ?? '')
       ? (filter as 'registration' | 'tuition' | 'full' | 'partial' | 'none')
       : 'registration';
-    const report = await this.reportsService.registrationPaidStudents(normalizedFilter, levelId, schoolYearId);
-    const pdf = await this.reportsService.renderRegistrationPaidPdf(report, normalizedFilter);
+    const selectedYearId = await this.selectedYearId(req);
+    const selectedYear = await this.schoolYearsService.findById(selectedYearId);
+    const report = await this.reportsService.registrationPaidStudents(
+      normalizedFilter,
+      levelId,
+      selectedYearId,
+    );
+    const pdf = await this.reportsService.renderRegistrationPaidPdf(
+      report,
+      normalizedFilter,
+      undefined,
+      selectedYear?.label,
+    );
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="registration-paid-students-${normalizedFilter}.pdf"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="registration-paid-students-${normalizedFilter}.pdf"`,
+    );
     return res.send(pdf);
   }
 
   @Get('/unpaid-students')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.COMPTABILITE, Role.AUDITEUR)
   @Render('reports/unpaid-students')
-  async unpaidStudents() {
+  async unpaidStudents(@Req() req: Request) {
     return {
       title: 'Eleves impayes',
-      report: await this.reportsService.unpaidStudents(),
+      report: await this.reportsService.unpaidStudents(
+        await this.selectedYearId(req),
+      ),
     };
   }
 
   @Get('/unpaid-students/export')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.COMPTABILITE, Role.AUDITEUR)
-  async unpaidStudentsExport(@Res() res: Response) {
-    const report = await this.reportsService.unpaidStudents();
+  async unpaidStudentsExport(@Req() req: Request, @Res() res: Response) {
+    const report = await this.reportsService.unpaidStudents(
+      await this.selectedYearId(req),
+    );
     const buffer = buildExcelBuffer(
       'Eleves_impayes',
       report.map((item: any) => ({
-        eleve: `${item.enrollmentId?.studentId?.lastname ?? ''} ${item.enrollmentId?.studentId?.firstname ?? ''}`.trim(),
+        eleve:
+          `${item.enrollmentId?.studentId?.lastname ?? ''} ${item.enrollmentId?.studentId?.firstname ?? ''}`.trim(),
         matricule: item.enrollmentId?.studentId?.matricule ?? '',
         annee: item.enrollmentId?.schoolYearId?.label ?? '',
         niveau: item.enrollmentId?.levelId?.label ?? '',
@@ -146,17 +226,33 @@ export class ReportsController {
       })),
     );
 
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename="eleves_impayes.xlsx"');
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="eleves_impayes.xlsx"',
+    );
     return res.send(buffer);
   }
 
   @Get('/class-financial-situation')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.COMPTABILITE, Role.AUDITEUR)
   @Render('reports/class-financial-situation')
-  async classFinancialSituation(@Query('levelId') levelId?: string) {
-    const report = await this.reportsService.classFinancialSituation();
-    const filtered = levelId ? report.filter((item: any) => String(item.level?._id ?? item.level?.id ?? '') === String(levelId)) : report;
+  async classFinancialSituation(
+    @Req() req: Request,
+    @Query('levelId') levelId?: string,
+  ) {
+    const selectedYearId = await this.selectedYearId(req);
+    const report =
+      await this.reportsService.classFinancialSituation(selectedYearId);
+    const filtered = levelId
+      ? report.filter(
+          (item: any) =>
+            String(item.level?._id ?? item.level?.id ?? '') === String(levelId),
+        )
+      : report;
     return {
       title: 'Situation financiere des classes',
       report: filtered,
@@ -167,14 +263,26 @@ export class ReportsController {
 
   @Get('/class-financial-situation/export')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.COMPTABILITE, Role.AUDITEUR)
-  async classFinancialSituationExport(@Query('levelId') levelId?: string, @Res() res?: Response) {
-    const report = await this.reportsService.classFinancialSituation();
-    const filtered = levelId ? report.filter((item: any) => String(item.level?._id ?? item.level?.id ?? '') === String(levelId)) : report;
+  async classFinancialSituationExport(
+    @Req() req: Request,
+    @Query('levelId') levelId?: string,
+    @Res() res?: Response,
+  ) {
+    const report = await this.reportsService.classFinancialSituation(
+      await this.selectedYearId(req),
+    );
+    const filtered = levelId
+      ? report.filter(
+          (item: any) =>
+            String(item.level?._id ?? item.level?.id ?? '') === String(levelId),
+        )
+      : report;
     const buffer = buildExcelBuffer(
       'Situation_financiere',
       filtered.map((item: any) => ({
         numero: item.student?.matricule ?? '',
-        nom_prenoms: `${item.student?.lastname ?? ''} ${item.student?.firstname ?? ''}`.trim(),
+        nom_prenoms:
+          `${item.student?.lastname ?? ''} ${item.student?.firstname ?? ''}`.trim(),
         sexe: item.student?.gender ?? '',
         montant_a_payer: item.totalDue,
         montant_paye: item.paidAmount,
@@ -184,42 +292,77 @@ export class ReportsController {
       })),
     );
 
-    res?.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res?.setHeader('Content-Disposition', 'attachment; filename="situation_financiere.xlsx"');
+    res?.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res?.setHeader(
+      'Content-Disposition',
+      'attachment; filename="situation_financiere.xlsx"',
+    );
     return res?.send(buffer);
   }
 
   @Get('/class-financial-situation/pdf')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.COMPTABILITE, Role.AUDITEUR)
-  async classFinancialSituationPdf(@Res() res: Response, @Query('levelId') levelId?: string) {
-    const report = await this.reportsService.classFinancialSituation();
-    const filtered = levelId ? report.filter((item: any) => String(item.level?._id ?? item.level?.id ?? '') === String(levelId)) : report;
-    const levelName = levelId ? await this.reportsService.findLevelName(levelId) : undefined;
-    const pdf = await this.reportsService.renderClassFinancialSituationPdf(filtered, levelName);
+  async classFinancialSituationPdf(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query('levelId') levelId?: string,
+  ) {
+    const selectedYearId = await this.selectedYearId(req);
+    const selectedYear = await this.schoolYearsService.findById(selectedYearId);
+    const report =
+      await this.reportsService.classFinancialSituation(selectedYearId);
+    const filtered = levelId
+      ? report.filter(
+          (item: any) =>
+            String(item.level?._id ?? item.level?.id ?? '') === String(levelId),
+        )
+      : report;
+    const levelName = levelId
+      ? await this.reportsService.findLevelName(levelId)
+      : undefined;
+    const pdf = await this.reportsService.renderClassFinancialSituationPdf(
+      filtered,
+      levelName,
+      selectedYear?.label,
+    );
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="situation_financiere${levelName ? `-${levelName.replace(/[^a-zA-Z0-9_-]/g, '_')}` : ''}.pdf"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="situation_financiere${levelName ? `-${levelName.replace(/[^a-zA-Z0-9_-]/g, '_')}` : ''}.pdf"`,
+    );
     return res.send(pdf);
   }
 
   @Get('/revenue')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.COMPTABILITE, Role.AUDITEUR)
   @Render('reports/revenue')
-  async revenue() {
+  async revenue(@Req() req: Request) {
     return {
       title: 'Recettes',
-      report: await this.reportsService.revenue(),
+      report: await this.reportsService.revenue(await this.selectedYearId(req)),
     };
   }
 
   @Get('/revenue/export')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.COMPTABILITE, Role.AUDITEUR)
-  async revenueExport(@Res() res: Response) {
-    const report = await this.reportsService.revenue();
+  async revenueExport(@Req() req: Request, @Res() res: Response) {
+    const report = await this.reportsService.revenue(
+      await this.selectedYearId(req),
+    );
     const buffer = buildExcelBuffer('Recettes', [report]);
 
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename="recettes.xlsx"');
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="recettes.xlsx"',
+    );
     return res.send(buffer);
   }
 }

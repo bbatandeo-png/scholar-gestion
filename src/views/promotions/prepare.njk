@@ -48,7 +48,7 @@
                 </td>
                 <td>
                   <select name="decisions[{{ loop.index0 }}][targetLevelId]">
-                    {% for level in levels %}<option value="{{ level._id }}" {% if candidate.importedTargetLevelId and candidate.importedTargetLevelId == (level._id | string) %}selected{% endif %}>{{ level.label }}</option>{% endfor %}
+                    {% for level in levels %}<option value="{{ level._id }}" {% if (candidate.importedTargetLevelId and candidate.importedTargetLevelId == (level._id | string)) or (not candidate.importedTargetLevelId and candidate.suggestedTargetLevelId == (level._id | string)) %}selected{% endif %}>{{ level.label }}</option>{% endfor %}
                   </select>
                 </td>
               </tr>

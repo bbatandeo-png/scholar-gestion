@@ -5,7 +5,16 @@ describe('EnrollmentsService', () => {
   it('requiert un motif pour une modification financiere sensible', async () => {
     const service: any = {
       enrollmentModel: {
-        findById: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({ _id: 'enr-1' }) }),
+        findById: jest
+          .fn()
+          .mockReturnValue({
+            exec: jest
+              .fn()
+              .mockResolvedValue({ _id: 'enr-1', schoolYearId: 'year-1' }),
+          }),
+      },
+      schoolYearsService: {
+        assertWritable: jest.fn().mockResolvedValue({ _id: 'year-1' }),
       },
       billingService: {
         findInvoiceByEnrollment: jest.fn().mockResolvedValue({
@@ -22,17 +31,29 @@ describe('EnrollmentsService', () => {
     };
 
     await expect(
-      EnrollmentsService.prototype.updateFinancialDetails.call(service, 'enr-1', {
-        registrationFee: 150,
-      }, 'user-1', 'super_admin'),
+      EnrollmentsService.prototype.updateFinancialDetails.call(
+        service,
+        'enr-1',
+        {
+          registrationFee: 150,
+        },
+        'user-1',
+        'super_admin',
+      ),
     ).rejects.toThrow(BadRequestException);
   });
 
   it('prepare une reinscription sans recreer un eleve et avec report des impayes active', async () => {
-    const createEnrollment = jest.fn().mockResolvedValue({ enrollmentId: 'enr-1' });
+    const createEnrollment = jest
+      .fn()
+      .mockResolvedValue({ enrollmentId: 'enr-1' });
     const service: any = {
-      studentsService: { findById: jest.fn().mockResolvedValue({ _id: 'student-1' }) },
-      findStudentHistory: jest.fn().mockResolvedValue([{ _id: 'prev-enrollment' }]),
+      studentsService: {
+        findById: jest.fn().mockResolvedValue({ _id: 'student-1' }),
+      },
+      findStudentHistory: jest
+        .fn()
+        .mockResolvedValue([{ _id: 'prev-enrollment' }]),
       createEnrollment,
       reenrollStudent: EnrollmentsService.prototype.reenrollStudent,
     };

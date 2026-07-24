@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import PDFDocument from 'pdfkit';
 import { Connection, Model } from 'mongoose';
@@ -28,7 +32,10 @@ export class PaymentsService {
   ) {}
 
   private generateReceiptNumber() {
-    const stamp = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
+    const stamp = new Date()
+      .toISOString()
+      .replace(/[-:TZ.]/g, '')
+      .slice(0, 14);
     const random = Math.floor(Math.random() * 10000)
       .toString()
       .padStart(4, '0');
@@ -49,46 +56,97 @@ export class PaymentsService {
         throw new BadRequestException('Le montant depasse le solde restant');
       }
 
-      const rule = await this.settingsService.getPaymentAllocationRule();
+      const rule = await this.settingsService.getPaymentAllocationRule(
+        String(invoice.schoolYearId),
+      );
       const enrollmentId = String(invoice.enrollmentId);
-      const enrollmentArrears = await this.arrearsService.findByTargetEnrollment(enrollmentId, session);
+      const enrollmentArrears =
+        await this.arrearsService.findByTargetEnrollment(enrollmentId, session);
+      const previousPayments = await this.paymentModel
+        .find({ invoiceId: dto.invoiceId })
+        .session(session ?? null)
+        .lean()
+        .exec();
+      const currentFeesPaidBefore = previousPayments.reduce(
+        (sum, payment: any) =>
+          sum +
+          (payment.allocation ?? [])
+            .filter((item: any) => item.type === 'current_fees')
+            .reduce(
+              (allocationSum: number, item: any) =>
+                allocationSum + Number(item.amount ?? 0),
+              0,
+            ),
+        0,
+      );
+      const currentFeesDue = Math.max(
+        Number(invoice.registrationFee) +
+          Number(invoice.tuitionFee) -
+          Number(invoice.discountAmount),
+        0,
+      );
+      const currentFeesRemaining = Math.max(
+        currentFeesDue - currentFeesPaidBefore,
+        0,
+      );
 
       let arrearsApplied = 0;
       let currentFeesApplied = 0;
       const allocation: Array<Record<string, unknown>> = [];
       let remaining = dto.amount;
 
-      if (rule === PaymentAllocationRule.ARREARS_FIRST && enrollmentArrears.length > 0) {
+      if (
+        rule === PaymentAllocationRule.ARREARS_FIRST &&
+        enrollmentArrears.length > 0
+      ) {
         const result = await this.arrearsService.applyPaymentAllocations(
           enrollmentArrears.map((item) => String(item._id)),
           remaining,
           session,
         );
-        arrearsApplied = result.allocations.reduce((sum, item) => sum + item.amount, 0);
+        arrearsApplied = result.allocations.reduce(
+          (sum, item) => sum + item.amount,
+          0,
+        );
         remaining = result.remaining;
-        allocation.push(...result.allocations.map((item) => ({ type: 'arrear', ...item })));
+        allocation.push(
+          ...result.allocations.map((item) => ({ type: 'arrear', ...item })),
+        );
       }
 
-      currentFeesApplied = remaining;
+      currentFeesApplied =
+        rule === PaymentAllocationRule.CURRENT_FEES_FIRST
+          ? Math.min(remaining, currentFeesRemaining)
+          : remaining;
+      remaining -= currentFeesApplied;
       if (currentFeesApplied > 0) {
         allocation.push({ type: 'current_fees', amount: currentFeesApplied });
       }
 
-      if (rule === PaymentAllocationRule.CURRENT_FEES_FIRST && enrollmentArrears.length > 0) {
-        const leftoverForArrears = Math.max(dto.amount - currentFeesApplied, 0);
+      if (
+        rule === PaymentAllocationRule.CURRENT_FEES_FIRST &&
+        enrollmentArrears.length > 0
+      ) {
+        const leftoverForArrears = remaining;
         if (leftoverForArrears > 0) {
           const result = await this.arrearsService.applyPaymentAllocations(
             enrollmentArrears.map((item) => String(item._id)),
             leftoverForArrears,
             session,
           );
-          arrearsApplied = result.allocations.reduce((sum, item) => sum + item.amount, 0);
-          allocation.push(...result.allocations.map((item) => ({ type: 'arrear', ...item })));
+          arrearsApplied = result.allocations.reduce(
+            (sum, item) => sum + item.amount,
+            0,
+          );
+          allocation.push(
+            ...result.allocations.map((item) => ({ type: 'arrear', ...item })),
+          );
         }
       }
 
       const updatedInvoice = await this.billingService.createOrUpdateInvoice(
         {
+          schoolYearId: String(invoice.schoolYearId),
           enrollmentId,
           registrationFee: invoice.registrationFee,
           tuitionFee: invoice.tuitionFee,
@@ -102,6 +160,7 @@ export class PaymentsService {
       const payment = await this.paymentModel.create(
         [
           {
+            schoolYearId: invoice.schoolYearId,
             invoiceId: dto.invoiceId,
             amount: dto.amount,
             method: dto.method,
@@ -115,19 +174,23 @@ export class PaymentsService {
         { session },
       );
 
-      await this.auditService.log({
-        actorId,
-        action: AuditAction.PAYMENT_CREATED,
-        entityType: 'Payment',
-        entityId: String(payment[0]._id),
-        details: {
-          invoiceId: dto.invoiceId,
-          amount: dto.amount,
-          arrearsApplied,
-          currentFeesApplied,
-          receiptNumber: payment[0].receiptNumber,
+      await this.auditService.log(
+        {
+          schoolYearId: String(invoice.schoolYearId),
+          actorId,
+          action: AuditAction.PAYMENT_CREATED,
+          entityType: 'Payment',
+          entityId: String(payment[0]._id),
+          details: {
+            invoiceId: dto.invoiceId,
+            amount: dto.amount,
+            arrearsApplied,
+            currentFeesApplied,
+            receiptNumber: payment[0].receiptNumber,
+          },
         },
-      });
+        session,
+      );
 
       return {
         payment: payment[0],
@@ -155,43 +218,88 @@ export class PaymentsService {
     if (!payment) {
       throw new NotFoundException('Recu introuvable');
     }
-
+    const enrollment = (payment.invoiceId as any)?.enrollmentId;
+    if (enrollment) {
+      if (enrollment.studentSnapshot) {
+        enrollment.studentId = {
+          ...(enrollment.studentId ?? {}),
+          ...enrollment.studentSnapshot,
+        };
+      }
+      if (enrollment.levelSnapshot) {
+        enrollment.levelId = {
+          ...(enrollment.levelId ?? {}),
+          ...enrollment.levelSnapshot,
+        };
+      }
+    }
     return payment;
   }
 
-  async listByInvoiceIds(invoiceIds: string[]) {
+  async findReceiptYear(id: string) {
+    const payment = await this.paymentModel
+      .findById(id)
+      .select('schoolYearId')
+      .lean()
+      .exec();
+    if (!payment) {
+      throw new NotFoundException('Recu introuvable');
+    }
+    return String(payment.schoolYearId);
+  }
+
+  async findReceiptYearByInvoice(invoiceId: string) {
+    const invoice = await this.billingService.findInvoiceById(invoiceId);
+    if (!invoice) {
+      throw new NotFoundException('Facture introuvable');
+    }
+    return String(invoice.schoolYearId);
+  }
+
+  async listByInvoiceIds(invoiceIds: string[], schoolYearId?: string) {
     if (!invoiceIds.length) {
       return [];
     }
 
     return this.paymentModel
-      .find({ invoiceId: { $in: invoiceIds } })
+      .find({
+        invoiceId: { $in: invoiceIds },
+        ...(schoolYearId ? { schoolYearId } : {}),
+      })
       .sort({ paidAt: -1 })
       .lean()
       .exec();
   }
 
-  async renderReceiptPdf(id: string, receiptMode: ReceiptMode = ReceiptMode.TUITION_ONLY) {
+  async renderReceiptPdf(
+    id: string,
+    receiptMode: ReceiptMode = ReceiptMode.TUITION_ONLY,
+  ) {
     const receipt = await this.findReceiptById(id);
     const chunks: Buffer[] = [];
     const doc = new PDFDocument({ margin: 40 });
     doc.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
 
     const storedSchoolName = await this.settingsService.getSchoolName();
-    const schoolName = storedSchoolName || process.env.SCHOOL_NAME || "Nom de l'école";
+    const schoolName =
+      storedSchoolName || process.env.SCHOOL_NAME || "Nom de l'école";
     const invoice = receipt.invoiceId as any;
     const enrollment = invoice?.enrollmentId as any;
     const student = enrollment?.studentId as any;
     const schoolYearLabel = enrollment?.schoolYearId?.label ?? '-';
     const levelLabel = enrollment?.levelId?.label ?? '-';
     const gender = student?.gender ?? '-';
-    const studentFullName = `${student?.lastname ?? ''} ${student?.firstname ?? ''}`.trim() || '-';
+    const studentFullName =
+      `${student?.lastname ?? ''} ${student?.firstname ?? ''}`.trim() || '-';
     const receiptDate = receipt.paidAt ? new Date(receipt.paidAt) : new Date();
     const formattedDate = `${receiptDate.getDate().toString().padStart(2, '0')}/${(
       receiptDate.getMonth() + 1
     )
       .toString()
-      .padStart(2, '0')} / ${receiptDate.getFullYear()} à ${receiptDate.getHours().toString().padStart(2, '0')}h ${receiptDate
+      .padStart(
+        2,
+        '0',
+      )} / ${receiptDate.getFullYear()} à ${receiptDate.getHours().toString().padStart(2, '0')}h ${receiptDate
       .getMinutes()
       .toString()
       .padStart(2, '0')}`;
@@ -201,7 +309,10 @@ export class PaymentsService {
 
       doc.font('Times-Bold').fontSize(18).text(schoolName, { align: 'center' });
       doc.moveDown(0.5);
-      doc.font('Times-Bold').fontSize(14).text('REÇU DE PAIEMENT DES FRAIS DE SCOLARITE', { align: 'center' });
+      doc
+        .font('Times-Bold')
+        .fontSize(14)
+        .text('REÇU DE PAIEMENT DES FRAIS DE SCOLARITE', { align: 'center' });
       doc.moveDown(1);
 
       const rows = [
@@ -214,7 +325,7 @@ export class PaymentsService {
       ];
 
       if (receiptMode === ReceiptMode.TUITION_AND_REGISTRATION) {
-        rows.push(['Frais d\'inscription', invoice?.registrationFee ?? '-']);
+        rows.push(["Frais d'inscription", invoice?.registrationFee ?? '-']);
       }
 
       rows.push(['Montant de l’écolage', invoice?.tuitionFee ?? '-']);
@@ -225,27 +336,41 @@ export class PaymentsService {
       const rowHeight = 22;
       const startX = doc.page.margins.left;
       const labelWidth = 190;
-      const valueWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right - labelWidth;
+      const valueWidth =
+        doc.page.width -
+        doc.page.margins.left -
+        doc.page.margins.right -
+        labelWidth;
       let y = doc.y;
 
       rows.forEach(([label, value], index) => {
         doc.rect(startX, y, labelWidth, rowHeight).stroke('#000000');
-        doc.rect(startX + labelWidth, y, valueWidth, rowHeight).stroke('#000000');
+        doc
+          .rect(startX + labelWidth, y, valueWidth, rowHeight)
+          .stroke('#000000');
 
-        doc.font('Times-Bold').fontSize(11).text(label, startX + 6, y + 6, {
-          width: labelWidth - 12,
-          align: 'left',
-        });
-        doc.font('Times-Roman').fontSize(11).text(String(value), startX + labelWidth + 6, y + 6, {
-          width: valueWidth - 12,
-          align: 'left',
-        });
+        doc
+          .font('Times-Bold')
+          .fontSize(11)
+          .text(label, startX + 6, y + 6, {
+            width: labelWidth - 12,
+            align: 'left',
+          });
+        doc
+          .font('Times-Roman')
+          .fontSize(11)
+          .text(String(value), startX + labelWidth + 6, y + 6, {
+            width: valueWidth - 12,
+            align: 'left',
+          });
 
         y += rowHeight;
       });
 
       doc.y = y + 10;
-      doc.font('Times-Roman').text(`Lomé, le ${formattedDate}`, { align: 'right' });
+      doc
+        .font('Times-Roman')
+        .text(`Lomé, le ${formattedDate}`, { align: 'right' });
       doc.moveDown(2);
       doc.font('Times-Roman').text('L’économe', { align: 'right' });
 

@@ -6,7 +6,12 @@ export type ArrearDocument = HydratedDocument<Arrear>;
 
 @Schema({ timestamps: true, collection: 'arrears' })
 export class Arrear {
-  @Prop({ type: SchemaTypes.ObjectId, required: true, ref: 'Student', index: true })
+  @Prop({
+    type: SchemaTypes.ObjectId,
+    required: true,
+    ref: 'Student',
+    index: true,
+  })
   studentId: string;
 
   @Prop({ type: SchemaTypes.ObjectId, required: true, ref: 'Enrollment' })
@@ -27,13 +32,21 @@ export class Arrear {
   @Prop({ required: true, min: 0 })
   amountRemaining: number;
 
-  @Prop({ required: true, enum: Object.values(ArrearStatus), default: ArrearStatus.OPEN })
+  @Prop({
+    required: true,
+    enum: Object.values(ArrearStatus),
+    default: ArrearStatus.OPEN,
+  })
   status: ArrearStatus;
 }
 
 export const ArrearSchema = SchemaFactory.createForClass(Arrear);
 ArrearSchema.index({ studentId: 1, status: 1 });
+ArrearSchema.index({ sourceEnrollmentId: 1 }, { unique: true });
 ArrearSchema.index(
   { sourceEnrollmentId: 1, targetEnrollmentId: 1 },
-  { unique: true, partialFilterExpression: { targetEnrollmentId: { $exists: true } } },
+  {
+    unique: true,
+    partialFilterExpression: { targetEnrollmentId: { $exists: true } },
+  },
 );

@@ -11,8 +11,8 @@
 
       <div class="topbar-actions">
         <form method="get" action="/students/search" class="inline-form" id="search-archived">
-          <label style="display:flex;gap:8px;align-items:center;">
-            <input type="search" name="q" value="{{ query }}" placeholder="Matricule, nom, prénom, quartier" style="min-width:320px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);" />
+          <label class="search-controls">
+            <input type="search" name="q" value="{{ query }}" placeholder="Matricule, nom, prénom, quartier" />
             <button type="submit" class="button btn-icon icon-search">Rechercher</button>
             <button type="button" id="toggle-advanced-archived" class="button secondary">Filtres</button>
           </label>

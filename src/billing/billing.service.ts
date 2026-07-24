@@ -2,7 +2,10 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Model } from 'mongoose';
 import { InvoiceStatus } from '../common/enums/domain.enums';
-import { FeeSchedule, FeeScheduleDocument } from './schemas/fee-schedule.schema';
+import {
+  FeeSchedule,
+  FeeScheduleDocument,
+} from './schemas/fee-schedule.schema';
 import { Invoice, InvoiceDocument } from './schemas/invoice.schema';
 import { UpsertFeeScheduleDto } from './dto/upsert-fee-schedule.dto';
 
@@ -26,9 +29,9 @@ export class BillingService {
       .exec();
   }
 
-  async listFeeSchedules() {
+  async listFeeSchedules(schoolYearId?: string) {
     return this.feeScheduleModel
-      .find()
+      .find(schoolYearId ? { schoolYearId } : {})
       .populate('schoolYearId')
       .populate('levelId')
       .sort({ createdAt: -1 })
@@ -36,8 +39,16 @@ export class BillingService {
       .exec();
   }
 
-  async getFeeSchedule(schoolYearId: string, levelId: string) {
-    const schedule = await this.feeScheduleModel.findOne({ schoolYearId, levelId }).lean().exec();
+  async getFeeSchedule(
+    schoolYearId: string,
+    levelId: string,
+    session?: ClientSession,
+  ) {
+    const schedule = await this.feeScheduleModel
+      .findOne({ schoolYearId, levelId })
+      .session(session ?? null)
+      .lean()
+      .exec();
     if (!schedule) {
       throw new NotFoundException('Parametrage des frais introuvable');
     }
@@ -60,8 +71,13 @@ export class BillingService {
   }
 
   async updateFeeSchedule(id: string, dto: Partial<UpsertFeeScheduleDto>) {
+    const { schoolYearId, ...changes } = dto;
     return this.feeScheduleModel
-      .findByIdAndUpdate(id, dto, { new: true })
+      .findOneAndUpdate(
+        { _id: id, ...(schoolYearId ? { schoolYearId } : {}) },
+        changes,
+        { new: true },
+      )
       .populate('schoolYearId')
       .populate('levelId')
       .lean()
@@ -78,10 +94,18 @@ export class BillingService {
     const discountAmount = payload.discountAmount ?? 0;
     const arrearsAmount = payload.arrearsAmount ?? 0;
     const paidAmount = payload.paidAmount ?? 0;
-    const totalDue = payload.registrationFee + payload.tuitionFee - discountAmount + arrearsAmount;
+    const totalDue =
+      payload.registrationFee +
+      payload.tuitionFee -
+      discountAmount +
+      arrearsAmount;
     const balanceDue = Math.max(totalDue - paidAmount, 0);
     const status =
-      balanceDue === 0 ? InvoiceStatus.PAID : paidAmount > 0 ? InvoiceStatus.PARTIAL : InvoiceStatus.UNPAID;
+      balanceDue === 0
+        ? InvoiceStatus.PAID
+        : paidAmount > 0
+          ? InvoiceStatus.PARTIAL
+          : InvoiceStatus.UNPAID;
 
     return {
       registrationFee: payload.registrationFee,
@@ -97,6 +121,7 @@ export class BillingService {
 
   async createOrUpdateInvoice(
     payload: {
+      schoolYearId: string;
       enrollmentId: string;
       registrationFee: number;
       tuitionFee: number;
@@ -109,7 +134,11 @@ export class BillingService {
     const invoiceData = this.calculateInvoiceAmounts(payload);
     return this.invoiceModel.findOneAndUpdate(
       { enrollmentId: payload.enrollmentId },
-      { enrollmentId: payload.enrollmentId, ...invoiceData },
+      {
+        schoolYearId: payload.schoolYearId,
+        enrollmentId: payload.enrollmentId,
+        ...invoiceData,
+      },
       { upsert: true, new: true, setDefaultsOnInsert: true, session },
     );
   }
@@ -118,11 +147,47 @@ export class BillingService {
     return this.invoiceModel.findOne({ enrollmentId }).lean().exec();
   }
 
-  async findInvoiceByEnrollmentForSession(enrollmentId: string, session?: ClientSession) {
-    return this.invoiceModel.findOne({ enrollmentId }).session(session ?? null).exec();
+  async findInvoiceByEnrollmentForSession(
+    enrollmentId: string,
+    session?: ClientSession,
+  ) {
+    return this.invoiceModel
+      .findOne({ enrollmentId })
+      .session(session ?? null)
+      .exec();
   }
 
   async findInvoiceById(id: string) {
     return this.invoiceModel.findById(id).lean().exec();
+  }
+
+  async listInvoicesForSchoolYear(schoolYearId: string) {
+    return this.invoiceModel.find({ schoolYearId }).lean().exec();
+  }
+
+  async copyFeeSchedules(
+    sourceSchoolYearId: string,
+    targetSchoolYearId: string,
+    session?: ClientSession,
+  ) {
+    const schedules = await this.feeScheduleModel
+      .find({ schoolYearId: sourceSchoolYearId })
+      .session(session ?? null)
+      .lean()
+      .exec();
+    for (const schedule of schedules) {
+      await this.feeScheduleModel.updateOne(
+        { schoolYearId: targetSchoolYearId, levelId: schedule.levelId },
+        {
+          $setOnInsert: {
+            schoolYearId: targetSchoolYearId,
+            levelId: schedule.levelId,
+            registrationFee: schedule.registrationFee,
+            tuitionFee: schedule.tuitionFee,
+          },
+        },
+        { upsert: true, session },
+      );
+    }
   }
 }

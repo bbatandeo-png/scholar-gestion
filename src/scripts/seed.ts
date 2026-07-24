@@ -9,6 +9,7 @@ import { Role, SchoolYearStatus } from '../common/enums/domain.enums';
 import { SchoolYear } from '../school-years/schemas/school-year.schema';
 import { SettingsService } from '../settings/settings.service';
 import { UsersService } from '../users/users.service';
+import { LevelsService } from '../levels/levels.service';
 
 export function shouldRunSeed(env: NodeJS.ProcessEnv = process.env) {
   if (env.NODE_ENV === 'test') {
@@ -24,7 +25,10 @@ export async function runSeed() {
     const usersService = app.get(UsersService);
     const billingService = app.get(BillingService);
     const settingsService = app.get(SettingsService);
-    const schoolYearModel = app.get<Model<SchoolYear>>(getModelToken(SchoolYear.name));
+    const levelsService = app.get(LevelsService);
+    const schoolYearModel = app.get<Model<SchoolYear>>(
+      getModelToken(SchoolYear.name),
+    );
     const levelModel = app.get<Model<Level>>(getModelToken(Level.name));
 
     const adminPassword = process.env.ADMIN_PASSWORD ?? 'Admin123!';
@@ -37,8 +41,18 @@ export async function runSeed() {
     });
 
     const schoolYears = [
-      { label: '2025-2026', startDate: new Date('2025-09-01'), endDate: new Date('2026-06-30'), status: SchoolYearStatus.CLOSED },
-      { label: '2026-2027', startDate: new Date('2026-09-01'), endDate: new Date('2027-06-30'), status: SchoolYearStatus.OPEN },
+      {
+        label: '2025-2026',
+        startDate: new Date('2025-09-01'),
+        endDate: new Date('2026-06-30'),
+        status: SchoolYearStatus.CLOSED,
+      },
+      {
+        label: '2026-2027',
+        startDate: new Date('2026-09-01'),
+        endDate: new Date('2027-06-30'),
+        status: SchoolYearStatus.OPEN,
+      },
     ];
 
     for (const schoolYear of schoolYears) {
@@ -50,27 +64,52 @@ export async function runSeed() {
     }
 
     const levels = [
-      'CP1', 'CP2', 'CE1', 'CE2', 'CM1', 'CM2', '6EME', '5EME', '4EME', '3EME', '2NDE', '1ERE', 'TERMINALE',
+      'CP1',
+      'CP2',
+      'CE1',
+      'CE2',
+      'CM1',
+      'CM2',
+      '6EME',
+      '5EME',
+      '4EME',
+      '3EME',
+      '2NDE',
+      '1ERE',
+      'TERMINALE',
     ].map((code, index) => ({ code, label: code, sortOrder: index + 1 }));
 
     for (const level of levels) {
-      await levelModel.findOneAndUpdate(
-        { code: level.code },
-        level,
-        { upsert: true, new: true, setDefaultsOnInsert: true },
-      );
+      await levelModel.findOneAndUpdate({ code: level.code }, level, {
+        upsert: true,
+        new: true,
+        setDefaultsOnInsert: true,
+      });
     }
 
-    const openYear = await schoolYearModel.findOne({ label: '2026-2027' }).lean().exec();
-    const storedLevels = await levelModel.find().sort({ sortOrder: 1 }).lean().exec();
+    const openYear = await schoolYearModel
+      .findOne({ label: '2026-2027' })
+      .lean()
+      .exec();
+    const storedLevels = await levelModel
+      .find()
+      .sort({ sortOrder: 1 })
+      .lean()
+      .exec();
     if (openYear) {
-      for (const level of storedLevels.slice(0, 5)) {
-        await billingService.upsertFeeSchedule({
-          schoolYearId: String((openYear as any)._id),
-          levelId: String((level as any)._id),
-          registrationFee: 25000 + level.sortOrder * 1000,
-          tuitionFee: 75000 + level.sortOrder * 5000,
-        });
+      for (const level of storedLevels) {
+        await levelsService.enableForSchoolYear(
+          String((openYear as any)._id),
+          String((level as any)._id),
+        );
+        if (level.sortOrder <= 5) {
+          await billingService.upsertFeeSchedule({
+            schoolYearId: String((openYear as any)._id),
+            levelId: String((level as any)._id),
+            registrationFee: 25000 + level.sortOrder * 1000,
+            tuitionFee: 75000 + level.sortOrder * 5000,
+          });
+        }
       }
     }
 

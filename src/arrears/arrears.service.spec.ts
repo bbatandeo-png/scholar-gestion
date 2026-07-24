@@ -4,6 +4,10 @@ import { Model } from 'mongoose';
 import { startMongoReplSet } from '../../test/mongo-replset';
 import { ArrearsService } from './arrears.service';
 import { Arrear, ArrearSchema } from './schemas/arrear.schema';
+import {
+  ArrearCarryForward,
+  ArrearCarryForwardSchema,
+} from './schemas/arrear-carry-forward.schema';
 
 describe('ArrearsService', () => {
   let repl: Awaited<ReturnType<typeof startMongoReplSet>>;
@@ -15,7 +19,10 @@ describe('ArrearsService', () => {
     const moduleRef = await Test.createTestingModule({
       imports: [
         MongooseModule.forRoot(repl.uri),
-        MongooseModule.forFeature([{ name: Arrear.name, schema: ArrearSchema }]),
+        MongooseModule.forFeature([
+          { name: Arrear.name, schema: ArrearSchema },
+          { name: ArrearCarryForward.name, schema: ArrearCarryForwardSchema },
+        ]),
       ],
       providers: [ArrearsService],
     }).compile();

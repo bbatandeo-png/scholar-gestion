@@ -39,9 +39,21 @@ describe('ReportsService', () => {
       }),
     };
 
-    const service = new ReportsService({} as any, invoiceModel as any, {} as any, {} as any);
+    const service = new ReportsService(
+      {} as any,
+      invoiceModel as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
 
-    const result = await service.registrationPaidStudents('registration', 'level-1', 'year-1');
+    const result = await service.registrationPaidStudents(
+      'registration',
+      'level-1',
+      'year-1',
+    );
 
     expect(result).toHaveLength(1);
     expect((result[0] as any).enrollmentId.studentId.lastname).toBe('A');

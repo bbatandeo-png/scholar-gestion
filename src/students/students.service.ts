@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Connection, Model } from 'mongoose';
 import { GuardiansService } from '../guardians/guardians.service';
@@ -8,7 +13,10 @@ import { SettingsService } from '../settings/settings.service';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
 import { Student, StudentDocument } from './schemas/student.schema';
-import { Enrollment, EnrollmentDocument } from '../enrollments/schemas/enrollment.schema';
+import {
+  Enrollment,
+  EnrollmentDocument,
+} from '../enrollments/schemas/enrollment.schema';
 import { Level, LevelDocument } from '../levels/schemas/level.schema';
 
 @Injectable()
@@ -41,7 +49,9 @@ export class StudentsService {
 
     let nextNumber = rule.startAt;
     for (const student of existing) {
-      const match = String(student.matricule).match(new RegExp(prefixPattern, 'i'));
+      const match = String(student.matricule).match(
+        new RegExp(prefixPattern, 'i'),
+      );
       if (!match) {
         continue;
       }
@@ -52,7 +62,9 @@ export class StudentsService {
     return `${basePrefix}${String(nextNumber).padStart(rule.padding, '0')}`;
   }
 
-  private normalizeGuardians(guardians: CreateStudentDto['guardians'] | UpdateStudentDto['guardians']) {
+  private normalizeGuardians(
+    guardians: CreateStudentDto['guardians'] | UpdateStudentDto['guardians'],
+  ) {
     const allowedTypes = new Set(Object.values(GuardianType));
 
     return (guardians ?? [])
@@ -83,10 +95,11 @@ export class StudentsService {
           address: item.address?.trim() || undefined,
         };
       })
-      .filter((item) =>
-        allowedTypes.has(item.type as GuardianType)
-        && item.lastname.length > 0
-        && item.firstname.length > 0,
+      .filter(
+        (item) =>
+          allowedTypes.has(item.type as GuardianType) &&
+          item.lastname.length > 0 &&
+          item.firstname.length > 0,
       );
   }
 
@@ -102,28 +115,44 @@ export class StudentsService {
     return candidate;
   }
 
-  async list() {
+  async list(schoolYearId?: string) {
+    const enrollmentCriteria = schoolYearId ? { schoolYearId } : {};
+    const studentIds = schoolYearId
+      ? await this.enrollmentModel
+          .distinct('studentId', enrollmentCriteria)
+          .exec()
+      : undefined;
     return this.studentModel
-      .find()
+      .find(studentIds ? { _id: { $in: studentIds } } : {})
       .select('matricule lastname firstname status')
       .sort({ lastname: 1, firstname: 1 })
       .lean()
       .exec();
   }
 
-  async search(query?: string) {
+  async search(query?: string, schoolYearId?: string) {
+    const studentIds = schoolYearId
+      ? await this.enrollmentModel
+          .distinct('studentId', { schoolYearId })
+          .exec()
+      : undefined;
+    const yearCriteria = studentIds ? { _id: { $in: studentIds } } : {};
     if (!query) {
-      return this.studentModel
-        .find()
-        .select('matricule lastname firstname gender birthDate birthPlace district status')
+      const students = await this.studentModel
+        .find(yearCriteria)
+        .select(
+          'matricule lastname firstname gender birthDate birthPlace district status',
+        )
         .sort({ lastname: 1, firstname: 1 })
         .lean()
         .exec();
+      return this.applyYearSnapshots(students, schoolYearId);
     }
 
     const regex = new RegExp(query.trim(), 'i');
-    return this.studentModel
+    const students = await this.studentModel
       .find({
+        ...yearCriteria,
         $or: [
           { matricule: regex },
           { lastname: regex },
@@ -131,14 +160,51 @@ export class StudentsService {
           { district: regex },
         ],
       })
-      .select('matricule lastname firstname gender birthDate birthPlace district status')
+      .select(
+        'matricule lastname firstname gender birthDate birthPlace district status',
+      )
       .sort({ lastname: 1, firstname: 1 })
       .lean()
       .exec();
+    return this.applyYearSnapshots(students, schoolYearId);
   }
 
-  async searchPaginated(query: string | undefined, page: number, pageSize: number) {
-    const criteria = query
+  private async applyYearSnapshots(students: any[], schoolYearId?: string) {
+    if (!schoolYearId || !students.length) {
+      return students;
+    }
+    const enrollments = await this.enrollmentModel
+      .find({
+        schoolYearId,
+        studentId: { $in: students.map((student) => student._id) },
+      })
+      .select('studentId studentSnapshot')
+      .lean()
+      .exec();
+    const snapshots = new Map(
+      enrollments.map((enrollment: any) => [
+        String(enrollment.studentId),
+        enrollment.studentSnapshot,
+      ]),
+    );
+    return students.map((student: any) => ({
+      ...student,
+      ...(snapshots.get(String(student._id)) ?? {}),
+    }));
+  }
+
+  async searchPaginated(
+    query: string | undefined,
+    page: number,
+    pageSize: number,
+    schoolYearId?: string,
+  ) {
+    const studentIds = schoolYearId
+      ? await this.enrollmentModel
+          .distinct('studentId', { schoolYearId })
+          .exec()
+      : undefined;
+    const searchCriteria = query
       ? {
           $or: [
             { matricule: new RegExp(query.trim(), 'i') },
@@ -148,13 +214,19 @@ export class StudentsService {
           ],
         }
       : {};
+    const criteria = {
+      ...searchCriteria,
+      ...(studentIds ? { _id: { $in: studentIds } } : {}),
+    };
 
     const skip = (page - 1) * pageSize;
 
     const [items, total] = await Promise.all([
       this.studentModel
         .find(criteria)
-        .select('matricule lastname firstname gender birthDate birthPlace district status')
+        .select(
+          'matricule lastname firstname gender birthDate birthPlace district status',
+        )
         .sort({ lastname: 1, firstname: 1 })
         .skip(skip)
         .limit(pageSize)
@@ -167,14 +239,23 @@ export class StudentsService {
     const studentsWithLevel = await Promise.all(
       items.map(async (student: any) => {
         const enrollment: any = await this.enrollmentModel
-          .findOne({ studentId: student._id })
+          .findOne({
+            studentId: student._id,
+            ...(schoolYearId ? { schoolYearId } : {}),
+          })
           .populate('levelId')
           .lean()
           .exec();
 
         return {
           ...student,
-          currentLevel: enrollment?.levelId?.label || '-',
+          ...(schoolYearId && enrollment?.studentSnapshot
+            ? enrollment.studentSnapshot
+            : {}),
+          currentLevel:
+            enrollment?.levelSnapshot?.label ||
+            enrollment?.levelId?.label ||
+            '-',
         };
       }),
     );
@@ -199,12 +280,17 @@ export class StudentsService {
 
   async create(dto: CreateStudentDto) {
     const normalizedGuardians = this.normalizeGuardians(dto.guardians);
-    const hasGuardianContact = normalizedGuardians.some((guardian) => Boolean(guardian.phone));
+    const hasGuardianContact = normalizedGuardians.some((guardian) =>
+      Boolean(guardian.phone),
+    );
     if (!hasGuardianContact) {
-      throw new BadRequestException('Au moins un contact parent ou tuteur est obligatoire');
+      throw new BadRequestException(
+        'Au moins un contact parent ou tuteur est obligatoire',
+      );
     }
 
-    const matricule = dto.matricule?.trim() || (await this.generateUniqueMatricule());
+    const matricule =
+      dto.matricule?.trim() || (await this.generateUniqueMatricule());
 
     const duplicate = await this.studentModel.findOne({
       $or: [
@@ -265,7 +351,11 @@ export class StudentsService {
 
       if (dto.guardians) {
         const normalizedGuardians = this.normalizeGuardians(dto.guardians);
-        await this.guardiansService.replaceForStudent(id, normalizedGuardians, session);
+        await this.guardiansService.replaceForStudent(
+          id,
+          normalizedGuardians,
+          session,
+        );
       }
 
       return student;

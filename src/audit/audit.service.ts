@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { ClientSession, Model } from 'mongoose';
 import { AuditLog, AuditLogDocument } from './schemas/audit-log.schema';
 
 @Injectable()
@@ -10,17 +10,27 @@ export class AuditService {
     private readonly auditLogModel: Model<AuditLogDocument>,
   ) {}
 
-  async log(payload: {
-    actorId?: string;
-    action: string;
-    entityType: string;
-    entityId: string;
-    details?: Record<string, unknown>;
-  }) {
-    return this.auditLogModel.create({
-      ...payload,
-      details: payload.details ?? {},
-    });
+  async log(
+    payload: {
+      schoolYearId?: string;
+      actorId?: string;
+      action: string;
+      entityType: string;
+      entityId: string;
+      details?: Record<string, unknown>;
+    },
+    session?: ClientSession,
+  ) {
+    const created = await this.auditLogModel.create(
+      [
+        {
+          ...payload,
+          details: payload.details ?? {},
+        },
+      ],
+      { session },
+    );
+    return created[0];
   }
 
   async findByEntityTypes(entityTypes: string[], entityId: string) {

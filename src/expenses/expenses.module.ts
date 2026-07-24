@@ -4,8 +4,15 @@ import { SettingsModule } from '../settings/settings.module';
 import { ExpensesController } from './expenses.controller';
 import { ExpensesService } from './expenses.service';
 import { Expense, ExpenseSchema } from './schemas/expense.schema';
-import { ExpenseCategory, ExpenseCategorySchema } from './schemas/expense-category.schema';
-import { SchoolYear, SchoolYearSchema } from '../school-years/schemas/school-year.schema';
+import {
+  ExpenseCategory,
+  ExpenseCategorySchema,
+} from './schemas/expense-category.schema';
+import {
+  SchoolYear,
+  SchoolYearSchema,
+} from '../school-years/schemas/school-year.schema';
+import { SchoolYearsModule } from '../school-years/school-years.module';
 
 @Module({
   imports: [
@@ -15,6 +22,7 @@ import { SchoolYear, SchoolYearSchema } from '../school-years/schemas/school-yea
       { name: SchoolYear.name, schema: SchoolYearSchema },
     ]),
     SettingsModule,
+    SchoolYearsModule,
   ],
   controllers: [ExpensesController],
   providers: [ExpensesService],

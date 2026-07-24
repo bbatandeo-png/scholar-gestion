@@ -4,7 +4,7 @@
     <div class="panel">
       <h2>{% if editYear %}Modifier annee scolaire{% else %}Nouvelle annee scolaire{% endif %}</h2>
       <div class="notice notice-info">
-        Une seule annee scolaire peut etre active (<strong>open</strong>) a la fois. Ouvrir une nouvelle annee repassera l'annee deja active en draft.
+        La clôture est manuelle. Clôturez l’année ouverte lorsque vous l’avez décidé, puis préparez et activez la nouvelle année depuis la promotion annuelle. Une année ancienne se consulte avec le sélecteur sans modifier son historique.
       </div>
       <form method="post" action="{% if editYear %}/settings/school-years/{{ editYear._id }}{% else %}/settings/school-years{% endif %}" class="stack">
         <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
@@ -15,7 +15,7 @@
           <label>Statut
             <select name="status">
               <option value="draft" {% if editYear and editYear.status == 'draft' %}selected{% endif %}>draft</option>
-              <option value="open" {% if editYear and editYear.status == 'open' %}selected{% endif %}>open</option>
+              {% if editYear and editYear.status == 'open' %}<option value="open" selected>open</option>{% endif %}
               <option value="closed" {% if editYear and editYear.status == 'closed' %}selected{% endif %}>closed</option>
               <option value="archived" {% if editYear and editYear.status == 'archived' %}selected{% endif %}>archived</option>
             </select>
@@ -48,16 +48,26 @@
               <td>{% set value = item.status %}{% include "partials/status-badge.njk" %}</td>
               <td>
                 <a class="button btn-sm" href="/settings/school-years/{{ item._id }}/edit">Modifier</a>
-                <form method="post" action="/settings/school-years/{{ item._id }}/status" style="display:inline-flex;gap:8px;flex-wrap:wrap;">
+                <form method="post" action="/settings/school-years/select" style="display:inline-flex;gap:8px;flex-wrap:wrap;">
                   <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
-                  <input type="hidden" name="status" value="open" />
-                  <button type="submit" class="button btn-sm" {% if item.status == 'open' %}disabled{% endif %}>Ouvrir</button>
+                  <input type="hidden" name="schoolYearId" value="{{ item._id }}" />
+                  <input type="hidden" name="returnTo" value="/dashboard" />
+                  <button type="submit" class="button btn-sm secondary">Consulter</button>
                 </form>
-                <form method="post" action="/settings/school-years/{{ item._id }}/status" style="display:inline-flex;gap:8px;flex-wrap:wrap;">
-                  <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
-                  <input type="hidden" name="status" value="closed" />
-                  <button type="submit" class="button btn-sm secondary" {% if item.status == 'closed' %}disabled{% endif %}>Cloturer</button>
-                </form>
+                {% if item.status == 'draft' %}<a class="button btn-sm" href="/promotions">Préparer et activer</a>{% endif %}
+                {% if item.status == 'open' %}
+                  <form method="post" action="/settings/school-years/{{ item._id }}/status" style="display:inline-flex;gap:8px;flex-wrap:wrap;">
+                    <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+                    <input type="hidden" name="status" value="closed" />
+                    <button type="submit" class="button btn-sm secondary">Clôturer</button>
+                  </form>
+                {% elif item.status == 'closed' and not openSchoolYear %}
+                  <form method="post" action="/settings/school-years/{{ item._id }}/status" style="display:inline-flex;gap:8px;flex-wrap:wrap;">
+                    <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+                    <input type="hidden" name="status" value="open" />
+                    <button type="submit" class="button btn-sm">Ouvrir</button>
+                  </form>
+                {% endif %}
               </td>
             </tr>
           {% endfor %}

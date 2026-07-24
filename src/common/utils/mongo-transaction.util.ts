@@ -13,6 +13,7 @@ function isTransactionUnsupportedError(error: unknown): boolean {
 export async function runWithMongoTransactionFallback<T>(
   connection: Connection,
   work: (session?: ClientSession) => Promise<T>,
+  options: { allowFallback?: boolean } = {},
 ): Promise<T> {
   const session = await connection.startSession();
   try {
@@ -28,6 +29,11 @@ export async function runWithMongoTransactionFallback<T>(
     }
 
     if (isTransactionUnsupportedError(error)) {
+      if (options.allowFallback === false) {
+        throw new Error(
+          'Cette operation exige MongoDB en mode replica set pour garantir une transaction atomique',
+        );
+      }
       return work();
     }
 
