@@ -195,10 +195,13 @@
         const navToggle = document.querySelector('.mobile-nav-toggle');
         const navBackdrop = document.querySelector('.sidebar-backdrop');
         const sidebar = document.querySelector('.sidebar');
+        const navLinks = document.querySelector('.nav-links');
+        const navDetails = document.querySelectorAll('.nav-details');
 
         const setNavigationOpen = (open) => {
           body.classList.toggle('nav-open', open);
           navToggle?.setAttribute('aria-expanded', String(open));
+          sidebar?.setAttribute('aria-hidden', String(!open && window.matchMedia('(max-width: 980px)').matches));
           navToggle?.setAttribute(
             'aria-label',
             open ? 'Fermer le menu principal' : 'Ouvrir le menu principal',
@@ -214,6 +217,34 @@
             setNavigationOpen(false);
           }
         });
+        navDetails.forEach((details) => {
+          const summary = details.querySelector('summary');
+          summary?.setAttribute('aria-expanded', String(details.open));
+
+          details.addEventListener('toggle', () => {
+            summary?.setAttribute('aria-expanded', String(details.open));
+            if (!details.open || !navLinks) {
+              return;
+            }
+
+            requestAnimationFrame(() => {
+              const navigationRect = navLinks.getBoundingClientRect();
+              const detailsRect = details.getBoundingClientRect();
+
+              if (detailsRect.bottom > navigationRect.bottom) {
+                navLinks.scrollBy({
+                  top: detailsRect.bottom - navigationRect.bottom + 12,
+                  behavior: 'smooth',
+                });
+              } else if (detailsRect.top < navigationRect.top) {
+                navLinks.scrollBy({
+                  top: detailsRect.top - navigationRect.top - 12,
+                  behavior: 'smooth',
+                });
+              }
+            });
+          });
+        });
         document.addEventListener('keydown', (event) => {
           if (event.key === 'Escape') {
             setNavigationOpen(false);
@@ -222,8 +253,12 @@
         window.addEventListener('resize', () => {
           if (!window.matchMedia('(max-width: 980px)').matches) {
             setNavigationOpen(false);
+            sidebar?.removeAttribute('aria-hidden');
           }
         });
+        if (window.matchMedia('(max-width: 980px)').matches) {
+          sidebar?.setAttribute('aria-hidden', 'true');
+        }
 
         document.querySelectorAll('table').forEach((table) => {
           if (!table.parentElement?.classList.contains('table-shell')) {

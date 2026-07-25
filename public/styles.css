@@ -71,11 +71,15 @@ body {
 }
 .nav-links {
   display: grid;
+  align-content: start;
+  grid-auto-rows: max-content;
   gap: 10px;
   margin-top: 6px;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding: 4px 4px 8px 2px;
   scrollbar-width: thin;
   scrollbar-color: rgba(232, 247, 242, 0.42) transparent;
@@ -168,7 +172,10 @@ body {
 .nav-details[open] > summary::after {
   transform: rotate(180deg);
 }
-.nav-submenu {
+.nav-details:not([open]) > .nav-submenu {
+  display: none;
+}
+.nav-details[open] > .nav-submenu {
   display: grid;
   gap: 4px;
   padding: 6px 8px 8px 12px;
@@ -1052,19 +1059,27 @@ th.sortable.sort-desc::after {
     z-index: 1100;
     inset: 0 auto 0 0;
     width: min(86vw, 320px);
+    max-width: calc(100vw - 28px);
     height: 100dvh;
     padding: 72px 18px 20px;
     transform: translateX(-105%);
-    transition: transform 180ms ease;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      transform 180ms ease,
+      visibility 0s linear 180ms;
     overflow: hidden;
   }
   .nav-open {
     overflow: hidden;
   }
-  .nav-open .sidebar {
+  body.nav-open .sidebar {
     transform: translateX(0);
+    visibility: visible;
+    pointer-events: auto;
+    transition-delay: 0s;
   }
-  .nav-open .sidebar-backdrop {
+  body.nav-open .sidebar-backdrop {
     opacity: 1;
     visibility: visible;
   }
