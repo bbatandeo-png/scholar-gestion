@@ -1,2 +1,4 @@
 {% set value = value | lower %}
-<span class="badge {{ value }}">{{ label or value }}</span>
+{% set groupMeta = ENUM_META[group] if group else None %}
+{% set meta = groupMeta[value] if groupMeta else None %}
+<span class="badge {{ value }}" {% if meta and meta.description %}title="{{ meta.description }}"{% endif %}>{{ label or (meta.label if meta else None) or value }}</span>

@@ -107,10 +107,14 @@ export class DashboardService {
     ] = await Promise.all([
       this.enrollmentModel.distinct('studentId', { schoolYearId }).exec(),
       this.enrollmentModel.countDocuments({ schoolYearId, status: 'active' }),
-      this.enrollmentModel.countDocuments({
-        schoolYearId,
-        finalDecision: 'archived',
-      }),
+      // Promotion decisions (archived/transferred/left) are recorded on the
+      // SOURCE enrollment, in the year the student left from - not on any
+      // enrollment in the currently selected year, so filtering enrollments
+      // by {schoolYearId, finalDecision} here could never match anything.
+      // Student.status is the durable, non-year-scoped signal for this
+      // (set correctly by PromotionsService.validate()) - matches the
+      // "Eleves archives" label exactly, unlike transferred/left.
+      this.studentModel.countDocuments({ status: 'archived' }),
       this.invoiceModel.find({ schoolYearId }).lean().exec(),
       this.arrearModel.countDocuments({
         $or: [

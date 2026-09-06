@@ -1,0 +1,417 @@
+{% extends "layout.njk" %}
+{% import "partials/legend.njk" as legend %}
+{% block content %}
+  <div class="panel notice" id="new-credentials-panel" style="display:none;"
+       data-has-new="{{ 'true' if newCredentials else 'false' }}"
+       data-admin-email="{{ newCredentials.email if newCredentials else '' }}"
+       data-admin-password="{{ newCredentials.tempPassword if newCredentials else '' }}">
+    <h3>Compte administrateur cree</h3>
+    <p class="muted">Notez ces identifiants - ils resteront affiches meme apres rechargement de la page, jusqu'a ce que vous cliquiez sur "Fermer".</p>
+    <div class="form-grid">
+      <label>Email
+        <div class="inline-form no-wrap">
+          <input type="text" id="new-admin-email" readonly />
+          <button type="button" class="button secondary btn-sm" data-copy-target="new-admin-email">Copier</button>
+        </div>
+      </label>
+      <label>Mot de passe temporaire
+        <div class="inline-form no-wrap">
+          <input type="text" id="new-admin-password" readonly />
+          <button type="button" class="button secondary btn-sm" data-copy-target="new-admin-password">Copier</button>
+        </div>
+      </label>
+    </div>
+    <div class="toolbar compact-actions top-gap">
+      <button type="button" class="button secondary btn-sm" id="dismiss-new-credentials">J'ai note les identifiants, fermer</button>
+    </div>
+  </div>
+  <script>
+    (function () {
+      var STORAGE_KEY = 'schoolar_new_admin_credentials';
+      var panel = document.getElementById('new-credentials-panel');
+
+      // The server only ever reveals a freshly created password once (it
+      // isn't stored in clear text) - mirror that one reveal into
+      // sessionStorage so it survives a page reload/navigation within this
+      // tab, instead of vanishing the instant the server-side one-time
+      // value is consumed.
+      if (panel.getAttribute('data-has-new') === 'true') {
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+          email: panel.getAttribute('data-admin-email'),
+          tempPassword: panel.getAttribute('data-admin-password'),
+        }));
+      }
+
+      var stored = sessionStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        var credentials = JSON.parse(stored);
+        document.getElementById('new-admin-email').value = credentials.email;
+        document.getElementById('new-admin-password').value = credentials.tempPassword;
+        panel.style.display = '';
+      }
+
+      document.getElementById('dismiss-new-credentials').addEventListener('click', function () {
+        sessionStorage.removeItem(STORAGE_KEY);
+        panel.style.display = 'none';
+      });
+
+      function flashButton(button, text, durationMs) {
+        var original = button.textContent;
+        button.textContent = text;
+        setTimeout(function () {
+          button.textContent = original;
+        }, durationMs);
+      }
+
+      // Try the old execCommand('copy') FIRST, not as a fallback: it runs
+      // synchronously inside the click handler, so it reliably stays
+      // within the "trusted user gesture" window. navigator.clipboard is
+      // async - by the time its .then()/.catch() callback runs it can be
+      // outside that window in some browsers/embedded webviews (VS Code's
+      // Simple Browser included), which silently no-ops and leaves the
+      // clipboard holding whatever was copied there before (e.g. the
+      // current page's own URL) - exactly the confusing symptom this
+      // ordering avoids.
+      function legacyCopy(field) {
+        field.focus();
+        field.select();
+        try {
+          return document.execCommand('copy');
+        } catch (e) {
+          return false;
+        }
+      }
+
+      function copyField(field, button) {
+        if (legacyCopy(field)) {
+          flashButton(button, 'Copie !', 1500);
+          return;
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(field.value).then(
+            function () {
+              flashButton(button, 'Copie !', 1500);
+            },
+            function () {
+              flashButton(button, 'Echec - selectionnez et Ctrl+C', 3000);
+            },
+          );
+        } else {
+          flashButton(button, 'Echec - selectionnez et Ctrl+C', 3000);
+        }
+      }
+
+      document.querySelectorAll('[data-copy-target]').forEach(function (button) {
+        button.addEventListener('click', function () {
+          var field = document.getElementById(button.getAttribute('data-copy-target'));
+          copyField(field, button);
+        });
+      });
+    })();
+  </script>
+
+  {% if editEcole %}
+    <div class="panel top-gap">
+      <div class="panel-heading">
+        <div>
+          <h3>Comptes de cette ecole</h3>
+          <p class="muted">Copiez l'email ou reinitialisez le mot de passe si l'ecole n'arrive pas a se connecter.</p>
+        </div>
+      </div>
+      <div class="table-shell">
+        <table class="table-report">
+          <thead>
+            <tr><th>Nom</th><th>Email</th><th>Role</th><th>Statut</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for admin in ecoleAdmins %}
+              <tr>
+                <td>{{ admin.name }}</td>
+                <td>
+                  <div class="inline-form no-wrap">
+                    <input type="text" id="admin-email-{{ admin._id }}" value="{{ admin.email }}" readonly />
+                    <button type="button" class="button secondary btn-sm" data-copy-target="admin-email-{{ admin._id }}">Copier</button>
+                  </div>
+                </td>
+                <td>{{ admin.role }}</td>
+                <td>{{ admin.status }}</td>
+                <td>
+                  <form method="post" action="/platform/ecoles/{{ editEcole._id }}/users/{{ admin._id }}/reset-password" class="inline-form no-wrap" onsubmit="return confirm('Reinitialiser le mot de passe de ce compte ? Un nouveau mot de passe temporaire sera genere et devra lui etre communique.');">
+                    <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+                    <button type="submit" class="button secondary btn-sm">Reinitialiser le mot de passe</button>
+                  </form>
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="5">Aucun compte pour cette ecole.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel top-gap">
+      <div class="panel-heading">
+        <div>
+          <h3>Modules actives</h3>
+          <p class="muted">Une ecriture est refusee tant qu'un module est desactive - les donnees deja saisies restent consultables.</p>
+        </div>
+      </div>
+      <div class="form-grid">
+        <div>
+          <strong>Finance</strong>
+          <p class="muted">{{ 'Actif' if moduleStatus.finance else 'Inactif' }}</p>
+          {% if moduleStatus.finance %}
+            <form method="post" action="/platform/ecoles/{{ editEcole._id }}/modules/toggle" class="inline-form no-wrap" onsubmit="return confirm('Desactiver le module Finance pour cette ecole ? Toute nouvelle ecriture financiere sera refusee tant que le module ne sera pas reactive (les donnees deja saisies restent consultables).');">
+          {% else %}
+            <form method="post" action="/platform/ecoles/{{ editEcole._id }}/modules/toggle" class="inline-form no-wrap" onsubmit="return confirm('Activer le module Finance pour cette ecole ?');">
+          {% endif %}
+            <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+            <input type="hidden" name="code" value="FINANCE" />
+            <input type="hidden" name="active" value="{{ 'false' if moduleStatus.finance else 'true' }}" />
+            <button type="submit" class="button secondary btn-sm">{{ 'Desactiver' if moduleStatus.finance else 'Activer' }}</button>
+          </form>
+        </div>
+        <div>
+          <strong>Bulletins</strong>
+          <p class="muted">{{ 'Actif' if moduleStatus.bulletins else 'Inactif' }}</p>
+          {% if moduleStatus.bulletins %}
+            <form method="post" action="/platform/ecoles/{{ editEcole._id }}/modules/toggle" class="inline-form no-wrap" onsubmit="return confirm('Desactiver le module Bulletins pour cette ecole ? Toute nouvelle ecriture sur les bulletins sera refusee tant que le module ne sera pas reactive (les donnees deja saisies restent consultables).');">
+          {% else %}
+            <form method="post" action="/platform/ecoles/{{ editEcole._id }}/modules/toggle" class="inline-form no-wrap" onsubmit="return confirm('Activer le module Bulletins pour cette ecole ?');">
+          {% endif %}
+            <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+            <input type="hidden" name="code" value="BULLETINS" />
+            <input type="hidden" name="active" value="{{ 'false' if moduleStatus.bulletins else 'true' }}" />
+            <button type="submit" class="button secondary btn-sm">{{ 'Desactiver' if moduleStatus.bulletins else 'Activer' }}</button>
+          </form>
+        </div>
+      </div>
+    </div>
+    <div class="panel top-gap">
+      <div class="panel-heading">
+        <div>
+          <h3>Pack d'installation</h3>
+          <p class="muted">Exe pre-construit (fabrique via <code>npm run build:exe:native</code> et depose sur ce serveur), empaquete avec un <code>.env</code> genere pour cette ecole (secrets propres, admin de cette ecole). Rien n'est compile ici — c'est un simple assemblage de fichiers.</p>
+        </div>
+      </div>
+      {% if releaseAssetsConfigured %}
+        <a class="button" id="download-installation-package" href="/platform/ecoles/{{ editEcole._id }}/installation-package">Télécharger le pack d'installation (.zip)</a>
+        <script>
+          (() => {
+            const link = document.getElementById('download-installation-package');
+            // A download link never navigates the page, so "Version de la
+            // release"/"Date d'activation" (updated server-side the instant
+            // this request starts, well before the zip finishes streaming)
+            // would otherwise stay stale until a manual refresh.
+            link?.addEventListener('click', () => {
+              setTimeout(() => window.location.reload(), 1200);
+            });
+          })();
+        </script>
+      {% else %}
+        <p class="notice notice-info">Indisponible sur cette instance — aucun exe pre-construit trouve (variable <code>RELEASE_ASSETS_DIR</code> non configuree, ou dossier vide).</p>
+      {% endif %}
+    </div>
+
+    <div class="panel top-gap">
+      <div class="panel-heading">
+        <div>
+          <h3>Licence</h3>
+          <p class="muted">Suivi manuel (version, dates, clé) — a reporter ici a la main si ce n'est pas la meme instance que celle qui a genere la cle. Ces champs ne pilotent rien : ce qui bloque reellement l'ecriture cote poste client, c'est l'etat ci-dessous.</p>
+        </div>
+      </div>
+      <p>
+        Etat actuel sur <strong>cette instance</strong> :
+        {% if licenseStatus.state == 'ok' %}
+          <span class="badge active">Active</span> jusqu'au {{ licenseStatus.expiresAt | formatDate }}
+        {% elif licenseStatus.state == 'grace' %}
+          <span class="badge partial">Grace</span> — expiree le {{ licenseStatus.expiresAt | formatDate }}, lecture seule a partir du {{ licenseStatus.graceEndsAt | formatDate }}
+        {% elif licenseStatus.expiresAt %}
+          <span class="badge badge-danger">Bloquee</span> — expiree le {{ licenseStatus.expiresAt | formatDate }}
+        {% else %}
+          <span class="badge badge-neutral">Aucune licence enregistree sur cette instance</span>
+        {% endif %}
+      </p>
+
+      {% if licenseGenerationAvailable %}
+        <form method="post" action="/platform/ecoles/{{ editEcole._id }}/license/generate" class="inline-form">
+          <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+          <label>Nouvelle date d'expiration
+            <input type="date" name="expiresAt" required />
+          </label>
+          <button type="submit" class="button btn-sm">Générer et appliquer localement</button>
+        </form>
+      {% else %}
+        <p class="notice notice-info">Generation indisponible sur cette instance (pas de LICENSE_SECRET configure — normal pour une instance en ligne de suivi uniquement).</p>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  <section class="grid cols-2">
+    <div class="panel">
+      <div class="panel-heading">
+        <div>
+          <h2>{% if editEcole %}Modifier l'ecole{% else %}Nouvelle ecole{% endif %}</h2>
+          <p class="muted">
+            {% if editEcole %}
+              Mettez a jour les informations de {{ editEcole.nom }}.
+            {% else %}
+              Cree un nouvel etablissement (un "tenant") avec ses propres donnees, isolees de toutes les autres ecoles. Un compte administrateur est genere automatiquement pour son equipe.
+            {% endif %}
+          </p>
+        </div>
+      </div>
+      <form method="post" action="{% if editEcole %}/platform/ecoles/{{ editEcole._id }}{% else %}/platform/ecoles{% endif %}" enctype="multipart/form-data">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+
+        <div class="form-section">
+          <span class="form-section-title">Identite de l'etablissement</span>
+          <div class="form-grid">
+            <label>Nom<input name="nom" value="{{ editEcole.nom }}" required /></label>
+            <label>Ministere de tutelle<input name="ministereTutelle" value="{{ editEcole.ministereTutelle }}" /></label>
+            <label>DRE<input name="dre" value="{{ editEcole.dre }}" /></label>
+            <label>Inspection<input name="inspection" value="{{ editEcole.inspection }}" /></label>
+            <label>Logo
+              <input type="file" name="logo" accept="image/png,image/jpeg,image/webp,image/gif" />
+              {% if editEcole.logo %}
+                <img src="/uploads/{{ editEcole.logo }}" alt="Logo actuel" style="height:48px;display:block;margin-top:4px;" />
+              {% endif %}
+            </label>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <span class="form-section-title">Coordonnees</span>
+          <div class="form-grid">
+            <label>Email<input type="email" name="email" value="{{ editEcole.email }}" /></label>
+            <label>Contact<input name="contact" value="{{ editEcole.contact }}" /></label>
+            <label>Localite<input name="localite" value="{{ editEcole.localite }}" /></label>
+          </div>
+        </div>
+
+        {% if not editEcole %}
+          <div class="form-section">
+            <span class="form-section-title">Compte administrateur</span>
+            <p class="form-section-desc">Ce compte permet a l'equipe de l'ecole de se connecter des la creation - les identifiants generes seront affiches une seule fois, juste apres l'enregistrement.</p>
+            <div class="form-grid">
+              <label>Nom de l'administrateur<input name="adminName" required /></label>
+              <label>Email de l'administrateur<input type="email" name="adminEmail" required /></label>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <span class="form-section-title">Modules actives a la creation</span>
+            <p class="form-section-desc">Modifiable ensuite depuis la fiche de l'ecole.</p>
+            <div class="grid cols-2">
+              <label class="toggle-option"><input type="checkbox" name="activateFinance" value="true" /> Module Finance</label>
+              <label class="toggle-option"><input type="checkbox" name="activateBulletins" value="true" /> Module Bulletins</label>
+            </div>
+          </div>
+        {% endif %}
+
+        <div class="form-section">
+          <span class="form-section-title">Personnalisation visuelle</span>
+          <p class="form-section-desc">Ces couleurs apparaissent sur les cartes scolaires et les bulletins generes pour cette ecole - avec le logo, c'est ce qui permet de distinguer chaque etablissement d'un coup d'oeil.</p>
+          <div class="grid cols-2">
+            <div class="color-field">
+              <input type="color" name="couleurCarte" id="couleurCarte-input" value="{{ editEcole.couleurCarte or '#eef2fb' }}" {% if not editEcole.couleurCarte %}disabled{% endif %} />
+              <label for="couleurCarte-toggle" class="toggle-option">
+                <input type="checkbox" id="couleurCarte-toggle" name="couleurCartePersonnalisee" value="true" {% if editEcole.couleurCarte %}checked{% endif %} />
+                Couleur de la carte scolaire
+              </label>
+            </div>
+            <div class="color-field">
+              <input type="color" name="couleurBulletin" id="couleurBulletin-input" value="{{ editEcole.couleurBulletin or '#1a3d8f' }}" {% if not editEcole.couleurBulletin %}disabled{% endif %} />
+              <label for="couleurBulletin-toggle" class="toggle-option">
+                <input type="checkbox" id="couleurBulletin-toggle" name="couleurBulletinPersonnalisee" value="true" {% if editEcole.couleurBulletin %}checked{% endif %} />
+                Couleur des bulletins
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {% if editEcole %}
+          <div class="form-section">
+            <span class="form-section-title">Suivi licence (manuel)</span>
+            <p class="form-section-desc">Purement informatif — a reporter a la main si la cle a ete generee ailleurs (autre instance, ou script). Auto-rempli quand la generation locale ci-dessus est utilisee.</p>
+            <div class="form-grid">
+              <label>Version de la release<input name="releaseVersion" value="{{ editEcole.releaseVersion }}" placeholder="ex. 1.4.2" /></label>
+              <label>Date d'activation<input type="date" name="licenseActivatedAt" value="{{ editEcole.licenseActivatedAt | inputDate }}" /></label>
+              <label>Date d'expiration<input type="date" name="licenseExpiresAt" value="{{ editEcole.licenseExpiresAt | inputDate }}" /></label>
+            </div>
+            <label>Clé d'activation
+              <div class="inline-form no-wrap">
+                <input type="text" id="license-key-field" name="licenseActivationKey" value="{{ editEcole.licenseActivationKey }}" placeholder="Coller ici si generee sur une autre instance" />
+                <button type="button" class="button secondary btn-sm" data-copy-target="license-key-field">Copier</button>
+              </div>
+            </label>
+          </div>
+        {% endif %}
+
+        <div class="toolbar compact-actions">
+          <button type="submit">{% if editEcole %}Mettre à jour{% else %}Enregistrer{% endif %}</button>
+          {% if editEcole %}<a class="button secondary" href="/platform/ecoles">Annuler</a>{% endif %}
+        </div>
+      </form>
+      <script>
+        (() => {
+          const bindColorToggle = (toggleId, inputId) => {
+            const toggle = document.getElementById(toggleId);
+            const input = document.getElementById(inputId);
+            toggle?.addEventListener('change', () => {
+              input.disabled = !toggle.checked;
+            });
+          };
+          bindColorToggle('couleurCarte-toggle', 'couleurCarte-input');
+          bindColorToggle('couleurBulletin-toggle', 'couleurBulletin-input');
+        })();
+      </script>
+    </div>
+
+    <div class="panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Ecoles</h2>
+          <p class="muted">Etablissements clients de la plateforme.</p>
+        </div>
+      </div>
+      <div class="table-shell">
+        <table class="table-report">
+          <thead>
+            <tr><th>Nom</th><th>Localite</th><th>Statut</th><th>Inscription</th><th>Actions</th></tr>
+          </thead>
+          <tbody>
+            {% for item in ecoles %}
+              <tr>
+                <td>{{ item.nom }}</td>
+                <td>{{ item.localite }}</td>
+                <td>{% set value = item.statutCompte %}{% set group = 'ecoleAccountStatus' %}{% include "partials/status-badge.njk" %}</td>
+                <td>{{ item.dateInscription | formatDate }}</td>
+                <td>
+                  <div class="table-actions">
+                    <a class="button btn-sm" href="/platform/ecoles/{{ item._id }}/edit">Modifier</a>
+                    <a class="button btn-sm secondary" href="/platform/ecoles/{{ item._id }}/dashboard">Tableau de bord</a>
+                    <a class="button btn-sm secondary" href="/platform/facturation/{{ item._id }}">Facturation</a>
+                    <form method="post" action="/platform/ecoles/{{ item._id }}/status" class="inline-form no-wrap">
+                      <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+                      <select name="statutCompte">
+                        {% for key, meta in ENUM_META.ecoleAccountStatus %}
+                          <option value="{{ key }}" {% if item.statutCompte == key %}selected{% endif %} title="{{ meta.description }}">{{ meta.label }}</option>
+                        {% endfor %}
+                      </select>
+                      <button type="submit" class="secondary btn-sm">Statut</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="5">Aucune ecole.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {{ legend.render(['ecoleAccountStatus']) }}
+    </div>
+  </section>
+{% endblock %}

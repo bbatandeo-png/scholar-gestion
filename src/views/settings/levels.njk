@@ -10,6 +10,13 @@
             <label>Code<input name="code" value="{{ editLevel.code }}" required /></label>
             <label>Libelle<input name="label" value="{{ editLevel.label }}" required /></label>
             <label>Ordre<input type="number" name="sortOrder" min="1" value="{{ editLevel.sortOrder }}" required /></label>
+            <label>Cycle
+              <select name="cycle">
+                <option value="">Non defini</option>
+                <option value="1" {% if editLevel.cycle == 1 %}selected{% endif %}>College (trimestres)</option>
+                <option value="2" {% if editLevel.cycle == 2 %}selected{% endif %}>Lycee (semestres)</option>
+              </select>
+            </label>
           </div>
           <div class="toolbar compact-actions">
             <button type="submit">Mettre à jour</button>
@@ -26,6 +33,13 @@
           <label>Code<input name="code" required /></label>
           <label>Libelle<input name="label" required /></label>
           <label>Ordre<input type="number" name="sortOrder" min="1" required /></label>
+          <label>Cycle
+            <select name="cycle">
+              <option value="">Non defini</option>
+              <option value="1">College (trimestres)</option>
+              <option value="2">Lycee (semestres)</option>
+            </select>
+          </label>
         </div>
         <button type="submit">Enregistrer</button>
       </form>
@@ -39,14 +53,15 @@
         <a class="button secondary" href="/settings/levels/export">Exporter Excel</a>
       </div>
       <div class="table-shell">
-        <table>
-          <thead><tr><th>Code</th><th>Libelle</th><th>Ordre</th><th>Actions</th></tr></thead>
+        <table class="table-report">
+          <thead><tr><th>Code</th><th>Libelle</th><th>Ordre</th><th>Cycle</th><th>Actions</th></tr></thead>
           <tbody>
             {% for item in levels %}
               <tr>
                 <td>{{ item.code }}</td>
                 <td>{{ item.label }}</td>
                 <td>{{ item.sortOrder }}</td>
+                <td>{% if item.cycle == 1 %}College{% elif item.cycle == 2 %}Lycee{% else %}—{% endif %}</td>
                 <td><a class="button btn-sm" href="/settings/levels/{{ item._id }}/edit">Modifier</a></td>
               </tr>
             {% endfor %}

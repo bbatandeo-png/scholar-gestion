@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuditModule } from '../audit/audit.module';
+import { EcoleModulesModule } from '../ecole-modules/ecole-modules.module';
 import { Arrear, ArrearSchema } from './schemas/arrear.schema';
 import {
   ArrearCarryForward,
@@ -18,6 +19,7 @@ import { SchoolYearsModule } from '../school-years/school-years.module';
     ]),
     AuditModule,
     SchoolYearsModule,
+    EcoleModulesModule,
   ],
   controllers: [ArrearsController],
   providers: [ArrearsService],

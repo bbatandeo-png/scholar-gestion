@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, SchemaTypes } from 'mongoose';
+import { ecoleScopePlugin } from '../../common/mongoose/ecole-scope.plugin';
 
 export type ArrearCarryForwardDocument = HydratedDocument<ArrearCarryForward>;
 
@@ -48,8 +49,9 @@ export class ArrearCarryForward {
 
 export const ArrearCarryForwardSchema =
   SchemaFactory.createForClass(ArrearCarryForward);
+ArrearCarryForwardSchema.plugin(ecoleScopePlugin);
 ArrearCarryForwardSchema.index(
-  { arrearId: 1, targetEnrollmentId: 1 },
+  { ecoleId: 1, arrearId: 1, targetEnrollmentId: 1 },
   { unique: true },
 );
 ArrearCarryForwardSchema.index({ targetSchoolYearId: 1, carriedAt: -1 });

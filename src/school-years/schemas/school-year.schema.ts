@@ -1,12 +1,13 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, SchemaTypes } from 'mongoose';
 import { SchoolYearStatus } from '../../common/enums/domain.enums';
+import { ecoleScopePlugin } from '../../common/mongoose/ecole-scope.plugin';
 
 export type SchoolYearDocument = HydratedDocument<SchoolYear>;
 
 @Schema({ timestamps: true, collection: 'school_years' })
 export class SchoolYear {
-  @Prop({ required: true, unique: true, trim: true })
+  @Prop({ required: true, trim: true })
   label: string;
 
   @Prop({ required: true })
@@ -33,8 +34,10 @@ export class SchoolYear {
 }
 
 export const SchoolYearSchema = SchemaFactory.createForClass(SchoolYear);
+SchoolYearSchema.plugin(ecoleScopePlugin);
+SchoolYearSchema.index({ ecoleId: 1, label: 1 }, { unique: true });
 SchoolYearSchema.index(
-  { status: 1 },
+  { ecoleId: 1, status: 1 },
   {
     unique: true,
     partialFilterExpression: { status: SchoolYearStatus.OPEN },

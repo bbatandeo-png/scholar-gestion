@@ -55,9 +55,7 @@ export class SettingsService {
     const setting = await this.settingModel
       .findOne({
         key: SettingKey.PAYMENT_ALLOCATION_RULE,
-        ...(schoolYearId
-          ? { schoolYearId }
-          : { schoolYearId: { $exists: false } }),
+        schoolYearId: schoolYearId ?? null,
       })
       .lean()
       .exec();
@@ -77,7 +75,7 @@ export class SettingsService {
   ) {
     const criteria = {
       key: SettingKey.PAYMENT_ALLOCATION_RULE,
-      ...(schoolYearId ? { schoolYearId } : {}),
+      schoolYearId: schoolYearId ?? null,
     };
     return this.settingModel.findOneAndUpdate(
       criteria,
@@ -88,7 +86,7 @@ export class SettingsService {
 
   async getStudentMatriculeRule() {
     const setting = await this.settingModel
-      .findOne({ key: SettingKey.STUDENT_MATRICULE_RULE })
+      .findOne({ key: SettingKey.STUDENT_MATRICULE_RULE, schoolYearId: null })
       .lean()
       .exec();
 
@@ -97,30 +95,39 @@ export class SettingsService {
 
   async setStudentMatriculeRule(value: StudentMatriculeRule) {
     const normalized = this.parseStudentMatriculeRule(JSON.stringify(value));
+    const criteria = {
+      key: SettingKey.STUDENT_MATRICULE_RULE,
+      schoolYearId: null,
+    };
 
     return this.settingModel.findOneAndUpdate(
-      { key: SettingKey.STUDENT_MATRICULE_RULE },
-      {
-        key: SettingKey.STUDENT_MATRICULE_RULE,
-        value: JSON.stringify(normalized),
-      },
+      criteria,
+      { ...criteria, value: JSON.stringify(normalized) },
       { upsert: true, new: true, setDefaultsOnInsert: true },
     );
   }
 
-  async getSchoolName() {
+  // Not year-scoped (unlike receipt mode/payment allocation) - who currently
+  // heads the school is a slow-changing operational fact, not something
+  // that resets each school year. Used on printed documents that need the
+  // principal's name (student ID cards; bulletins currently still take this
+  // per-session instead, see BulletinSession.meta.chefEtablissement).
+  async getChefEtablissementNom(): Promise<string> {
     const setting = await this.settingModel
-      .findOne({ key: SettingKey.SCHOOL_NAME })
+      .findOne({ key: SettingKey.CHEF_ETABLISSEMENT_NOM, schoolYearId: null })
       .lean()
       .exec();
-
-    return setting?.value ?? '';
+    return setting?.value?.trim() ?? '';
   }
 
-  async setSchoolName(value: string) {
+  async setChefEtablissementNom(value: string) {
+    const criteria = {
+      key: SettingKey.CHEF_ETABLISSEMENT_NOM,
+      schoolYearId: null,
+    };
     return this.settingModel.findOneAndUpdate(
-      { key: SettingKey.SCHOOL_NAME },
-      { key: SettingKey.SCHOOL_NAME, value: value.trim() },
+      criteria,
+      { ...criteria, value: value.trim() },
       { upsert: true, new: true, setDefaultsOnInsert: true },
     );
   }
@@ -129,9 +136,7 @@ export class SettingsService {
     const setting = await this.settingModel
       .findOne({
         key: SettingKey.RECEIPT_MODE,
-        ...(schoolYearId
-          ? { schoolYearId }
-          : { schoolYearId: { $exists: false } }),
+        schoolYearId: schoolYearId ?? null,
       })
       .lean()
       .exec();
@@ -147,7 +152,7 @@ export class SettingsService {
   async setReceiptMode(value: ReceiptMode, schoolYearId?: string) {
     const criteria = {
       key: SettingKey.RECEIPT_MODE,
-      ...(schoolYearId ? { schoolYearId } : {}),
+      schoolYearId: schoolYearId ?? null,
     };
     return this.settingModel.findOneAndUpdate(
       criteria,
@@ -174,7 +179,7 @@ export class SettingsService {
       const fallback =
         source ??
         (await this.settingModel
-          .findOne({ key, schoolYearId: { $exists: false } })
+          .findOne({ key, schoolYearId: null })
           .session(session ?? null)
           .lean()
           .exec());

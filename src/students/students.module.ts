@@ -12,18 +12,18 @@ import { StudentsController } from './students.controller';
 import { StudentsService } from './students.service';
 
 @Module({
-	imports: [
-		MongooseModule.forFeature([{ name: Student.name, schema: StudentSchema }]),
-		GuardiansModule,
-		BillingModule,
-		PaymentsModule,
-		SettingsModule,
-		SchoolYearsModule,
-		LevelsModule,
-		forwardRef(() => EnrollmentsModule),
-	],
-	controllers: [StudentsController],
-	providers: [StudentsService],
-	exports: [StudentsService, MongooseModule],
+  imports: [
+    MongooseModule.forFeature([{ name: Student.name, schema: StudentSchema }]),
+    GuardiansModule,
+    BillingModule,
+    PaymentsModule,
+    SettingsModule,
+    SchoolYearsModule,
+    LevelsModule,
+    forwardRef(() => EnrollmentsModule),
+  ],
+  controllers: [StudentsController],
+  providers: [StudentsService],
+  exports: [StudentsService, MongooseModule],
 })
 export class StudentsModule {}

@@ -1,0 +1,44 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <section class="grid cols-2">
+    <div class="panel">
+      <h2>Mon abonnement</h2>
+      {% if parametre %}
+        <p class="muted">
+          Actif depuis le {{ parametre.dateEffet | formatDate }} —
+          mode <strong>{{ parametre.mode }}</strong>
+          {% if parametre.sousType %}({{ parametre.sousType }}){% endif %},
+          {{ parametre.montantUnitaire }} FCFA
+        </p>
+      {% else %}
+        <p class="muted">Aucun parametre de facturation configure pour votre ecole.</p>
+      {% endif %}
+      <p class="notice notice-info">Le mode et le tarif sont geres par la plateforme.</p>
+    </div>
+
+    <div class="panel">
+      <div class="panel-heading">
+        <div><h2>Mes factures</h2></div>
+      </div>
+      <div class="table-shell">
+        <table class="table-report">
+          <thead><tr><th>Numero</th><th>Periode</th><th>Date</th><th>Montant</th><th>Statut</th><th></th></tr></thead>
+          <tbody>
+            {% for facture in factures %}
+              <tr>
+                <td>{{ facture.numero }}</td>
+                <td>{{ facture.periode }}</td>
+                <td>{{ facture.dateGeneration | formatDate }}</td>
+                <td>{{ facture.montantTotal }}</td>
+                <td>{{ facture.statut }}</td>
+                <td><a class="button btn-sm" href="/facturation/factures/{{ facture._id }}/pdf">PDF</a></td>
+              </tr>
+            {% else %}
+              <tr><td colspan="6">Aucune facture.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+{% endblock %}

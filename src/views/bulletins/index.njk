@@ -1,0 +1,38 @@
+{% extends "layout.njk" %}
+{% import "partials/legend.njk" as legend %}
+{% block content %}
+<div class="panel">
+  <div class="panel-heading">
+    <div><h3>Sessions de bulletins</h3><p class="muted">Créez une session, importez les notes puis validez-les après contrôle.</p></div>
+    <a class="button" href="/bulletins/new">Nouvelle session</a>
+  </div>
+  <div class="table-shell">
+    <table class="table-report">
+      <thead>
+        <tr><th>Classe</th><th>Annee scolaire</th><th>Periode</th><th>Statut</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for item in sessions %}
+          <tr>
+            <td>{{ item.levelId.label }}</td>
+            <td>{{ item.schoolYearId.label }}</td>
+            <td>{{ periodeLabels[item.periode] }}</td>
+            <td>{% set value = item.status %}{% set group = 'bulletinSessionStatus' %}{% include "partials/status-badge.njk" %}</td>
+            <td>
+              <div class="table-actions">
+                <a class="button btn-sm" href="/bulletins/{{ item._id }}">Ouvrir</a>
+                {% if item.status != 'draft' %}
+                  <a class="button btn-sm secondary" href="/bulletins/{{ item._id }}/donnees">Donnees</a>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="5">Aucune session de bulletins.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {{ legend.render(['bulletinSessionStatus']) }}
+</div>
+{% endblock %}

@@ -1,0 +1,95 @@
+{% extends "layout.njk" %}
+{% block content %}
+<div class="grid cols-2">
+  <div class="panel">
+    <h2>Nouvelle matiere</h2>
+    <form method="post" action="/bulletins/matieres" class="stack">
+      <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+      <div class="form-grid">
+        <label>Nom<input name="label" required /></label>
+        <label>Categorie
+          <select name="category" required>
+            {% for cat in subjectCategories %}<option value="{{ cat }}">{{ ENUM_META.subjectCategory[cat].label if ENUM_META.subjectCategory[cat] else cat }}</option>{% endfor %}
+          </select>
+        </label>
+      </div>
+      <button type="submit">Creer</button>
+    </form>
+
+    <div class="table-shell top-gap">
+      <table class="table-report">
+        <thead><tr><th>Nom</th><th>Categorie</th></tr></thead>
+        <tbody>
+          {% for subject in subjects %}
+            <tr><td>{{ subject.label }}</td><td>{{ ENUM_META.subjectCategory[subject.category].label if ENUM_META.subjectCategory[subject.category] else subject.category }}</td></tr>
+          {% else %}
+            <tr><td colspan="2">Aucune matiere.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Coefficients par classe</h2>
+    <form method="get" action="/bulletins/matieres" class="stack">
+      <div class="form-grid">
+        <label>Annee scolaire
+          <select name="schoolYearId" required>
+            <option value="">Choisir</option>
+            {% for year in schoolYears %}
+              <option value="{{ year._id }}" {% if year._id == selectedSchoolYearId %}selected{% endif %}>{{ year.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Classe
+          <select name="levelId" required>
+            <option value="">Choisir</option>
+            {% for level in levels %}
+              <option value="{{ level._id }}" {% if level._id == selectedLevelId %}selected{% endif %}>{{ level.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+      <button type="submit" class="secondary">Afficher</button>
+    </form>
+
+    {% if selectedSchoolYearId and selectedLevelId %}
+      <form method="post" action="/bulletins/matieres/class-subject" class="stack top-gap">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+        <input type="hidden" name="schoolYearId" value="{{ selectedSchoolYearId }}" />
+        <input type="hidden" name="levelId" value="{{ selectedLevelId }}" />
+        <div class="form-grid">
+          <label>Matiere
+            <select name="subjectId" required>
+              {% for subject in subjects %}<option value="{{ subject._id }}">{{ subject.label }}</option>{% endfor %}
+            </select>
+          </label>
+          <label>Coefficient<input type="number" name="coefficient" min="0" step="1" required /></label>
+          <label>Professeur<input type="text" name="teacherName" /></label>
+        </div>
+        <button type="submit">Enregistrer</button>
+      </form>
+
+      <div class="table-shell top-gap">
+        <table class="table-report">
+          <thead><tr><th>Matiere</th><th>Coefficient</th><th>Professeur</th></tr></thead>
+          <tbody>
+            {% for cs in classSubjects %}
+              <tr>
+                <td>{{ cs.subjectId.label }}</td>
+                <td>{{ cs.coefficient }}</td>
+                <td>{{ cs.teacherName or '—' }}</td>
+              </tr>
+            {% else %}
+              <tr><td colspan="3">Aucune matiere configuree pour cette classe.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="muted top-gap">Choisissez une annee scolaire et une classe pour voir/configurer les coefficients.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

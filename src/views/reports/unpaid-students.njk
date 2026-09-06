@@ -1,4 +1,5 @@
 ﻿{% extends "layout.njk" %}
+{% import "partials/legend.njk" as legend %}
 {% block content %}
   <section class="panel">
     <div class="panel-heading">
@@ -34,7 +35,7 @@
               <td>{{ item.totalDue }}</td>
               <td>{{ item.paidAmount }}</td>
               <td>{{ item.balanceDue }}</td>
-              <td>{% set value = item.status %}{% include "partials/status-badge.njk" %}</td>
+              <td>{% set value = item.status %}{% set group = 'invoiceStatus' %}{% include "partials/status-badge.njk" %}</td>
             </tr>
           {% else %}
             <tr><td colspan="8">Aucun impaye.</td></tr>
@@ -42,5 +43,6 @@
         </tbody>
       </table>
     </div>
+    {{ legend.render(['invoiceStatus']) }}
   </section>
 {% endblock %}

@@ -2,7 +2,7 @@
 {% block content %}
   <section class="panel">
     <h2>{{ receipt.schoolName or "Nom de l'école" }}</h2>
-    <h3 style="text-align: center; margin-top: 0;">REÇU DE PAIEMENT DES FRAIS DE SCOLARITE</h3>
+    <h3 class="receipt-header">REÇU DE PAIEMENT DES FRAIS DE SCOLARITE</h3>
 
     {% set invoice = receipt.invoiceId %}
     {% set enrollment = invoice.enrollmentId if invoice %}
@@ -22,10 +22,10 @@
     <p><strong>Total payé                :</strong> {{ receipt.receiptSummary.totalPaid }}</p>
     <p><strong>Reste à payer             :</strong> {{ receipt.receiptSummary.balanceDue }}</p>
 
-    <p style="text-align: right; margin-top: 40px;">Lomé, le {{ receipt.paidAt | string }}</p>
-    <p style="text-align: right; margin-top: 40px;">L’économe</p>
+    <p class="receipt-signature">Lomé, le {{ receipt.paidAt | formatDate }}</p>
+    <p class="receipt-signature">L’économe</p>
 
-    <div class="actions" style="margin-top: 16px;">
+    <div class="actions top-gap">
       <a class="button" target="_blank" href="/receipts/{{ receipt._id }}?format=pdf">Imprimer le reçu en double</a>
     </div>
   </section>

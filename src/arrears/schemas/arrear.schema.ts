@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, SchemaTypes } from 'mongoose';
 import { ArrearStatus } from '../../common/enums/domain.enums';
+import { ecoleScopePlugin } from '../../common/mongoose/ecole-scope.plugin';
 
 export type ArrearDocument = HydratedDocument<Arrear>;
 
@@ -41,10 +42,11 @@ export class Arrear {
 }
 
 export const ArrearSchema = SchemaFactory.createForClass(Arrear);
+ArrearSchema.plugin(ecoleScopePlugin);
 ArrearSchema.index({ studentId: 1, status: 1 });
-ArrearSchema.index({ sourceEnrollmentId: 1 }, { unique: true });
+ArrearSchema.index({ ecoleId: 1, sourceEnrollmentId: 1 }, { unique: true });
 ArrearSchema.index(
-  { sourceEnrollmentId: 1, targetEnrollmentId: 1 },
+  { ecoleId: 1, sourceEnrollmentId: 1, targetEnrollmentId: 1 },
   {
     unique: true,
     partialFilterExpression: { targetEnrollmentId: { $exists: true } },

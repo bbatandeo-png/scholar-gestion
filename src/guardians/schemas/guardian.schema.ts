@@ -1,12 +1,18 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, SchemaTypes } from 'mongoose';
 import { GuardianType } from '../../common/enums/domain.enums';
+import { ecoleScopePlugin } from '../../common/mongoose/ecole-scope.plugin';
 
 export type GuardianDocument = HydratedDocument<Guardian>;
 
 @Schema({ timestamps: true, collection: 'guardians' })
 export class Guardian {
-  @Prop({ type: SchemaTypes.ObjectId, required: true, ref: 'Student', index: true })
+  @Prop({
+    type: SchemaTypes.ObjectId,
+    required: true,
+    ref: 'Student',
+    index: true,
+  })
   studentId: string;
 
   @Prop({ required: true, enum: Object.values(GuardianType) })
@@ -26,3 +32,4 @@ export class Guardian {
 }
 
 export const GuardianSchema = SchemaFactory.createForClass(Guardian);
+GuardianSchema.plugin(ecoleScopePlugin);

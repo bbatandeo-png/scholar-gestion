@@ -69,8 +69,20 @@ export class SchoolYearsController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    await this.schoolYearsService.create(dto);
-    setFlash(req, 'success', 'Annee scolaire enregistree');
+    try {
+      await this.schoolYearsService.create(dto);
+      setFlash(req, 'success', 'Annee scolaire enregistree');
+    } catch (error: any) {
+      if (error?.code === 11000) {
+        setFlash(
+          req,
+          'error',
+          'Une annee scolaire avec ce libelle existe deja',
+        );
+        return res.redirect('/settings/school-years');
+      }
+      throw error;
+    }
     return res.redirect('/settings/school-years');
   }
 
@@ -118,13 +130,17 @@ export class SchoolYearsController {
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION)
   @Render('settings/school-years')
   async edit(@Param('id') id: string) {
-    const schoolYears = await this.schoolYearsService.list();
-    const editYear = await this.schoolYearsService.findById(id);
+    const [schoolYears, editYear, openSchoolYear] = await Promise.all([
+      this.schoolYearsService.list(),
+      this.schoolYearsService.findById(id),
+      this.schoolYearsService.findOpen(),
+    ]);
 
     return {
       title: 'Modifier annee scolaire',
       schoolYears,
       editYear,
+      openSchoolYear,
     };
   }
 

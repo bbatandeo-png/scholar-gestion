@@ -1,0 +1,45 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <section class="grid cols-2">
+    <div class="panel">
+      <h2>Etat de la licence</h2>
+
+      {% if status.state == 'ok' %}
+        <p class="notice notice-info">
+          Licence active, valable jusqu'au <strong>{{ status.expiresAt | formatDate }}</strong>.
+        </p>
+      {% elif status.state == 'grace' %}
+        <p class="notice notice-danger">
+          Licence expiree depuis le <strong>{{ status.expiresAt | formatDate }}</strong>. L'application reste pleinement utilisable jusqu'au <strong>{{ status.graceEndsAt | formatDate }}</strong>, date a partir de laquelle elle passera en lecture seule si la licence n'est pas renouvelee.
+        </p>
+      {% elif status.state == 'blocked' %}
+        <p class="notice notice-danger">
+          {% if status.expiresAt %}
+            Licence expiree depuis le <strong>{{ status.expiresAt | formatDate }}</strong> — la periode de grace est terminee.
+          {% else %}
+            Aucune licence n'a encore ete enregistree pour cette installation.
+          {% endif %}
+          L'application est actuellement en lecture seule : consultation des dossiers, factures et bulletins deja enregistres toujours possible, mais aucun nouvel enregistrement.
+        </p>
+      {% endif %}
+
+      <div class="stack">
+        <p><strong>Code d'installation a communiquer au support :</strong></p>
+        <p><code>{{ status.deviceCode }}</code></p>
+        <p class="muted">Appelez le support avec ce code pour obtenir un code de renouvellement.</p>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Renouveler la licence</h2>
+      <p class="muted">Collez ci-dessous le code de renouvellement communique par le support.</p>
+      <form method="post" action="/licence/renew" class="stack">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+        <label>Code de renouvellement
+          <textarea name="code" rows="4" required></textarea>
+        </label>
+        <button type="submit">Appliquer le code</button>
+      </form>
+    </div>
+  </section>
+{% endblock %}

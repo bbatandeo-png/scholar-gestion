@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, SchemaTypes } from 'mongoose';
 import { InvoiceStatus } from '../../common/enums/domain.enums';
+import { ecoleScopePlugin } from '../../common/mongoose/ecole-scope.plugin';
 
 export type InvoiceDocument = HydratedDocument<Invoice>;
 
@@ -18,7 +19,6 @@ export class Invoice {
     type: SchemaTypes.ObjectId,
     required: true,
     ref: 'Enrollment',
-    unique: true,
   })
   enrollmentId: string;
 
@@ -52,4 +52,6 @@ export class Invoice {
 }
 
 export const InvoiceSchema = SchemaFactory.createForClass(Invoice);
+InvoiceSchema.plugin(ecoleScopePlugin);
 InvoiceSchema.index({ schoolYearId: 1, status: 1 });
+InvoiceSchema.index({ ecoleId: 1, enrollmentId: 1 }, { unique: true });

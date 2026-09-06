@@ -12,23 +12,30 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { Roles } from '../common/decorators/roles.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { RequireModule } from '../common/decorators/require-module.decorator';
 import { Role } from '../common/enums/domain.enums';
 import { AuthenticatedGuard } from '../common/guards/authenticated.guard';
+import { ModuleGuard } from '../common/guards/module.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { setFlash } from '../common/utils/flash.util';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { PaymentsService } from './payments.service';
 import { SettingsService } from '../settings/settings.service';
 import { SchoolYearsService } from '../school-years/school-years.service';
+import { EcolesService } from '../ecoles/ecoles.service';
+import { SessionUser } from '../common/types/session-user.type';
 import { ForbiddenException } from '@nestjs/common';
 
 @Controller()
-@UseGuards(AuthenticatedGuard, RolesGuard)
+@UseGuards(AuthenticatedGuard, RolesGuard, ModuleGuard)
+@RequireModule('FINANCE')
 export class PaymentsController {
   constructor(
     private readonly paymentsService: PaymentsService,
     private readonly settingsService: SettingsService,
     private readonly schoolYearsService: SchoolYearsService,
+    private readonly ecolesService: EcolesService,
   ) {}
 
   @Post('/payments')
@@ -37,15 +44,13 @@ export class PaymentsController {
     @Body() dto: CreatePaymentDto,
     @Req() req: Request,
     @Res() res: Response,
+    @CurrentUser() user: SessionUser | undefined,
   ) {
     const invoice = await this.paymentsService.findReceiptYearByInvoice(
       dto.invoiceId,
     );
     await this.schoolYearsService.assertWritable(invoice);
-    const result = await this.paymentsService.createPayment(
-      dto,
-      req.session.user?.id,
-    );
+    const result = await this.paymentsService.createPayment(dto, user?.id);
     setFlash(req, 'success', 'Paiement enregistre');
     return res.redirect(`/receipts/${result.payment._id}`);
   }
@@ -79,7 +84,7 @@ export class PaymentsController {
     }
 
     const receipt = await this.paymentsService.findReceiptById(id);
-    const schoolName = await this.settingsService.getSchoolName();
+    const schoolName = await this.ecolesService.getCurrentSchoolName();
     const receiptSummary = this.paymentsService.getReceiptAmounts(
       receipt.invoiceId,
       receiptMode,

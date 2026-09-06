@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Scolar-Gestion — Gestion scolaire et financière pour les écoles du Togo</title>
+<meta name="description" content="Scolar-Gestion calcule les bulletins et suit l'écolage de votre établissement, même sans connexion internet. Deux modules indépendants : Finances et Bulletins." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Zilla+Slab:wght@500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a href="#top" class="brand">
+      <span class="brand-mark serif">S</span>
+      <span class="brand-text">
+        <span class="brand-name">Scolar-Gestion</span>
+        <span class="brand-tag mono">Logo · placeholder</span>
+      </span>
+    </a>
+
+    <nav class="desktop-nav">
+      <a href="#fonctionnalites">Fonctionnalités</a>
+      <a href="#tarifs">Tarifs</a>
+      <a href="#faq">FAQ</a>
+      <a href="#contact">Contact</a>
+      <a href="#contact" class="btn btn-primary btn-sm">Demander une démo</a>
+    </nav>
+
+    <button class="menu-toggle" id="menuToggle" aria-label="Menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+
+  <nav class="mobile-nav" id="mobileNav">
+    <a href="#fonctionnalites">Fonctionnalités</a>
+    <a href="#tarifs">Tarifs</a>
+    <a href="#faq">FAQ</a>
+    <a href="#contact">Contact</a>
+    <a href="#contact" class="btn btn-primary">Demander une démo</a>
+  </nav>
+</header>
+
+<main id="top">
+
+  <section class="hero wrap">
+    <div data-reveal>
+      <span class="badge">Écoles privées et publiques du Togo</span>
+      <h1 class="hero-title serif">Vos bulletins et votre écolage, justes du premier coup.</h1>
+      <p class="hero-sub">Scolar-Gestion calcule les moyennes, les rangs et le suivi des paiements à votre place — et continue de fonctionner même quand la connexion internet, elle, ne fonctionne plus.</p>
+      <div class="hero-actions">
+        <a href="#contact" class="btn btn-primary">Demander une démo</a>
+        <a href="#fonctionnalites" class="btn btn-outline">Voir les deux modules</a>
+      </div>
+      <p class="hero-note">Sans engagement. Nous configurons votre école avec vous.</p>
+    </div>
+
+    <div data-reveal class="hero-visual">
+      <div class="bulletin-card">
+        <div class="bulletin-head">
+          <div>
+            <div class="bulletin-eyebrow mono">Bulletin · 2<sup>e</sup> trimestre</div>
+            <div class="bulletin-name serif">KOSSI Aménuvévé</div>
+            <div class="bulletin-meta">Classe de 4<sup>e</sup> B · 38 élèves</div>
+          </div>
+          <div class="bulletin-rank">
+            <div class="bulletin-eyebrow mono">Rang</div>
+            <div class="bulletin-rank-num serif">3<sup>e</sup></div>
+          </div>
+        </div>
+
+        <div class="bulletin-table">
+          <div class="bulletin-row head"><span>Matière</span><span>Note</span><span>Coef.</span></div>
+          <div class="bulletin-row"><span>Mathématiques</span><span>14,50</span><span class="coef">4</span></div>
+          <div class="bulletin-row"><span>Français</span><span>12,75</span><span class="coef">4</span></div>
+          <div class="bulletin-row"><span>Sciences physiques</span><span>15,00</span><span class="coef">3</span></div>
+          <div class="bulletin-row"><span>Histoire-Géographie</span><span>13,25</span><span class="coef">2</span></div>
+          <div class="bulletin-avg">
+            <span class="bulletin-avg-label">Moyenne générale</span>
+            <span class="bulletin-avg-value serif">13,88</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="bulletin-pill">
+        <span class="dot"></span>
+        Calculé automatiquement · hors connexion
+      </div>
+    </div>
+  </section>
+
+  <section class="dark">
+    <div class="wrap">
+      <h2 data-reveal class="section-title-lg serif">Aujourd'hui, la fin du trimestre coûte trois nuits blanches.</h2>
+      <div class="compare-grid">
+        <div data-reveal class="compare-card bad">
+          <div class="compare-label mono">Avant</div>
+          <ul class="compare-list">
+            <li><span>✗</span>Les notes dorment dans cinq fichiers Excel différents, chacun sur un ordinateur différent.</li>
+            <li><span>✗</span>Une moyenne recopiée de travers, et c'est un rang de classe à refaire.</li>
+            <li><span>✗</span>Personne ne sait exactement qui a soldé son écolage et qui doit encore deux tranches.</li>
+          </ul>
+        </div>
+        <div data-reveal class="compare-card good">
+          <div class="compare-label mono">Avec Scolar-Gestion</div>
+          <ul class="compare-list">
+            <li><span>✓</span>Une seule base pour toute l'école : élèves, notes, paiements.</li>
+            <li><span>✓</span>Moyennes, coefficients et rangs calculés par le logiciel, jamais à la main.</li>
+            <li><span>✓</span>La liste des impayés est à jour en permanence, classe par classe.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="fonctionnalites" class="modules wrap">
+    <div data-reveal class="section-head">
+      <div class="eyebrow mono">Deux modules</div>
+      <h2 class="serif">Prenez ce dont votre école a besoin. Rien de plus.</h2>
+      <p>Finances et Bulletins fonctionnent séparément. Vous pouvez commencer par un seul module et activer le second plus tard, sans rien perdre.</p>
+    </div>
+
+    <div class="module-grid">
+      <div data-reveal class="module-card finance">
+        <span class="module-icon finance">₣</span>
+        <h3>Module Finances</h3>
+        <p>Tout l'argent de l'école au même endroit : ce qui est dû, ce qui est encaissé, ce qui manque.</p>
+        <ul class="module-list">
+          <li><span>✓</span>Écolage par classe et par niveau</li>
+          <li><span>✓</span>Paiements fractionnés en tranches et réductions</li>
+          <li><span>✓</span>Suivi des impayés élève par élève</li>
+          <li><span>✓</span>Tableau de bord des recettes et reçus imprimables</li>
+        </ul>
+      </div>
+
+      <div data-reveal class="module-card bulletin">
+        <span class="module-icon bulletin">✎</span>
+        <h3>Module Bulletins</h3>
+        <p>Des bulletins prêts à signer, sans une seule moyenne calculée à la main.</p>
+        <ul class="module-list">
+          <li><span>✓</span>Import des notes des enseignants</li>
+          <li><span>✓</span>Moyennes et rangs calculés automatiquement</li>
+          <li><span>✓</span>Édition et impression des bulletins par classe</li>
+          <li><span>✓</span>Classement de classe et appréciations</li>
+        </ul>
+      </div>
+    </div>
+
+    <div data-reveal class="modules-note">
+      <span><strong>Indépendants.</strong> Finances seul, Bulletins seul, ou les deux ensemble — c'est vous qui choisissez.</span>
+    </div>
+  </section>
+
+  <section class="offline">
+    <div class="wrap">
+      <div data-reveal>
+        <div class="offline-eyebrow mono">Fonctionne partout</div>
+        <h2 class="serif">La connexion tombe. Le travail continue.</h2>
+        <p class="lead">Le logiciel garde vos données directement dans votre école. Vous saisissez les notes, encaissez l'écolage et imprimez les bulletins sans internet. Dès que la connexion revient, tout se synchronise et se sauvegarde, sans que vous ayez à y penser.</p>
+      </div>
+      <div data-reveal>
+        <div class="offline-feature">
+          <span class="offline-feature-icon">✓</span>
+          <div>
+            <div class="offline-feature-title">Sans internet</div>
+            <div class="offline-feature-desc">Vous travaillez normalement, tout est enregistré sur place.</div>
+          </div>
+        </div>
+        <div class="offline-feature">
+          <span class="offline-feature-icon">↻</span>
+          <div>
+            <div class="offline-feature-title">Au retour de la connexion</div>
+            <div class="offline-feature-desc">Synchronisation et sauvegarde automatiques.</div>
+          </div>
+        </div>
+        <div class="offline-feature">
+          <span class="offline-feature-icon">⌂</span>
+          <div>
+            <div class="offline-feature-title">Données cloisonnées</div>
+            <div class="offline-feature-desc">Les informations de votre école ne sont jamais mélangées à celles d'une autre.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="how wrap">
+    <div data-reveal class="section-head">
+      <div class="eyebrow mono">Comment ça marche</div>
+      <h2 class="serif">Opérationnel en trois étapes.</h2>
+    </div>
+    <div class="how-grid">
+      <div data-reveal class="how-step">
+        <div class="how-num serif">1</div>
+        <div class="how-rule"></div>
+        <h3>Nous configurons votre école</h3>
+        <p>Classes, niveaux, matières, coefficients, montants d'écolage : nous les paramétrons avec vous.</p>
+      </div>
+      <div data-reveal class="how-step">
+        <div class="how-num serif">2</div>
+        <div class="how-rule"></div>
+        <h3>Vous reprenez vos données existantes</h3>
+        <p>Vos listes d'élèves et vos fichiers Excel actuels sont importés, pas retapés.</p>
+      </div>
+      <div data-reveal class="how-step">
+        <div class="how-num serif">3</div>
+        <div class="how-rule"></div>
+        <h3>Vous générez bulletins et reçus</h3>
+        <p>En quelques clics, pour une classe entière, prêts à imprimer.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="tarifs" class="pricing">
+    <div class="wrap">
+      <div data-reveal class="section-head">
+        <div class="eyebrow mono">Tarifs</div>
+        <h2 class="serif">Un tarif établi sur demande, école par école.</h2>
+        <p class="section-lead">Une école de 80 élèves et un établissement de 900 élèves n'ont pas les mêmes besoins. Nous étudions votre situation et vous envoyons une proposition claire, sans frais cachés.</p>
+      </div>
+
+      <div class="pricing-grid">
+        <div data-reveal class="pricing-card">
+          <div class="eyebrow mono">Ce qui détermine le tarif</div>
+          <ul class="pricing-list">
+            <li><span>·</span>Le nombre d'élèves de votre établissement</li>
+            <li><span>·</span>Les modules retenus : Finances, Bulletins, ou les deux</li>
+            <li><span>·</span>La formule choisie : abonnement annuel ou facturation à l'usage</li>
+            <li><span>·</span>La reprise de vos fichiers existants et la formation de votre équipe</li>
+          </ul>
+          <p class="pricing-fine">Mises à jour et assistance par téléphone et WhatsApp comprises dans tous les cas. Aucun matériel à acheter.</p>
+        </div>
+
+        <div data-reveal class="pricing-card pricing-cta">
+          <h3 class="serif">Demandez votre proposition tarifaire</h3>
+          <p>Dites-nous le nombre d'élèves et les modules qui vous intéressent. Vous recevez une proposition chiffrée sous 48 heures, sans engagement.</p>
+          <div class="pricing-cta-list">
+            <div><span>✓</span>Proposition gratuite et sans engagement</div>
+            <div><span>✓</span>Écoles privées comme établissements publics</div>
+            <div><span>✓</span>Paiement en FCFA, échelonnable sur l'année scolaire</div>
+          </div>
+          <a href="#contact" class="btn btn-primary">Demander une démo</a>
+          <p class="pricing-cta-fine">Tarifs définitifs communiqués après échange.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="testimonials wrap">
+    <div data-reveal class="section-head">
+      <div class="eyebrow mono">Ils nous font confiance</div>
+      <h2 class="serif">Ce que disent les écoles.</h2>
+    </div>
+    <div class="testi-grid">
+      <div data-reveal class="testi-card">
+        <p class="testi-quote">« Témoignage à venir. »</p>
+        <div class="testi-who">
+          <span class="testi-avatar mono">photo</span>
+          <div><div class="testi-name">Nom de l'école</div><div class="testi-role">Fonction du responsable</div></div>
+        </div>
+      </div>
+      <div data-reveal class="testi-card">
+        <p class="testi-quote">« Témoignage à venir. »</p>
+        <div class="testi-who">
+          <span class="testi-avatar mono">photo</span>
+          <div><div class="testi-name">Nom de l'école</div><div class="testi-role">Fonction du responsable</div></div>
+        </div>
+      </div>
+      <div data-reveal class="testi-card">
+        <p class="testi-quote">« Témoignage à venir. »</p>
+        <div class="testi-who">
+          <span class="testi-avatar mono">photo</span>
+          <div><div class="testi-name">Nom de l'école</div><div class="testi-role">Fonction du responsable</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq" class="faq">
+    <div class="faq-wrap">
+      <h2 data-reveal class="serif section-title-lg">Questions fréquentes</h2>
+      <div class="faq-list" id="faqList">
+        <div class="faq-item open">
+          <button class="faq-q"><span class="faq-q-text">Le logiciel est-il réservé aux écoles privées ?</span><span class="faq-q-sign">−</span></button>
+          <p class="faq-a">Non. Tout établissement peut l'utiliser, privé comme public : le paramétrage s'adapte à votre organisation de classes, de matières et de coefficients.</p>
+        </div>
+        <div class="faq-item">
+          <button class="faq-q"><span class="faq-q-text">Mes données sont-elles en sécurité ?</span><span class="faq-q-sign">+</span></button>
+          <p class="faq-a">Les informations de votre école sont totalement cloisonnées : elles ne sont jamais mélangées à celles d'un autre établissement. Les accès sont nominatifs et les sauvegardes automatiques.</p>
+        </div>
+        <div class="faq-item">
+          <button class="faq-q"><span class="faq-q-text">Que se passe-t-il quand il n'y a pas de connexion internet ?</span><span class="faq-q-sign">+</span></button>
+          <p class="faq-a">Rien ne s'arrête. Vous continuez à saisir les notes, encaisser l'écolage et imprimer les bulletins. Dès que la connexion revient, tout se synchronise automatiquement.</p>
+        </div>
+        <div class="faq-item">
+          <button class="faq-q"><span class="faq-q-text">Peut-on récupérer nos anciens fichiers Excel ?</span><span class="faq-q-sign">+</span></button>
+          <p class="faq-a">Oui. Vos listes d'élèves, vos notes et vos montants d'écolage sont importés depuis vos fichiers actuels lors de la mise en route. Vous ne retapez rien.</p>
+        </div>
+        <div class="faq-item">
+          <button class="faq-q"><span class="faq-q-text">Peut-on n'activer qu'un seul module ?</span><span class="faq-q-sign">+</span></button>
+          <p class="faq-a">Oui. Finances et Bulletins sont indépendants. Beaucoup d'écoles commencent par les bulletins, puis ajoutent les finances l'année suivante.</p>
+        </div>
+        <div class="faq-item">
+          <button class="faq-q"><span class="faq-q-text">Faut-il acheter du nouveau matériel ?</span><span class="faq-q-sign">+</span></button>
+          <p class="faq-a">Non. Le logiciel fonctionne sur les ordinateurs que vous avez déjà, et l'installation est faite par nos soins.</p>
+        </div>
+        <div class="faq-item">
+          <button class="faq-q"><span class="faq-q-text">Combien de temps prend la mise en route ?</span><span class="faq-q-sign">+</span></button>
+          <p class="faq-a">Comptez une à deux semaines entre la configuration de votre école et la reprise de vos données, selon le nombre de classes.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="contact" class="contact">
+    <div class="wrap">
+      <div data-reveal>
+        <h2 class="serif">Voyons ce que ça donne sur votre école.</h2>
+        <p class="contact-lead">Une démonstration de 30 minutes, avec vos propres classes et vos propres montants. Nous nous déplaçons ou nous faisons ça par téléphone.</p>
+        <div class="contact-links">
+          <a href="tel:+22800000000"><span>☎</span>+228 00 00 00 00</a>
+          <a href="mailto:contact@scolar-gestion.tg"><span>✉</span>contact@scolar-gestion.tg</a>
+          <span class="mono">coordonnées · placeholder</span>
+        </div>
+      </div>
+
+      <div data-reveal class="contact-panel">
+        <div class="contact-sent" id="contactSent">
+          <span class="sent-icon">✓</span>
+          <div class="sent-title serif">Merci, c'est noté.</div>
+          <p>Nous vous rappelons sous 24 heures ouvrées.</p>
+        </div>
+        <p class="contact-fine error hidden" id="contactError">
+          L'envoi a échoué. Réessayez, ou écrivez directement à
+          <a href="mailto:bbatandeo@gmail.com">bbatandeo@gmail.com</a>.
+        </p>
+        <form class="contact-form" id="contactForm" action="https://formsubmit.co/ajax/bbatandeo@gmail.com" method="POST">
+          <input type="hidden" name="_subject" value="Nouvelle demande de démo — Scolar-Gestion" />
+          <input type="hidden" name="_template" value="table" />
+          <input type="hidden" name="_captcha" value="false" />
+          <label>Votre nom
+            <input type="text" name="Nom" placeholder="Ex. M. Kodjo" required />
+          </label>
+          <label>Nom de l'école
+            <input type="text" name="École" placeholder="Ex. Complexe scolaire ..." required />
+          </label>
+          <label>Téléphone ou email
+            <input type="text" name="Contact" placeholder="+228 ..." required />
+          </label>
+          <label>Votre message
+            <textarea name="Message" rows="3" placeholder="Nombre d'élèves, modules qui vous intéressent..."></textarea>
+          </label>
+          <button type="submit" class="btn btn-primary" id="contactSubmit">Demander une démo</button>
+          <p class="contact-fine">Ou écrivez-nous sur WhatsApp au +228 00 00 00 00.</p>
+        </form>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="footer-grid">
+    <div>
+      <div class="footer-brand">
+        <span class="brand-mark serif">S</span>
+        <span class="name">Scolar-Gestion</span>
+      </div>
+      <p>Gestion des bulletins et de l'écolage pour les écoles du Togo, privées comme publiques.</p>
+    </div>
+    <div class="footer-col">
+      <span class="col-title mono">Navigation</span>
+      <a href="#fonctionnalites">Fonctionnalités</a>
+      <a href="#tarifs">Tarifs</a>
+      <a href="#faq">FAQ</a>
+      <a href="#contact">Contact</a>
+    </div>
+    <div class="footer-col">
+      <span class="col-title mono">Contact</span>
+      <a href="tel:+22800000000">+228 00 00 00 00</a>
+      <a href="mailto:contact@scolar-gestion.tg">contact@scolar-gestion.tg</a>
+      <span>Lomé, Togo</span>
+    </div>
+    <div class="footer-col">
+      <span class="col-title mono">Informations</span>
+      <a href="#top">Mentions légales</a>
+      <a href="#top">Confidentialité</a>
+      <span class="mono fine">à compléter</span>
+    </div>
+  </div>
+  <div class="footer-bottom"><div>© 2026 Scolar-Gestion. Site vitrine.</div></div>
+</footer>
+
+<a href="#contact" class="floating-cta">Demander une démo</a>
+
+<script src="js/main.js"></script>
+
+</body>
+</html>

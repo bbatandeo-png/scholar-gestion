@@ -18,8 +18,10 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { SchoolYearsService } from '../school-years/school-years.service';
 import { LevelsService } from '../levels/levels.service';
 import { Roles } from '../common/decorators/roles.decorator';
+import { RequireModule } from '../common/decorators/require-module.decorator';
 import { Role } from '../common/enums/domain.enums';
 import { AuthenticatedGuard } from '../common/guards/authenticated.guard';
+import { ModuleGuard } from '../common/guards/module.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { pickRowValue, readExcelRows } from '../common/utils/excel.util';
 import { setFlash } from '../common/utils/flash.util';
@@ -28,9 +30,11 @@ import { UpsertFeeScheduleDto } from './dto/upsert-fee-schedule.dto';
 import { BillingService } from './billing.service';
 import { SettingsService } from '../settings/settings.service';
 import { ExpensesService } from '../expenses/expenses.service';
+import { EcolesService } from '../ecoles/ecoles.service';
 
 @Controller('/settings/fees')
-@UseGuards(AuthenticatedGuard, RolesGuard)
+@UseGuards(AuthenticatedGuard, RolesGuard, ModuleGuard)
+@RequireModule('FINANCE')
 export class BillingController {
   constructor(
     private readonly billingService: BillingService,
@@ -38,6 +42,7 @@ export class BillingController {
     private readonly levelsService: LevelsService,
     private readonly settingsService: SettingsService,
     private readonly expensesService: ExpensesService,
+    private readonly ecolesService: EcolesService,
   ) {}
 
   @Get()
@@ -51,10 +56,18 @@ export class BillingController {
       req.session.selectedSchoolYearId,
     );
     const schoolYearId = String(year._id);
-    const [matriculeRule, schoolName, receiptMode] = await Promise.all([
+    const [
+      matriculeRule,
+      schoolName,
+      receiptMode,
+      paymentAllocationRule,
+      chefEtablissementNom,
+    ] = await Promise.all([
       this.settingsService.getStudentMatriculeRule(),
-      this.settingsService.getSchoolName(),
+      this.ecolesService.getCurrentSchoolName(),
       this.settingsService.getReceiptMode(schoolYearId),
+      this.settingsService.getPaymentAllocationRule(schoolYearId),
+      this.settingsService.getChefEtablissementNom(),
     ]);
     const categories = await this.expensesService.listCategories();
     const editCategory = editCategoryId
@@ -70,6 +83,8 @@ export class BillingController {
       matriculeRule,
       schoolName,
       receiptMode,
+      paymentAllocationRule,
+      chefEtablissementNom,
       matriculePreview: `${matriculeRule.prefix}${matriculeRule.separator}${String(matriculeRule.startAt).padStart(matriculeRule.padding, '0')}`,
       editCategory,
     };
@@ -82,7 +97,7 @@ export class BillingController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    await this.expensesService.createCategory(dto as any);
+    await this.expensesService.createCategory(dto);
     setFlash(req, 'success', 'Catégorie enregistrée');
     return res.redirect('/settings/fees');
   }
@@ -95,7 +110,7 @@ export class BillingController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    await this.expensesService.updateCategory(id, dto as any);
+    await this.expensesService.updateCategory(id, dto);
     setFlash(req, 'success', 'Catégorie modifiée');
     return res.redirect('/settings/fees');
   }
@@ -227,14 +242,18 @@ export class BillingController {
       matriculeRule,
       schoolName,
       receiptMode,
+      paymentAllocationRule,
+      chefEtablissementNom,
       editFee,
     ] = await Promise.all([
       this.billingService.listFeeSchedules(schoolYearId),
       Promise.resolve([year]),
       this.levelsService.listForSchoolYear(schoolYearId),
       this.settingsService.getStudentMatriculeRule(),
-      this.settingsService.getSchoolName(),
+      this.ecolesService.getCurrentSchoolName(),
       this.settingsService.getReceiptMode(schoolYearId),
+      this.settingsService.getPaymentAllocationRule(schoolYearId),
+      this.settingsService.getChefEtablissementNom(),
       this.billingService.findFeeScheduleById(id),
     ]);
 
@@ -247,6 +266,8 @@ export class BillingController {
       matriculeRule,
       schoolName,
       receiptMode,
+      paymentAllocationRule,
+      chefEtablissementNom,
       matriculePreview: `${matriculeRule.prefix}${matriculeRule.separator}${String(matriculeRule.startAt).padStart(matriculeRule.padding, '0')}`,
     };
   }

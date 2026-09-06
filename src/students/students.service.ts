@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -9,6 +8,11 @@ import { Connection, Model } from 'mongoose';
 import { GuardiansService } from '../guardians/guardians.service';
 import { GuardianType, StudentStatus } from '../common/enums/domain.enums';
 import { runWithMongoTransactionFallback } from '../common/utils/mongo-transaction.util';
+import {
+  UploadedImageFile,
+  resolveUploadedImagePath,
+  saveUploadedImage,
+} from '../common/utils/uploaded-image.util';
 import { SettingsService } from '../settings/settings.service';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
@@ -90,9 +94,7 @@ export class StudentsService {
     return `${basePrefix}${String(nextNumber).padStart(rule.padding, '0')}`;
   }
 
-  private normalizeGuardians(
-    guardians: CreateStudentDto['guardians'] | UpdateStudentDto['guardians'],
-  ) {
+  private normalizeGuardians(guardians: CreateStudentDto['guardians']) {
     const allowedTypes = new Set(Object.values(GuardianType));
 
     return (guardians ?? [])
@@ -125,10 +127,17 @@ export class StudentsService {
       })
       .filter(
         (item) =>
-          allowedTypes.has(item.type as GuardianType) &&
+          allowedTypes.has(item.type) &&
           item.lastname.length > 0 &&
           item.firstname.length > 0,
-      );
+      )
+      .filter((item, index, all) => {
+        // The form only ever sends one slot per type (father/mother/tutor),
+        // but nothing at the schema level enforces that - guard here too
+        // so a direct API call with duplicate types can't insert two
+        // "father" rows for the same student.
+        return all.findIndex((other) => other.type === item.type) === index;
+      });
   }
 
   async generateUniqueMatricule() {
@@ -320,9 +329,9 @@ export class StudentsService {
       this.studentModel
         .find(criteria)
         .select(
-          'matricule lastname firstname gender birthDate birthPlace district status',
+          'matricule lastname firstname gender birthDate birthPlace district status createdAt',
         )
-        .sort({ lastname: 1, firstname: 1 })
+        .sort({ createdAt: -1 })
         .skip(skip)
         .limit(pageSize)
         .lean()
@@ -375,14 +384,6 @@ export class StudentsService {
 
   async create(dto: CreateStudentDto) {
     const normalizedGuardians = this.normalizeGuardians(dto.guardians);
-    const hasGuardianContact = normalizedGuardians.some((guardian) =>
-      Boolean(guardian.phone),
-    );
-    if (!hasGuardianContact) {
-      throw new BadRequestException(
-        'Au moins un contact parent ou tuteur est obligatoire',
-      );
-    }
 
     const matricule =
       dto.matricule?.trim() || (await this.generateUniqueMatricule());
@@ -455,6 +456,23 @@ export class StudentsService {
 
       return student;
     });
+  }
+
+  // Stores an uploaded photo for the student ID card (see
+  // ReportsService.renderStudentIdCardPdf) - a no-op when no file was
+  // submitted, matching EcolesService.saveLogo's contract exactly.
+  async savePhoto(id: string, file: UploadedImageFile | undefined) {
+    const relativePath = saveUploadedImage('students', id, 'photo', file);
+    if (!relativePath) {
+      return;
+    }
+    await this.studentModel
+      .updateOne({ _id: id }, { photo: relativePath })
+      .exec();
+  }
+
+  resolvePhotoAbsolutePath(student: { photo?: string } | null): string | null {
+    return resolveUploadedImagePath(student?.photo);
   }
 
   async detail(id: string) {

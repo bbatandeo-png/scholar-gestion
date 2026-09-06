@@ -1,4 +1,8 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+} from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Connection, Model } from 'mongoose';
 import { ArrearsService } from '../arrears/arrears.service';
@@ -12,7 +16,9 @@ import {
   SchoolYearStatus,
   StudentStatus,
 } from '../common/enums/domain.enums';
+import { getTenantStore } from '../common/tenant/tenant-context';
 import { runWithMongoTransactionFallback } from '../common/utils/mongo-transaction.util';
+import { EcoleModulesService } from '../ecole-modules/ecole-modules.service';
 import {
   Enrollment,
   EnrollmentDocument,
@@ -40,6 +46,7 @@ export class PromotionsService {
     private readonly auditService: AuditService,
     private readonly levelsService: LevelsService,
     private readonly settingsService: SettingsService,
+    private readonly ecoleModulesService: EcoleModulesService,
     @InjectConnection() private readonly connection: Connection,
   ) {}
 
@@ -51,7 +58,7 @@ export class PromotionsService {
       })
       .populate('studentId')
       .populate('levelId')
-      .sort({ createdAt: 1 })
+      .sort({ createdAt: -1 })
       .lean()
       .exec();
     return Promise.all(
@@ -68,6 +75,19 @@ export class PromotionsService {
   }
 
   async validate(dto: ValidatePromotionsDto, actorId?: string) {
+    // Blocks entirely (no silent skip of invoice/arrears generation) if
+    // Finance is inactive for this ecole - a plain read, done before opening
+    // a transaction that would otherwise be aborted immediately anyway.
+    const ecoleId = getTenantStore()?.ecoleId;
+    if (
+      !ecoleId ||
+      !(await this.ecoleModulesService.isActive(ecoleId, 'FINANCE'))
+    ) {
+      throw new ForbiddenException(
+        'Le module Finance doit etre actif pour valider une promotion',
+      );
+    }
+
     return runWithMongoTransactionFallback(
       this.connection,
       async (session) => {
@@ -99,8 +119,17 @@ export class PromotionsService {
             'Cloturez manuellement l annee source avant d activer la suivante',
           );
         }
+        // Activation and preparation are independent actions - the target
+        // year may already have been opened on its own beforehand (see
+        // SchoolYearsService.updateStatus). That's not a conflict, it's the
+        // expected order when a school opens the new year immediately and
+        // runs the promotion/rollover into it later - only a THIRD,
+        // unrelated open year is an actual conflict.
         const currentOpen = await this.schoolYearModel
-          .findOne({ status: SchoolYearStatus.OPEN })
+          .findOne({
+            status: SchoolYearStatus.OPEN,
+            _id: { $ne: targetYear._id },
+          })
           .session(session ?? null)
           .lean()
           .exec();
@@ -324,11 +353,6 @@ export class PromotionsService {
             await this.studentModel.updateOne(
               { _id: item.studentId },
               { status: nextStudentStatus },
-              { session },
-            );
-            await this.studentModel.updateOne(
-              { _id: item.studentId },
-              { status: StudentStatus.ACTIVE },
               { session },
             );
           }

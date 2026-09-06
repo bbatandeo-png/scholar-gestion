@@ -47,6 +47,7 @@ describe('ReportsService', () => {
       {} as any,
       {} as any,
       {} as any,
+      {} as any,
     );
 
     const result = await service.registrationPaidStudents(
@@ -56,7 +57,7 @@ describe('ReportsService', () => {
     );
 
     expect(result).toHaveLength(1);
-    expect((result[0] as any).enrollmentId.studentId.lastname).toBe('A');
+    expect(result[0].enrollmentId.studentId.lastname).toBe('A');
     expect(result[0]).toMatchObject({
       amountDue: 1000,
       amountPaid: 1000,
@@ -90,6 +91,7 @@ describe('ReportsService', () => {
     const service = new ReportsService(
       {} as any,
       invoiceModel as any,
+      {} as any,
       {} as any,
       {} as any,
       {} as any,
@@ -144,6 +146,7 @@ describe('ReportsService', () => {
       {} as any,
       {} as any,
       {} as any,
+      {} as any,
     );
 
     const partial = await service.registrationPaidStudents('partial');
@@ -172,8 +175,11 @@ describe('ReportsService', () => {
       {} as any,
       {} as any,
       {
-        getSchoolName: jest.fn().mockResolvedValue('Complexe scolaire Dunya'),
+        getCurrentSchoolName: jest
+          .fn()
+          .mockResolvedValue('Complexe scolaire Dunya'),
       } as any,
+      {} as any,
     );
 
     const pdf = await service.renderRegistrationPaidPdf(
@@ -186,13 +192,14 @@ describe('ReportsService', () => {
     expect(pdfSource).toContain('/MediaBox [0 0 841.89 595.28]');
   });
 
-  it('builds the open-year nominal roll in alphabetical order with gender totals', async () => {
+  it('builds the open-year nominal roll ordered by most recent registration first, with gender totals', async () => {
     const enrollmentModel = {
       find: jest.fn().mockReturnValue({
         populate: jest.fn().mockReturnValue({
           lean: jest.fn().mockReturnValue({
             exec: jest.fn().mockResolvedValue([
               {
+                createdAt: new Date('2026-01-01T00:00:00Z'),
                 studentId: {
                   lastname: 'Zongo',
                   firstname: 'Ali',
@@ -201,6 +208,7 @@ describe('ReportsService', () => {
                 },
               },
               {
+                createdAt: new Date('2026-03-01T00:00:00Z'),
                 studentId: {
                   lastname: 'Afidégnon',
                   firstname: 'Yawa',
@@ -209,6 +217,7 @@ describe('ReportsService', () => {
                 },
               },
               {
+                createdAt: new Date('2026-02-01T00:00:00Z'),
                 studentId: {
                   lastname: 'Zongo',
                   firstname: 'Abla',
@@ -237,8 +246,10 @@ describe('ReportsService', () => {
         }),
       }),
     };
-    const settingsService = {
-      getSchoolName: jest.fn().mockResolvedValue('Complexe scolaire Dunya'),
+    const ecolesService = {
+      getCurrentSchoolName: jest
+        .fn()
+        .mockResolvedValue('Complexe scolaire Dunya'),
     };
     const service = new ReportsService(
       enrollmentModel as any,
@@ -247,7 +258,8 @@ describe('ReportsService', () => {
       levelModel as any,
       schoolYearModel as any,
       {} as any,
-      settingsService as any,
+      ecolesService as any,
+      {} as any,
     );
 
     const result = await service.getNominalRoll('level-1');
@@ -272,6 +284,7 @@ describe('ReportsService', () => {
 
   it('paginates a long nominal roll PDF without losing the A4 table', async () => {
     const service = new ReportsService(
+      {} as any,
       {} as any,
       {} as any,
       {} as any,

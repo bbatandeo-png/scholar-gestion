@@ -4,7 +4,7 @@
     <h2>Preparation du passage annuel</h2>
     {% if openSchoolYear %}
       <div class="notice notice-info">
-        L’année {{ openSchoolYear.label }} est encore ouverte. Sa clôture doit être effectuée manuellement dans les paramètres avant l’activation de la suivante.
+        L’année {{ openSchoolYear.label }} est actuellement ouverte. Si c’est l’année cible ci-dessous, vous pouvez preparer/promouvoir directement dedans. Si vous visez une autre année, clôturez d’abord {{ openSchoolYear.label }} dans les paramètres.
       </div>
     {% endif %}
     <form method="post" action="/promotions/prepare" class="stack">

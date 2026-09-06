@@ -5,4 +5,5 @@ export type SessionUser = {
   name: string;
   email: string;
   role: Role;
+  ecoleId: string | null;
 };

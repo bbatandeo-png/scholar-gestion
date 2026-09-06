@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Model } from 'mongoose';
 import { InvoiceStatus } from '../common/enums/domain.enums';
+import { FeeScheduleNotFoundException } from '../common/exceptions/fee-schedule-not-found.exception';
 import {
   FeeSchedule,
   FeeScheduleDocument,
@@ -50,7 +51,7 @@ export class BillingService {
       .lean()
       .exec();
     if (!schedule) {
-      throw new NotFoundException('Parametrage des frais introuvable');
+      throw new FeeScheduleNotFoundException();
     }
 
     return schedule;
@@ -64,7 +65,7 @@ export class BillingService {
       .lean()
       .exec();
     if (!schedule) {
-      throw new NotFoundException('Parametrage des frais introuvable');
+      throw new FeeScheduleNotFoundException();
     }
 
     return schedule;

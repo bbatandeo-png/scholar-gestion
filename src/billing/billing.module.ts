@@ -1,5 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { EcoleModulesModule } from '../ecole-modules/ecole-modules.module';
+import { EcolesModule } from '../ecoles/ecoles.module';
 import { LevelsModule } from '../levels/levels.module';
 import { SchoolYearsModule } from '../school-years/school-years.module';
 import { SettingsModule } from '../settings/settings.module';
@@ -18,6 +20,8 @@ import { Invoice, InvoiceSchema } from './schemas/invoice.schema';
     SchoolYearsModule,
     LevelsModule,
     ExpensesModule,
+    EcoleModulesModule,
+    EcolesModule,
     forwardRef(() => SettingsModule),
   ],
   controllers: [BillingController],

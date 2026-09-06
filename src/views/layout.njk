@@ -4,6 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{{ title or 'Scolar-Gestion' }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
@@ -35,16 +38,38 @@
             </a>
           </div>
 
+          {% if licenseEnforcementEnabled and (role == 'super_admin' or role == 'direction' or role == 'secretariat') %}
+            <div class="nav-group">
+              <a href="/licence" class="nav-link {% if currentPath == '/licence' %}is-active{% endif %}">
+                <span class="nav-icon">⚿</span>
+                <span>Licence</span>
+              </a>
+            </div>
+          {% endif %}
+
           {% if role == 'super_admin' or role == 'direction' or role == 'secretariat' or role == 'auditeur' %}
             <div class="nav-group">
-              <details class="nav-details" {% if currentPath and (currentPath.startsWith('/students') or currentPath == '/students/search') %}open{% endif %}>
+              <details class="nav-details" {% if currentPath and (currentPath.startsWith('/students') or currentPath == '/students/search' or currentPath.startsWith('/reports/student-cards')) %}open{% endif %}>
                 <summary>Gestion scolaire</summary>
                 <div class="nav-submenu">
                   <a href="/students" class="{% if currentPath and currentPath.startsWith('/students') and currentPath != '/students/search' %}is-active{% endif %}">Élèves</a>
                   <a href="/students/search" class="{% if currentPath == '/students/search' %}is-active{% endif %}">Recherche ancien élève</a>
+                  <a href="/reports/student-cards" class="{% if currentPath and currentPath.startsWith('/reports/student-cards') %}is-active{% endif %}">Cartes scolaires</a>
                 </div>
               </details>
             </div>
+            {% if activeModules.bulletins %}
+              <div class="nav-group">
+                <details class="nav-details" {% if currentPath and currentPath.startsWith('/bulletins') %}open{% endif %}>
+                  <summary>Gestion pédagogique</summary>
+                  <div class="nav-submenu">
+                    <a href="/bulletins" class="{% if currentPath == '/bulletins' or (currentPath and currentPath.startsWith('/bulletins/') and not currentPath.startsWith('/bulletins/new') and not currentPath.startsWith('/bulletins/matieres')) %}is-active{% endif %}">Sessions de bulletins</a>
+                    <a href="/bulletins/new" class="{% if currentPath and currentPath.startsWith('/bulletins/new') %}is-active{% endif %}">Nouvelle session</a>
+                    <a href="/bulletins/matieres" class="{% if currentPath and currentPath.startsWith('/bulletins/matieres') %}is-active{% endif %}">Matieres</a>
+                  </div>
+                </details>
+              </div>
+            {% endif %}
           {% endif %}
 
           {% if role == 'super_admin' or role == 'direction' or role == 'secretariat' or role == 'comptabilite' or role == 'auditeur' %}
@@ -63,10 +88,13 @@
               <details class="nav-details" {% if currentPath and (currentPath.startsWith('/expenses') or currentPath.startsWith('/arrears')) %}open{% endif %}>
                 <summary>Finances</summary>
                 <div class="nav-submenu">
-                  {% if role == 'super_admin' or role == 'direction' or role == 'comptabilite' %}
-                    <a href="/expenses" class="{% if currentPath and currentPath.startsWith('/expenses') %}is-active{% endif %}">Dépenses</a>
+                  {% if activeModules.finance %}
+                    {% if role == 'super_admin' or role == 'direction' or role == 'comptabilite' %}
+                      <a href="/expenses" class="{% if currentPath and currentPath.startsWith('/expenses') %}is-active{% endif %}">Dépenses</a>
+                    {% endif %}
+                    <a href="/arrears" class="{% if currentPath and currentPath.startsWith('/arrears') %}is-active{% endif %}">Impayés</a>
                   {% endif %}
-                  <a href="/arrears" class="{% if currentPath and currentPath.startsWith('/arrears') %}is-active{% endif %}">Impayés</a>
+                  <a href="/facturation" class="{% if currentPath and currentPath.startsWith('/facturation') %}is-active{% endif %}">Facturation</a>
                 </div>
               </details>
             </div>
@@ -90,7 +118,9 @@
                 <div class="nav-submenu">
                   <a href="/settings/school-years" class="{% if currentPath and currentPath.startsWith('/settings/school-years') %}is-active{% endif %}">Années scolaires</a>
                   <a href="/settings/levels" class="{% if currentPath and currentPath.startsWith('/settings/levels') %}is-active{% endif %}">Niveaux</a>
-                  <a href="/settings/fees" class="{% if currentPath and currentPath.startsWith('/settings/fees') %}is-active{% endif %}">Frais</a>
+                  {% if activeModules.finance %}
+                    <a href="/settings/fees" class="{% if currentPath and currentPath.startsWith('/settings/fees') %}is-active{% endif %}">Frais</a>
+                  {% endif %}
                 </div>
               </details>
             </div>
@@ -102,6 +132,17 @@
                 <summary>Administration</summary>
                 <div class="nav-submenu">
                   <a href="/users" class="{% if currentPath and currentPath.startsWith('/users') %}is-active{% endif %}">Utilisateurs</a>
+                </div>
+              </details>
+            </div>
+          {% endif %}
+
+          {% if role == 'platform_admin' %}
+            <div class="nav-group">
+              <details class="nav-details" {% if currentPath and currentPath.startsWith('/platform/ecoles') %}open{% endif %}>
+                <summary>Plateforme</summary>
+                <div class="nav-submenu">
+                  <a href="/platform/ecoles" class="{% if currentPath and currentPath.startsWith('/platform/ecoles') %}is-active{% endif %}">Ecoles</a>
                 </div>
               </details>
             </div>
@@ -178,6 +219,20 @@
 
         {% if flash %}
           <div class="flash {{ flash.type }}">{{ flash.message }}</div>
+        {% endif %}
+
+        {% if licenseStatus and licenseStatus.state == 'blocked' %}
+          <div class="notice notice-danger">
+            Licence expiree depuis le <strong>{{ licenseStatus.expiresAt | formatDate }}</strong> — l'application est en lecture seule. <a href="/licence">Renouveler la licence</a>.
+          </div>
+        {% elif licenseStatus and licenseStatus.state == 'grace' %}
+          <div class="notice notice-danger">
+            Licence expiree depuis le <strong>{{ licenseStatus.expiresAt | formatDate }}</strong> — passage en lecture seule le <strong>{{ licenseStatus.graceEndsAt | formatDate }}</strong> si elle n'est pas renouvelee. <a href="/licence">Renouveler la licence</a>.
+          </div>
+        {% elif licenseStatus and licenseStatus.showWarning %}
+          <div class="notice notice-warning">
+            Licence valable jusqu'au <strong>{{ licenseStatus.expiresAt | formatDate }}</strong> ({{ licenseStatus.daysRemaining }} jour(s) restant(s)). <a href="/licence">Voir les details</a>.
+          </div>
         {% endif %}
 
         {% if schoolYearContext and schoolYearContext.isHistorical %}
@@ -316,6 +371,30 @@
               header.dataset.sortDirection = next;
               header.classList.add(next === 'asc' ? 'sort-asc' : 'sort-desc');
             });
+          });
+        });
+      })();
+    </script>
+    <script>
+      (() => {
+        // Prevents an impatient double-click on "Importer" (or any other
+        // file-upload submit) from firing the request twice while the
+        // upload is in flight - does not block the submission itself, only
+        // disables the button and swaps its label once it has started.
+        document.querySelectorAll('form[enctype="multipart/form-data"]').forEach((form) => {
+          form.addEventListener('submit', () => {
+            const submitControl = form.querySelector(
+              'button[type="submit"], button:not([type]), input[type="submit"]',
+            );
+            if (!submitControl || submitControl.disabled) {
+              return;
+            }
+            submitControl.disabled = true;
+            if (submitControl.tagName === 'INPUT') {
+              submitControl.value = 'Import en cours...';
+            } else {
+              submitControl.textContent = 'Import en cours...';
+            }
           });
         });
       })();

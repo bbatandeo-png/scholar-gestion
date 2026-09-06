@@ -17,6 +17,7 @@
         <select name="filter">
           <option value="registration" {% if filter == 'registration' %}selected{% endif %}>Inscription payée</option>
           <option value="tuition" {% if filter == 'tuition' %}selected{% endif %}>Écolage payé</option>
+          <option value="full" {% if filter == 'full' %}selected{% endif %}>Paiement complet</option>
           <option value="partial" {% if filter == 'partial' %}selected{% endif %}>Paiement partiel</option>
           <option value="none" {% if filter == 'none' %}selected{% endif %}>Aucun paiement</option>
         </select>

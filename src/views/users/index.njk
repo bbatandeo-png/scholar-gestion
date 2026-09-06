@@ -1,4 +1,5 @@
 {% extends "layout.njk" %}
+{% import "partials/legend.njk" as legend %}
 {% block content %}
   <section class="grid user-page two-columns">
     <div class="panel">
@@ -66,14 +67,14 @@
           <label><span>Role</span>
             <select name="role" required>
               {% for role in roleOptions %}
-                <option value="{{ role }}">{{ role }}</option>
+                <option value="{{ role }}" title="{{ ENUM_META.role[role].description }}">{{ ENUM_META.role[role].label if ENUM_META.role[role] else role }}</option>
               {% endfor %}
             </select>
           </label>
           <label><span>Statut</span>
             <select name="status" required>
               {% for status in statusOptions %}
-                <option value="{{ status }}" {% if status == 'active' %}selected{% endif %}>{{ status }}</option>
+                <option value="{{ status }}" {% if status == 'active' %}selected{% endif %} title="{{ ENUM_META.userStatus[status].description }}">{{ ENUM_META.userStatus[status].label if ENUM_META.userStatus[status] else status }}</option>
               {% endfor %}
             </select>
           </label>
@@ -99,7 +100,7 @@
           <select name="role">
             <option value="">Tous les rôles</option>
             {% for role in roleOptions %}
-              <option value="{{ role }}" {% if role == selectedRole %}selected{% endif %}>{{ role }}</option>
+              <option value="{{ role }}" {% if role == selectedRole %}selected{% endif %}>{{ ENUM_META.role[role].label if ENUM_META.role[role] else role }}</option>
             {% endfor %}
           </select>
         </label>
@@ -107,7 +108,7 @@
           <select name="status">
             <option value="">Tous les statuts</option>
             {% for status in statusOptions %}
-              <option value="{{ status }}" {% if status == selectedStatus %}selected{% endif %}>{{ status }}</option>
+              <option value="{{ status }}" {% if status == selectedStatus %}selected{% endif %}>{{ ENUM_META.userStatus[status].label if ENUM_META.userStatus[status] else status }}</option>
             {% endfor %}
           </select>
         </label>
@@ -118,27 +119,29 @@
       <div class="table-shell">
         <table class="table-report">
           <thead>
-            <tr><th>Nom</th><th>Email</th><th>Role</th><th>Statut</th><th>Actions</th></tr>
+            <tr><th>N°</th><th>Nom</th><th>Email</th><th>Role</th><th>Statut</th><th>Date d'enregistrement</th><th>Actions</th></tr>
           </thead>
           <tbody>
             {% for user in users %}
               <tr>
+                <td>{{ (pagination.page - 1) * pagination.pageSize + loop.index }}</td>
                 <td>{{ user.name }}</td>
                 <td>{{ user.email }}</td>
-                <td>{{ user.role }}</td>
-                <td>{% set value = user.status %}{% include "partials/status-badge.njk" %}</td>
+                <td>{{ ENUM_META.role[user.role].label if ENUM_META.role[user.role] else user.role }}</td>
+                <td>{% set value = user.status %}{% set group = 'userStatus' %}{% include "partials/status-badge.njk" %}</td>
+                <td>{{ user.createdAt | formatDate }}</td>
                 <td>
                   <div class="table-actions">
                     <form method="post" action="/users/{{ user._id }}/access" class="inline-form no-wrap">
                       <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
                       <select name="role">
                         {% for role in roleOptions %}
-                          <option value="{{ role }}" {% if role == user.role %}selected{% endif %}>{{ role }}</option>
+                          <option value="{{ role }}" {% if role == user.role %}selected{% endif %}>{{ ENUM_META.role[role].label if ENUM_META.role[role] else role }}</option>
                         {% endfor %}
                       </select>
                       <select name="status">
                         {% for status in statusOptions %}
-                          <option value="{{ status }}" {% if status == user.status %}selected{% endif %}>{{ status }}</option>
+                          <option value="{{ status }}" {% if status == user.status %}selected{% endif %}>{{ ENUM_META.userStatus[status].label if ENUM_META.userStatus[status] else status }}</option>
                         {% endfor %}
                       </select>
                       <button type="submit" class="secondary btn-sm btn-icon icon-save">Accès</button>
@@ -152,11 +155,12 @@
                 </td>
               </tr>
             {% else %}
-              <tr><td colspan="5">Aucun utilisateur.</td></tr>
+              <tr><td colspan="7">Aucun utilisateur.</td></tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
+      {{ legend.render(['userStatus']) }}
       <div class="pagination-row">
         <form method="get" action="/users" class="inline-form">
           <input type="hidden" name="q" value="{{ query }}" />

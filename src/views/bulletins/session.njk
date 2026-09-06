@@ -1,0 +1,68 @@
+{% extends "layout.njk" %}
+{% import "partials/legend.njk" as legend %}
+{% block content %}
+<div class="panel">
+  <div class="panel-heading">
+    <div>
+      <h2>{{ session.levelId.label }} — {{ periodeLabels[session.periode] }} ({{ session.schoolYearId.label }})</h2>
+      <p class="muted">Statut : {% set value = session.status %}{% set group = 'bulletinSessionStatus' %}{% include "partials/status-badge.njk" %}</p>
+    </div>
+  </div>
+
+  {% if session.status != 'validated' %}
+    <h3>Importer le fichier Excel</h3>
+    <form method="post" action="/bulletins/{{ session._id }}/import?_csrf={{ csrfToken }}" enctype="multipart/form-data" class="stack">
+      <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+      <div class="form-grid">
+        <label>Fichier Excel<input type="file" name="file" accept=".xlsx,.xls" required /></label>
+        <label>Mode d'import
+          <select name="mode">
+            {% for key, meta in ENUM_META.bulletinImportMode %}
+              <option value="{{ key }}" title="{{ meta.description }}">{{ meta.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+      <button type="submit">Importer</button>
+    </form>
+    {{ legend.render(['bulletinImportMode']) }}
+  {% endif %}
+
+  {% if session.status == 'imported' or session.status == 'pending_review' or session.status == 'ready' %}
+    <div class="toolbar top-gap">
+      <a class="button" href="/bulletins/{{ session._id }}/review">Revoir les correspondances</a>
+      <a class="button secondary" href="/bulletins/{{ session._id }}/donnees">Voir les donnees importees</a>
+      <a class="button secondary" href="/bulletins/{{ session._id }}/discipline">Retards / absences / decisions</a>
+      {% if session.status == 'ready' %}
+        <form method="post" action="/bulletins/{{ session._id }}/validate" class="inline-form">
+          <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+          <button type="submit">Valider la session</button>
+        </form>
+      {% else %}
+        <span class="muted">{{ unapprovedSubjects.length }} matiere(s) a approuver / des eleves a rapprocher avant validation.</span>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  {% if session.status == 'validated' %}
+    <div class="notice notice-info">
+      Session validee le {{ session.importedAt | formatDate }}. Les notes sont enregistrees.
+    </div>
+    <div class="toolbar top-gap">
+      <a class="button secondary" href="/bulletins/{{ session._id }}/donnees">Voir les donnees importees</a>
+      <a class="button btn-icon icon-export" href="/bulletins/{{ session._id }}/pdf">Telecharger tous les bulletins (PDF)</a>
+    </div>
+  {% endif %}
+
+  {% if session.meta %}
+    <h3 class="top-gap">Informations du fichier</h3>
+    <p class="muted">
+      Titulaire : {{ session.meta.titulaire or '—' }} —
+      Chef d'etablissement : {{ session.meta.chefEtablissement or '—' }} —
+      Annee scolaire (fichier) : {{ session.meta.anneeScolaire or '—' }} —
+      Date du conseil : {{ session.meta.dateDuConseil | formatDate if session.meta.dateDuConseil else '—' }}
+    </p>
+  {% endif %}
+  {{ legend.render(['bulletinSessionStatus']) }}
+</div>
+{% endblock %}

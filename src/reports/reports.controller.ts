@@ -1,6 +1,10 @@
 import {
+  BadRequestException,
+  Body,
   Controller,
   Get,
+  Param,
+  Post,
   Query,
   Render,
   Req,
@@ -16,6 +20,9 @@ import { buildExcelBuffer } from '../common/utils/excel.util';
 import { ReportsService } from './reports.service';
 import { SchoolYearsService } from '../school-years/school-years.service';
 
+// Not gated by @RequireModule('FINANCE'): every route here is read-only, and
+// the Finance module guard never blocks reads - gating this controller
+// would have no enforcement effect, so it's deliberately left alone.
 @Controller('/reports')
 @UseGuards(AuthenticatedGuard, RolesGuard)
 export class ReportsController {
@@ -49,6 +56,105 @@ export class ReportsController {
     res.setHeader(
       'Content-Disposition',
       `inline; filename="liste-nominative-${safeLevelName}.pdf"`,
+    );
+    return res.send(pdf);
+  }
+
+  @Get('/student-cards')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT, Role.AUDITEUR)
+  @Render('reports/student-cards')
+  async studentCards(@Req() req: Request, @Query('levelId') levelId?: string) {
+    const schoolYearId = await this.selectedYearId(req);
+    const roster = levelId
+      ? await this.reportsService.getClassRosterForCards(levelId, schoolYearId)
+      : null;
+    return {
+      title: 'Cartes scolaires',
+      levels: await this.reportsService.listLevels(),
+      levelId: levelId || '',
+      roster,
+    };
+  }
+
+  @Get('/student-cards/pdf')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT, Role.AUDITEUR)
+  async studentCardsPdf(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query('levelId') levelId: string,
+  ) {
+    const schoolYearId = await this.selectedYearId(req);
+    const roster = await this.reportsService.getClassRosterForCards(
+      levelId,
+      schoolYearId,
+    );
+    const dataList = await Promise.all(
+      roster.students.map((student) =>
+        this.reportsService.getStudentIdCardData(student._id, schoolYearId),
+      ),
+    );
+    const pdf = await this.reportsService.renderClassIdCardsPdf(dataList);
+    const safeLevelName = roster.levelName.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="cartes-scolaires-${safeLevelName}.pdf"`,
+    );
+    return res.send(pdf);
+  }
+
+  @Post('/student-cards/selection')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT, Role.AUDITEUR)
+  async studentCardsSelectionPdf(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Body('studentIds') studentIdsRaw: string | string[] | undefined,
+  ) {
+    const studentIds = (
+      Array.isArray(studentIdsRaw)
+        ? studentIdsRaw
+        : studentIdsRaw
+          ? [studentIdsRaw]
+          : []
+    ).filter(Boolean);
+    if (studentIds.length === 0) {
+      throw new BadRequestException('Aucun eleve selectionne');
+    }
+
+    const schoolYearId = await this.selectedYearId(req);
+    const dataList = await Promise.all(
+      studentIds.map((studentId) =>
+        this.reportsService.getStudentIdCardData(studentId, schoolYearId),
+      ),
+    );
+    const pdf = await this.reportsService.renderClassIdCardsPdf(dataList);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="cartes-scolaires-selection.pdf"',
+    );
+    return res.send(pdf);
+  }
+
+  @Get('/student-cards/:studentId/pdf')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT, Role.AUDITEUR)
+  async studentCardPdf(
+    @Param('studentId') studentId: string,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const data = await this.reportsService.getStudentIdCardData(
+      studentId,
+      await this.selectedYearId(req),
+    );
+    const pdf = await this.reportsService.renderStudentIdCardPdf(data);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="carte-scolaire-${data.lastname}-${data.firstname}.pdf"`,
     );
     return res.send(pdf);
   }
@@ -151,18 +257,17 @@ export class ReportsController {
     ].includes(filter ?? '')
       ? (filter as 'registration' | 'tuition' | 'full' | 'partial' | 'none')
       : 'registration';
-    const selectedSchoolYearId = await this.selectedYearId(req);
-    const selectedYear =
-      await this.schoolYearsService.findById(selectedSchoolYearId);
+    const effectiveSchoolYearId =
+      schoolYearId || (await this.selectedYearId(req));
 
     const [report, levels, schoolYears] = await Promise.all([
       this.reportsService.registrationPaidStudents(
         normalizedFilter,
         levelId,
-        selectedSchoolYearId,
+        effectiveSchoolYearId,
       ),
       this.reportsService.listLevels(),
-      Promise.resolve(selectedYear ? [selectedYear] : []),
+      this.schoolYearsService.list(),
     ]);
 
     return {
@@ -170,7 +275,7 @@ export class ReportsController {
       report,
       filter: normalizedFilter,
       levelId: levelId || '',
-      schoolYearId: selectedSchoolYearId,
+      schoolYearId: effectiveSchoolYearId,
       levels,
       schoolYears,
     };
@@ -194,12 +299,15 @@ export class ReportsController {
     ].includes(filter ?? '')
       ? (filter as 'registration' | 'tuition' | 'full' | 'partial' | 'none')
       : 'registration';
-    const selectedYearId = await this.selectedYearId(req);
-    const selectedYear = await this.schoolYearsService.findById(selectedYearId);
+    const effectiveSchoolYearId =
+      schoolYearId || (await this.selectedYearId(req));
+    const selectedYear = await this.schoolYearsService.findById(
+      effectiveSchoolYearId,
+    );
     const report = await this.reportsService.registrationPaidStudents(
       normalizedFilter,
       levelId,
-      selectedYearId,
+      effectiveSchoolYearId,
     );
     const pdf = await this.reportsService.renderRegistrationPaidPdf(
       report,

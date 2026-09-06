@@ -402,6 +402,45 @@ export class EnrollmentsService {
       String(enrollment.schoolYearId),
     );
 
+    const studentChanged =
+      dto.studentId && dto.studentId !== String(enrollment.studentId);
+    const levelChanged =
+      dto.levelId && dto.levelId !== String(enrollment.levelId);
+
+    if (studentChanged) {
+      // Same guard createEnrollment already applies at creation time - the
+      // student being switched onto this enrollment must not already have
+      // a separate active enrollment for the same school year.
+      const conflicting = await this.enrollmentModel
+        .findOne({
+          _id: { $ne: id },
+          studentId: dto.studentId,
+          schoolYearId: enrollment.schoolYearId,
+          status: EnrollmentStatus.ACTIVE,
+        })
+        .exec();
+      if (conflicting) {
+        throw new ConflictException(
+          'Double inscription active interdite pour cette annee',
+        );
+      }
+    }
+
+    // studentSnapshot/levelSnapshot are denormalized for display (e.g. the
+    // enrollments list) - they must be refreshed whenever the student or
+    // level actually changes, otherwise the list keeps showing the old
+    // student/level for this row even though the detail page (which
+    // populates the live reference) shows the new one.
+    const [studentSnapshot, levelSnapshot] = await Promise.all([
+      studentChanged
+        ? this.studentsService.findById(dto.studentId as string)
+        : null,
+      levelChanged ? this.levelsService.findById(dto.levelId as string) : null,
+    ]);
+    if (levelChanged && !levelSnapshot) {
+      throw new NotFoundException('Niveau introuvable');
+    }
+
     const updated = await this.enrollmentModel
       .findByIdAndUpdate(
         id,
@@ -412,6 +451,28 @@ export class EnrollmentsService {
           type: dto.type ?? enrollment.type,
           previousEnrollmentId:
             dto.previousEnrollmentId ?? enrollment.previousEnrollmentId,
+          ...(studentSnapshot
+            ? {
+                studentSnapshot: {
+                  matricule: studentSnapshot.matricule,
+                  lastname: studentSnapshot.lastname,
+                  firstname: studentSnapshot.firstname,
+                  gender: studentSnapshot.gender,
+                  birthDate: studentSnapshot.birthDate,
+                  birthPlace: studentSnapshot.birthPlace,
+                  district: studentSnapshot.district,
+                },
+              }
+            : {}),
+          ...(levelSnapshot
+            ? {
+                levelSnapshot: {
+                  code: levelSnapshot.code,
+                  label: levelSnapshot.label,
+                  sortOrder: levelSnapshot.sortOrder,
+                },
+              }
+            : {}),
         },
         { new: true },
       )

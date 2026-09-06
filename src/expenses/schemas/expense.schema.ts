@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, SchemaTypes } from 'mongoose';
+import { ecoleScopePlugin } from '../../common/mongoose/ecole-scope.plugin';
 
 export type ExpenseDocument = HydratedDocument<Expense>;
 
@@ -53,4 +54,5 @@ export class Expense {
 }
 
 export const ExpenseSchema = SchemaFactory.createForClass(Expense);
+ExpenseSchema.plugin(ecoleScopePlugin);
 ExpenseSchema.index({ schoolYearId: 1, expenseDate: -1 });

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { SettingsModule } from '../settings/settings.module';
+import { EcoleModulesModule } from '../ecole-modules/ecole-modules.module';
+import { EcolesModule } from '../ecoles/ecoles.module';
 import { ExpensesController } from './expenses.controller';
 import { ExpensesService } from './expenses.service';
 import { Expense, ExpenseSchema } from './schemas/expense.schema';
@@ -21,8 +22,9 @@ import { SchoolYearsModule } from '../school-years/school-years.module';
       { name: ExpenseCategory.name, schema: ExpenseCategorySchema },
       { name: SchoolYear.name, schema: SchoolYearSchema },
     ]),
-    SettingsModule,
     SchoolYearsModule,
+    EcoleModulesModule,
+    EcolesModule,
   ],
   controllers: [ExpensesController],
   providers: [ExpensesService],

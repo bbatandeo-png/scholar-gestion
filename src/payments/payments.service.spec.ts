@@ -9,6 +9,7 @@ describe('PaymentsService receipt amounts', () => {
     {} as any,
     {} as any,
     {} as any,
+    {} as any,
   );
   const invoice = {
     tuitionFee: 80000,
@@ -43,7 +44,12 @@ describe('PaymentsService receipt amounts', () => {
       {} as any,
       {} as any,
       {} as any,
-      { getSchoolName: jest.fn().mockResolvedValue('Complexe scolaire Dunya') } as any,
+      {} as any,
+      {
+        getCurrentSchoolName: jest
+          .fn()
+          .mockResolvedValue('Complexe scolaire Dunya'),
+      } as any,
       {} as any,
       {} as any,
     );
@@ -54,7 +60,12 @@ describe('PaymentsService receipt amounts', () => {
       invoiceId: {
         ...invoice,
         enrollmentId: {
-          studentId: { lastname: 'AFANVI', firstname: 'Kodjo', matricule: 'MAT-010', gender: 'M' },
+          studentId: {
+            lastname: 'AFANVI',
+            firstname: 'Kodjo',
+            matricule: 'MAT-010',
+            gender: 'M',
+          },
           schoolYearId: { label: '2026 – 2027' },
           levelId: { label: 'CP1' },
         },

@@ -1,4 +1,5 @@
 ﻿{% extends "layout.njk" %}
+{% import "partials/legend.njk" as legend %}
 {% block content %}
   <section class="grid cols-2">
     <div class="panel">
@@ -11,8 +12,8 @@
       <p><strong>Eleve:</strong> {{ enrollment.studentId.lastname if enrollment.studentId }} {{ enrollment.studentId.firstname if enrollment.studentId }}</p>
       <p><strong>Annee:</strong> {{ enrollment.schoolYearId.label if enrollment.schoolYearId }}</p>
       <p><strong>Niveau:</strong> {{ enrollment.levelId.label if enrollment.levelId }}</p>
-      <p><strong>Type:</strong> {{ enrollment.type }}</p>
-      <p><strong>Statut:</strong> {% set value = enrollment.status %}{% include "partials/status-badge.njk" %}</p>
+      <p><strong>Type:</strong> {{ ENUM_META.enrollmentType[enrollment.type].label if ENUM_META.enrollmentType[enrollment.type] else enrollment.type }}</p>
+      <p><strong>Statut:</strong> {% set value = enrollment.status %}{% set group = 'enrollmentStatus' %}{% include "partials/status-badge.njk" %}</p>
 
       <form method="post" action="/enrollments/{{ enrollment._id }}?_method=PUT" class="stack">
         <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
@@ -40,15 +41,15 @@
           </label>
           <label>Type
             <select name="type">
-              <option value="initial" {% if enrollment.type == 'initial' %}selected{% endif %}>initial</option>
-              <option value="re_enrollment" {% if enrollment.type == 're_enrollment' %}selected{% endif %}>re_enrollment</option>
-              <option value="promotion" {% if enrollment.type == 'promotion' %}selected{% endif %}>promotion</option>
-              <option value="repeat" {% if enrollment.type == 'repeat' %}selected{% endif %}>repeat</option>
+              {% for key, meta in ENUM_META.enrollmentType %}
+                <option value="{{ key }}" {% if enrollment.type == key %}selected{% endif %} title="{{ meta.description }}">{{ meta.label }}</option>
+              {% endfor %}
             </select>
           </label>
         </div>
         <button type="submit">Enregistrer les changements</button>
       </form>
+      {{ legend.render(['enrollmentType', 'enrollmentStatus']) }}
     </div>
 
     <div class="panel">
@@ -66,7 +67,7 @@
         <p><strong>Total du:</strong> {{ invoice.totalDue }}</p>
         <p><strong>Paye:</strong> {{ invoice.paidAmount }}</p>
         <p><strong>Reste:</strong> {{ invoice.balanceDue }}</p>
-        <p><strong>Statut:</strong> {% set value = invoice.status %}{% include "partials/status-badge.njk" %}</p>
+        <p><strong>Statut:</strong> {% set value = invoice.status %}{% set group = 'invoiceStatus' %}{% include "partials/status-badge.njk" %}</p>
 
         {% if currentUser and currentUser.role == 'super_admin' %}
           <div class="stack">
@@ -105,10 +106,9 @@
               <label>Montant<input type="number" name="amount" min="1" required /></label>
               <label>Mode
                 <select name="method">
-                  <option value="cash">cash</option>
-                  <option value="mobile_money">mobile_money</option>
-                  <option value="bank_transfer">bank_transfer</option>
-                  <option value="other">other</option>
+                  {% for key, meta in ENUM_META.paymentMethod %}
+                    <option value="{{ key }}">{{ meta.label }}</option>
+                  {% endfor %}
                 </select>
               </label>
               <label>Reference<input name="reference" /></label>
@@ -116,8 +116,9 @@
             <button type="submit">Enregistrer le paiement</button>
           </form>
         </div>
+        {{ legend.render(['invoiceStatus']) }}
 
-        {% if currentUser and (currentUser.role == 'super_admin' or currentUser.role == 'comptabilite') %}
+        {% if activeModules.finance and currentUser and (currentUser.role == 'super_admin' or currentUser.role == 'comptabilite') %}
           <div class="stack">
             <h3>Modification financière</h3>
             <p class="muted">Cette action est réservée au Super Administrateur ou au Comptable. Le motif est obligatoire.</p>

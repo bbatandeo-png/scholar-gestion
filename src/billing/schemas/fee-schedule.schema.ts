@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, SchemaTypes } from 'mongoose';
+import { ecoleScopePlugin } from '../../common/mongoose/ecole-scope.plugin';
 
 export type FeeScheduleDocument = HydratedDocument<FeeSchedule>;
 
@@ -19,4 +20,8 @@ export class FeeSchedule {
 }
 
 export const FeeScheduleSchema = SchemaFactory.createForClass(FeeSchedule);
-FeeScheduleSchema.index({ schoolYearId: 1, levelId: 1 }, { unique: true });
+FeeScheduleSchema.plugin(ecoleScopePlugin);
+FeeScheduleSchema.index(
+  { ecoleId: 1, schoolYearId: 1, levelId: 1 },
+  { unique: true },
+);

@@ -11,11 +11,12 @@ import {
   SchoolYear,
   SchoolYearSchema,
 } from '../school-years/schemas/school-year.schema';
-import { SettingsModule } from '../settings/settings.module';
+import { EcolesModule } from '../ecoles/ecoles.module';
 import { ReportsController } from './reports.controller';
 import { ReportsService } from './reports.service';
 import { SchoolYearsModule } from '../school-years/school-years.module';
 import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
+import { SettingsModule } from '../settings/settings.module';
 
 @Module({
   imports: [
@@ -27,10 +28,12 @@ import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
       { name: SchoolYear.name, schema: SchoolYearSchema },
       { name: Payment.name, schema: PaymentSchema },
     ]),
-    SettingsModule,
+    EcolesModule,
     SchoolYearsModule,
+    SettingsModule,
   ],
   controllers: [ReportsController],
   providers: [ReportsService],
+  exports: [ReportsService],
 })
 export class ReportsModule {}

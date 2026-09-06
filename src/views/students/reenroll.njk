@@ -1,4 +1,5 @@
 ﻿{% extends "layout.njk" %}
+{% import "partials/legend.njk" as legend %}
 {% block content %}
   <section class="grid cols-2">
     <div class="panel">
@@ -35,20 +36,23 @@
     </div>
     <div class="panel">
       <h2>Impayes ouverts reportables</h2>
-      <table>
-        <thead><tr><th>Montant initial</th><th>Reste</th><th>Statut</th></tr></thead>
-        <tbody>
-          {% for item in openArrears %}
-            <tr>
-              <td>{{ item.amountInitial }}</td>
-              <td>{{ item.amountRemaining }}</td>
-              <td>{% set value = item.status %}{% include "partials/status-badge.njk" %}</td>
-            </tr>
-          {% else %}
-            <tr><td colspan="3">Aucun impaye ouvert.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      <div class="table-shell">
+        <table class="table-report">
+          <thead><tr><th>Montant initial</th><th>Reste</th><th>Statut</th></tr></thead>
+          <tbody>
+            {% for item in openArrears %}
+              <tr>
+                <td>{{ item.amountInitial }}</td>
+                <td>{{ item.amountRemaining }}</td>
+                <td>{% set value = item.status %}{% set group = 'arrearStatus' %}{% include "partials/status-badge.njk" %}</td>
+              </tr>
+            {% else %}
+              <tr><td colspan="3">Aucun impaye ouvert.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {{ legend.render(['arrearStatus']) }}
     </div>
   </section>
 {% endblock %}

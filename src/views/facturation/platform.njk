@@ -1,0 +1,77 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <section class="grid cols-2">
+    <div class="panel">
+      <h2>Parametre de facturation — {{ ecole.nom }}</h2>
+      {% if parametre %}
+        <p class="muted">
+          Actif depuis le {{ parametre.dateEffet | formatDate }} —
+          mode <strong>{{ parametre.mode }}</strong>
+          {% if parametre.sousType %}({{ parametre.sousType }}){% endif %},
+          {{ parametre.montantUnitaire }} FCFA
+        </p>
+      {% else %}
+        <p class="muted">Aucun parametre actif pour cette ecole.</p>
+      {% endif %}
+      <form method="post" action="/platform/facturation/{{ ecole._id }}/parametre" class="stack">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+        <div class="form-grid">
+          <label>Mode
+            <select name="mode" required>
+              <option value="forfait" {% if parametre.mode == 'forfait' %}selected{% endif %}>Forfait</option>
+              <option value="usage_eleve" {% if parametre.mode == 'usage_eleve' %}selected{% endif %}>Usage par eleve</option>
+              <option value="usage_bulletin" {% if parametre.mode == 'usage_bulletin' %}selected{% endif %}>Usage par bulletin</option>
+            </select>
+          </label>
+          <label>Sous-type (si forfait)
+            <select name="sousType">
+              <option value="">—</option>
+              <option value="trimestriel" {% if parametre.sousType == 'trimestriel' %}selected{% endif %}>Trimestriel</option>
+              <option value="annuel" {% if parametre.sousType == 'annuel' %}selected{% endif %}>Annuel</option>
+              <option value="illimite" {% if parametre.sousType == 'illimite' %}selected{% endif %}>Illimite</option>
+            </select>
+          </label>
+          <label>Montant unitaire (FCFA)<input type="number" min="0" step="1" name="montantUnitaire" value="{{ parametre.montantUnitaire }}" required /></label>
+        </div>
+        <button type="submit">Changer le parametre</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>Generer une facture</h2>
+      <form method="post" action="/platform/facturation/{{ ecole._id }}/factures" class="stack">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+        <div class="form-grid">
+          <label>Periode<input name="periode" placeholder="ex: 2026-T1" required /></label>
+          <label>Classe (optionnel, sinon toute l'ecole)<input name="classeId" placeholder="id de la classe" /></label>
+        </div>
+        <button type="submit">Generer</button>
+      </form>
+
+      <div class="panel-heading top-gap">
+        <div>
+          <h2>Factures</h2>
+        </div>
+      </div>
+      <div class="table-shell">
+        <table class="table-report">
+          <thead><tr><th>Numero</th><th>Periode</th><th>Date</th><th>Montant</th><th>Statut</th><th></th></tr></thead>
+          <tbody>
+            {% for facture in factures %}
+              <tr>
+                <td>{{ facture.numero }}</td>
+                <td>{{ facture.periode }}</td>
+                <td>{{ facture.dateGeneration | formatDate }}</td>
+                <td>{{ facture.montantTotal }}</td>
+                <td>{{ facture.statut }}</td>
+                <td><a class="button btn-sm" href="/platform/facturation/factures/{{ facture._id }}/pdf">PDF</a></td>
+              </tr>
+            {% else %}
+              <tr><td colspan="6">Aucune facture.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+{% endblock %}

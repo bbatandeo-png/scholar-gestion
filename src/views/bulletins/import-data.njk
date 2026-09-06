@@ -1,0 +1,104 @@
+{% extends "layout.njk" %}
+{% import "partials/legend.njk" as legend %}
+{% block content %}
+<div class="panel">
+  <div class="panel-heading">
+    <div>
+      <h2>Donnees importees — {{ session.levelId.label }} — {{ periodeLabels[session.periode] }}</h2>
+      <p class="muted">{{ rows.length }} eleve(s), {{ subjects.length }} matiere(s). Reflete l'etat actuel de l'import (avant ou apres validation).</p>
+    </div>
+    <div class="toolbar">
+      <a class="button secondary" href="/bulletins/{{ session._id }}/review">Revue / rapprochement</a>
+      <a class="button secondary" href="/bulletins/{{ session._id }}">Retour a la session</a>
+    </div>
+  </div>
+
+  {% if session.meta %}
+    <p class="muted">
+      Titulaire : {{ session.meta.titulaire or '—' }} —
+      Chef d'etablissement : {{ session.meta.chefEtablissement or '—' }} —
+      Annee scolaire (fichier) : {{ session.meta.anneeScolaire or '—' }} —
+      Date du conseil : {{ session.meta.dateDuConseil | formatDate if session.meta.dateDuConseil else '—' }}
+    </p>
+  {% endif %}
+
+  {% if session.status == 'validated' %}
+    <form method="post" action="/bulletins/{{ session._id }}/students/selection/pdf" target="_blank" id="bulletins-selection-form">
+      <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+  {% endif %}
+  <div class="table-shell">
+    <table class="table-report">
+      <thead>
+        <tr>
+          {% if session.status == 'validated' %}<th rowspan="2"><input type="checkbox" id="select-all-bulletins" /></th>{% endif %}
+          <th rowspan="2">Eleve</th>
+          <th rowspan="2">Sexe</th>
+          <th rowspan="2">Statut</th>
+          {% if session.status == 'validated' %}<th rowspan="2"></th>{% endif %}
+          {% for subject in subjects %}
+            <th colspan="5">{{ subject }}{% if subjectTeachers[loop.index0] %} — {{ subjectTeachers[loop.index0] }}{% endif %}</th>
+          {% endfor %}
+        </tr>
+        <tr>
+          {% for subject in subjects %}
+            <th>i1</th><th>i2</th><th>Dev</th><th>Comp</th><th>Prof</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            {% if session.status == 'validated' %}
+              <td>{% if row.studentId %}<input type="checkbox" class="bulletin-checkbox" name="studentIds" value="{{ row.studentId }}" />{% endif %}</td>
+            {% endif %}
+            <td>{{ row.displayName }} {% if row.matricule %}({{ row.matricule }}){% endif %}</td>
+            <td>{{ row.sexeRaw or '—' }}</td>
+            <td>{% set value = row.matchStatus %}{% set group = 'importRowMatchStatus' %}{% include "partials/status-badge.njk" %}</td>
+            {% if session.status == 'validated' %}
+              <td>{% if row.studentId %}<a class="button btn-sm" href="/bulletins/{{ session._id }}/students/{{ row.studentId }}/pdf">PDF</a>{% endif %}</td>
+            {% endif %}
+            {% for cell in row.cells %}
+              <td>{{ cell.i1 if cell and cell.i1 != null else '—' }}</td>
+              <td>{{ cell.i2 if cell and cell.i2 != null else '—' }}</td>
+              <td>{{ cell.devoir if cell and cell.devoir != null else '—' }}</td>
+              <td>{{ cell.compo if cell and cell.compo != null else '—' }}</td>
+              <td>{{ cell.profRaw or '—' }}</td>
+            {% endfor %}
+          </tr>
+        {% else %}
+          <tr><td colspan="3">Aucune donnee importee.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if session.status == 'validated' %}
+      {% if rows.length %}
+        <div class="toolbar compact-actions top-gap">
+          <button type="submit" class="button secondary btn-icon icon-export" id="download-bulletins-selection-btn" disabled>Telecharger la selection (PDF)</button>
+          <span class="muted" id="bulletins-selection-count">0 eleve(s) selectionne(s)</span>
+        </div>
+      {% endif %}
+    </form>
+    <script>
+      (() => {
+        const selectAll = document.getElementById('select-all-bulletins');
+        const boxes = Array.from(document.querySelectorAll('.bulletin-checkbox'));
+        const downloadBtn = document.getElementById('download-bulletins-selection-btn');
+        const counter = document.getElementById('bulletins-selection-count');
+        const refresh = () => {
+          const checked = boxes.filter((box) => box.checked).length;
+          if (downloadBtn) downloadBtn.disabled = checked === 0;
+          if (counter) counter.textContent = checked + ' eleve(s) selectionne(s)';
+        };
+        selectAll?.addEventListener('change', () => {
+          boxes.forEach((box) => { box.checked = selectAll.checked; });
+          refresh();
+        });
+        boxes.forEach((box) => box.addEventListener('change', refresh));
+        refresh();
+      })();
+    </script>
+  {% endif %}
+  {{ legend.render(['importRowMatchStatus']) }}
+</div>
+{% endblock %}

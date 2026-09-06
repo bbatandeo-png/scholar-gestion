@@ -3,6 +3,11 @@
 /node_modules
 /build
 
+# packaged exe builds - large binaries, never committed
+/release
+/release-assets
+/release_old
+
 # Logs
 logs
 *.log

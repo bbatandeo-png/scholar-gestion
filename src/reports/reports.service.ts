@@ -11,9 +11,13 @@ import { Invoice } from '../billing/schemas/invoice.schema';
 import { Level } from '../levels/schemas/level.schema';
 import { Student } from '../students/schemas/student.schema';
 import { SchoolYear } from '../school-years/schemas/school-year.schema';
-import { SettingsService } from '../settings/settings.service';
+import { EcolesService } from '../ecoles/ecoles.service';
 import { SchoolYearStatus } from '../common/enums/domain.enums';
 import { Payment } from '../payments/schemas/payment.schema';
+import { SettingsService } from '../settings/settings.service';
+import { resolveUploadedImagePath } from '../common/utils/uploaded-image.util';
+import { resolveStaticAssetPath } from '../common/utils/runtime-paths.util';
+import { getReadableTextColor } from '../common/utils/color.util';
 
 type PdfDocumentInstance = InstanceType<typeof PDFDocument>;
 export type RegistrationPaidFilter =
@@ -22,6 +26,23 @@ export type RegistrationPaidFilter =
   | 'full'
   | 'partial'
   | 'none';
+
+export type StudentIdCardData = {
+  schoolName: string;
+  schoolLogoPath: string | null;
+  headerColor: string | null;
+  ministereTutelle: string;
+  localite: string;
+  contact: string;
+  chefEtablissementNom: string;
+  lastname: string;
+  firstname: string;
+  birthDateAndPlaceLabel: string;
+  genderLabel: string;
+  levelLabel: string;
+  issueDateLabel: string;
+  photoPath: string | null;
+};
 
 export type NominalRoll = {
   schoolName: string;
@@ -49,6 +70,7 @@ export class ReportsService {
     @InjectModel(SchoolYear.name)
     private readonly schoolYearModel: Model<SchoolYear>,
     @InjectModel(Payment.name) private readonly paymentModel: Model<Payment>,
+    private readonly ecolesService: EcolesService,
     private readonly settingsService: SettingsService,
   ) {}
 
@@ -245,9 +267,8 @@ export class ReportsService {
     return enrollments
       .map((enrollment: any) => {
         const invoice = invoiceByEnrollment.get(String(enrollment._id));
-        const student = (enrollment.studentSnapshot ??
-          enrollment.studentId) as any;
-        const level = (enrollment.levelSnapshot ?? enrollment.levelId) as any;
+        const student = enrollment.studentSnapshot ?? enrollment.studentId;
+        const level = enrollment.levelSnapshot ?? enrollment.levelId;
         return {
           enrollment,
           student,
@@ -279,7 +300,7 @@ export class ReportsService {
 
   async getSchoolName() {
     return (
-      (await this.settingsService.getSchoolName()) ||
+      (await this.ecolesService.getCurrentSchoolName()) ||
       process.env.SCHOOL_NAME ||
       "Nom de l'établissement"
     );
@@ -325,6 +346,7 @@ export class ReportsService {
       .map((enrollment: any) => ({
         ...(enrollment.studentId ?? {}),
         ...(enrollment.studentSnapshot ?? {}),
+        enrolledAt: enrollment.createdAt,
       }))
       .filter((student: any) => student.lastname || student.firstname)
       .map((student: any) => ({
@@ -332,18 +354,21 @@ export class ReportsService {
         firstname: String(student.firstname ?? ''),
         matricule: String(student.matricule ?? ''),
         gender: String(student.gender ?? '').toUpperCase(),
+        enrolledAt: student.enrolledAt,
       }))
-      .sort((left, right) => {
-        const byLastName = left.lastname.localeCompare(right.lastname, 'fr', {
-          sensitivity: 'base',
-        });
-        return (
-          byLastName ||
-          left.firstname.localeCompare(right.firstname, 'fr', {
-            sensitivity: 'base',
-          })
-        );
-      });
+      // Most recently registered first - the date itself isn't shown on
+      // this document (a fixed-layout official roster), only the order.
+      .sort(
+        (left, right) =>
+          new Date(right.enrolledAt).getTime() -
+          new Date(left.enrolledAt).getTime(),
+      )
+      .map(({ lastname, firstname, matricule, gender }) => ({
+        lastname,
+        firstname,
+        matricule,
+        gender,
+      }));
 
     return {
       schoolName,
@@ -355,6 +380,145 @@ export class ReportsService {
       boys: students.filter((student) => student.gender === 'M').length,
       girls: students.filter((student) => student.gender === 'F').length,
       total: students.length,
+    };
+  }
+
+  // Roster for the "Cartes scolaires" picker page - unlike getNominalRoll
+  // (which deliberately strips ids for the printed official document),
+  // this keeps each student's _id so the page can link to their card.
+  async getClassRosterForCards(levelId: string, schoolYearId?: string) {
+    if (!levelId) {
+      throw new BadRequestException('Veuillez sélectionner une classe');
+    }
+    const level = await this.levelModel.findById(levelId).lean().exec();
+    const schoolYearQuery = schoolYearId
+      ? this.schoolYearModel.findById(schoolYearId).lean()
+      : this.schoolYearModel.findOne({ status: SchoolYearStatus.OPEN }).lean();
+    const schoolYear = await schoolYearQuery.exec();
+    if (!level) {
+      throw new NotFoundException('Classe introuvable');
+    }
+    if (!schoolYear) {
+      throw new BadRequestException("Aucune année scolaire n'est disponible");
+    }
+
+    const enrollments = await this.enrollmentModel
+      .find({ levelId, schoolYearId: schoolYear._id, status: 'active' })
+      .populate({
+        path: 'studentId',
+        select: 'lastname firstname matricule',
+      })
+      .lean()
+      .exec();
+
+    const students = enrollments
+      .slice()
+      .sort(
+        (a: any, b: any) =>
+          new Date(b.createdAt ?? 0).getTime() -
+          new Date(a.createdAt ?? 0).getTime(),
+      )
+      .map((enrollment: any) => ({
+        _id: String(enrollment.studentId?._id ?? enrollment.studentId ?? ''),
+        lastname: String(
+          enrollment.studentSnapshot?.lastname ??
+            enrollment.studentId?.lastname ??
+            '',
+        ),
+        firstname: String(
+          enrollment.studentSnapshot?.firstname ??
+            enrollment.studentId?.firstname ??
+            '',
+        ),
+        matricule: String(
+          enrollment.studentSnapshot?.matricule ??
+            enrollment.studentId?.matricule ??
+            '',
+        ),
+      }))
+      .filter((student) => student._id);
+
+    return {
+      levelName: (level as any).label as string,
+      schoolYearId: String(schoolYear._id),
+      students,
+    };
+  }
+
+  // Assembles everything renderStudentIdCardPdf()/renderClassIdCardsPdf()
+  // need for one student's card - shared by the single-student and
+  // whole-class routes so both always show identical data (same pattern
+  // as BulletinsService.buildBulletinPageData).
+  async getStudentIdCardData(
+    studentId: string,
+    schoolYearId?: string,
+  ): Promise<StudentIdCardData> {
+    const student = await this.studentModel.findById(studentId).lean().exec();
+    if (!student) {
+      throw new NotFoundException('Eleve introuvable');
+    }
+
+    const schoolYearQuery = schoolYearId
+      ? this.schoolYearModel.findById(schoolYearId).lean()
+      : this.schoolYearModel.findOne({ status: SchoolYearStatus.OPEN }).lean();
+    const schoolYear = await schoolYearQuery.exec();
+
+    const enrollment = schoolYear
+      ? await this.enrollmentModel
+          .findOne({
+            studentId,
+            schoolYearId: schoolYear._id,
+            status: 'active',
+          })
+          .populate({ path: 'levelId', select: 'label' })
+          .lean()
+          .exec()
+      : null;
+    const levelLabel =
+      (enrollment as any)?.levelSnapshot?.label ??
+      (enrollment as any)?.levelId?.label ??
+      '-';
+
+    const [ecole, chefEtablissementNom] = await Promise.all([
+      this.ecolesService.getCurrentEcole(),
+      this.settingsService.getChefEtablissementNom(),
+    ]);
+
+    const genderLabel =
+      String((student as any).gender ?? '').toUpperCase() === 'F'
+        ? 'Féminin'
+        : 'Masculin';
+    const birthDate = (student as any).birthDate
+      ? new Date((student as any).birthDate)
+      : null;
+    const birthDateLabel =
+      birthDate && !Number.isNaN(birthDate.getTime())
+        ? `${String(birthDate.getDate()).padStart(2, '0')}/${String(birthDate.getMonth() + 1).padStart(2, '0')}/${birthDate.getFullYear()}`
+        : '-';
+    const birthPlace = (student as any).birthPlace
+      ? ` à ${(student as any).birthPlace}`
+      : '';
+
+    const today = new Date();
+    const issueDateLabel = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+
+    return {
+      schoolName: (ecole as any)?.nom || (await this.getSchoolName()),
+      schoolLogoPath: this.ecolesService.resolveLogoAbsolutePath(ecole),
+      headerColor: (ecole as any)?.couleurCarte || null,
+      ministereTutelle:
+        (ecole as any)?.ministereTutelle ||
+        "MINISTERE DE L'EDUCATION NATIONALE",
+      localite: (ecole as any)?.localite || '-',
+      contact: (ecole as any)?.contact || '-',
+      chefEtablissementNom: chefEtablissementNom || '-',
+      lastname: (student as any).lastname ?? '',
+      firstname: (student as any).firstname ?? '',
+      birthDateAndPlaceLabel: `${birthDateLabel}${birthPlace}`,
+      genderLabel,
+      levelLabel,
+      issueDateLabel,
+      photoPath: resolveUploadedImagePath((student as any).photo),
     };
   }
 
@@ -462,7 +626,7 @@ export class ReportsService {
     levelName?: string,
     schoolYearLabel?: string,
   ) {
-    const schoolName = await this.settingsService.getSchoolName();
+    const schoolName = await this.ecolesService.getCurrentSchoolName();
     const chunks: Buffer[] = [];
     const doc = new PDFDocument({
       margin: 40,
@@ -590,7 +754,7 @@ export class ReportsService {
     levelName?: string,
     schoolYearLabel?: string,
   ) {
-    const schoolName = await this.settingsService.getSchoolName();
+    const schoolName = await this.ecolesService.getCurrentSchoolName();
     const chunks: Buffer[] = [];
     const doc = new PDFDocument({ margin: 40, size: 'A4' });
     doc.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
@@ -801,6 +965,388 @@ export class ReportsService {
           index + 1,
         );
       });
+      doc.end();
+    });
+  }
+
+  // Draws one 8.5cm x 5.5cm (standard CR80 landscape) student ID card with
+  // its top-left corner at (x, y) on doc's current page - three bands
+  // (header / identity / footer), each separated by a thin accent rule:
+  // header carries the Togo flags sized to fill their corner, identity
+  // carries the photo and personal fields, footer gives the school's
+  // address/contact and the principal's signature block their own
+  // dedicated width instead of squeezing them into the identity column.
+  // Never embeds an actual photo/logo when the student/ecole has none,
+  // matching the "draw nothing rather than a placeholder" rule used
+  // throughout this feature.
+  private drawIdCard(
+    doc: PdfDocumentInstance,
+    data: StudentIdCardData,
+    x: number,
+    y: number,
+  ): void {
+    const CARD_W = 241;
+    const CARD_H = 156;
+    const PAD = 5;
+    const ACCENT = '#1a3d8f';
+    const LOGO_SIZE = 10;
+    const LOGO_ROW_H = LOGO_SIZE + 1;
+
+    // The ecole can pick its own header color (Ecole.couleurCarte) in place
+    // of the default pale blue - since that choice could be dark, header
+    // text switches to whichever of black/white actually reads on top of
+    // it (relative luminance), rather than assuming black always works.
+    // The default color's own text stays black/blue exactly as before, so
+    // no ecole's card changes unless it opts in.
+    const HEADER_BG = data.headerColor || '#eef2fb';
+    const hasCustomHeaderColor = Boolean(data.headerColor);
+    const headerTextColor = hasCustomHeaderColor
+      ? getReadableTextColor(HEADER_BG)
+      : '#000000';
+    const schoolNameColor = hasCustomHeaderColor ? headerTextColor : ACCENT;
+
+    doc.rect(x, y, CARD_W, CARD_H).stroke('#000000');
+
+    // Ecole logo watermark, centered behind everything else - drawn very
+    // faint (10% opacity) so the fields on top stay fully legible. Skipped
+    // entirely when the ecole has no logo, same rule as everywhere else.
+    if (data.schoolLogoPath) {
+      try {
+        const WATERMARK_SIZE = Math.min(CARD_W, CARD_H) - 16;
+        doc.save();
+        doc.opacity(0.1);
+        doc.image(
+          data.schoolLogoPath,
+          x + CARD_W / 2 - WATERMARK_SIZE / 2,
+          y + CARD_H / 2 - WATERMARK_SIZE / 2,
+          {
+            fit: [WATERMARK_SIZE, WATERMARK_SIZE],
+            align: 'center',
+            valign: 'center',
+          },
+        );
+        doc.restore();
+      } catch {
+        // Missing/unreadable asset - card still renders without the watermark.
+      }
+    }
+
+    // --- Header band: tinted background, Togo flags filling both corners,
+    // ministry, ecole logo, school name (blue), document title. Every line
+    // below sits at a fixed offset from y (heights here don't depend on
+    // data content), so the total is a constant - computed once so the
+    // background can be painted before the text without a throwaway pass.
+    const REPUBLIQUE_Y = 4;
+    const MINISTERE_Y = REPUBLIQUE_Y + 8;
+    const LOGO_Y = MINISTERE_Y + 6;
+    const SCHOOL_NAME_Y = LOGO_Y + LOGO_ROW_H;
+    const TITLE_Y = SCHOOL_NAME_Y + 8;
+    const HEADER_H = TITLE_Y + 8;
+    const hy = y + HEADER_H;
+
+    doc.rect(x, y, CARD_W, HEADER_H).fill(HEADER_BG);
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(6.5)
+      .fillColor(headerTextColor)
+      .text('REPUBLIQUE TOGOLAISE', x, y + REPUBLIQUE_Y, {
+        width: CARD_W,
+        align: 'center',
+      });
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(5.6)
+      .text(data.ministereTutelle.toUpperCase(), x, y + MINISTERE_Y, {
+        width: CARD_W,
+        align: 'center',
+      });
+
+    // Ecole logo (uploaded via the ecole record) - space is always
+    // reserved so the header height stays consistent across a batch,
+    // but nothing is drawn when the ecole has no logo.
+    if (data.schoolLogoPath) {
+      try {
+        doc.image(
+          data.schoolLogoPath,
+          x + CARD_W / 2 - LOGO_SIZE / 2,
+          y + LOGO_Y,
+          { fit: [LOGO_SIZE, LOGO_SIZE], align: 'center', valign: 'center' },
+        );
+      } catch {
+        // Missing/unreadable asset - rest of the header still renders.
+      }
+    }
+
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(7.2)
+      .fillColor(schoolNameColor)
+      .text(data.schoolName.toUpperCase(), x + PAD, y + SCHOOL_NAME_Y, {
+        width: CARD_W - PAD * 2,
+        align: 'center',
+      });
+    doc.fillColor(headerTextColor);
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(6.5)
+      .text("Carte d'identite scolaire", x, y + TITLE_Y, {
+        width: CARD_W,
+        align: 'center',
+      });
+
+    // Togo flags, sized to fill their corner of the header band rather
+    // than sitting as a thin sliver next to the title line - anchored
+    // against the height of the top two text lines (true flag aspect
+    // ratio, 568x352px) so they read as a deliberate corner emblem
+    // without crowding the centered text between them.
+    const flagPath = resolveStaticAssetPath('cards', 'togo-flag.png');
+    if (flagPath) {
+      try {
+        const flagH = MINISTERE_Y + 5;
+        const flagW = flagH * (568 / 352);
+        const flagY = y + 3;
+        doc.image(flagPath, x + 3, flagY, {
+          fit: [flagW, flagH],
+          align: 'center',
+          valign: 'center',
+        });
+        doc.image(flagPath, x + CARD_W - 3 - flagW, flagY, {
+          fit: [flagW, flagH],
+          align: 'center',
+          valign: 'center',
+        });
+      } catch {
+        // Missing/unreadable asset - header text still centers fine alone.
+      }
+    }
+
+    doc
+      .lineWidth(1)
+      .moveTo(x, hy)
+      .lineTo(x + CARD_W, hy)
+      .stroke(ACCENT);
+    doc.lineWidth(1);
+    // The header may have left fillColor on white (a dark custom header
+    // background uses white text) - reset explicitly so the rest of the
+    // card (always on a plain white background) never inherits that.
+    doc.fillColor('#000000');
+    const bodyTop = hy + 4;
+
+    // --- Identity band: photo box (left), personal fields (right) ---
+    const PHOTO_W = 76;
+    const PHOTO_H = 70;
+    const photoX = x + PAD;
+    doc.rect(photoX, bodyTop, PHOTO_W, PHOTO_H).stroke('#000000');
+    if (data.photoPath) {
+      try {
+        doc.image(data.photoPath, photoX + 1, bodyTop + 1, {
+          fit: [PHOTO_W - 2, PHOTO_H - 2],
+          align: 'center',
+          valign: 'center',
+        });
+      } catch {
+        // Corrupt/unreadable file on disk - leave the box empty rather
+        // than fail the whole card.
+      }
+    } else {
+      doc
+        .font('Helvetica')
+        .fontSize(7)
+        .fillColor('#999999')
+        .text('Photo', photoX, bodyTop + PHOTO_H / 2 - 4, {
+          width: PHOTO_W,
+          align: 'center',
+        })
+        .fillColor('#000000');
+    }
+
+    const colX = photoX + PHOTO_W + 7;
+    const colW = x + CARD_W - PAD - colX;
+    let ty = bodyTop + 1;
+    const line = (text: string, bold = false) => {
+      doc
+        .font(bold ? 'Helvetica-Bold' : 'Helvetica')
+        .fontSize(6.5)
+        .text(text, colX, ty, { width: colW });
+      ty += doc.heightOfString(text, { width: colW }) + 2;
+    };
+    line(`Nom : ${data.lastname}`.toUpperCase(), true);
+    line(`Prenoms : ${data.firstname}`, true);
+    line(`Ne(e) le : ${data.birthDateAndPlaceLabel}`, true);
+    line(`Sexe : ${data.genderLabel}`);
+    line(`Classe : ${data.levelLabel}`, true);
+
+    const bodyBottom = bodyTop + PHOTO_H;
+    doc
+      .lineWidth(1)
+      .moveTo(x, bodyBottom + 3)
+      .lineTo(x + CARD_W, bodyBottom + 3)
+      .stroke(ACCENT);
+    doc.lineWidth(1);
+
+    // --- Footer band: address/contact (left) and the principal's
+    // signature block (right) each get their own dedicated column,
+    // instead of being crammed into the identity column above. ---
+    const footerTop = bodyBottom + 7;
+    const footerLeftW = (CARD_W - PAD * 2) * 0.44;
+    const footerRightX = x + PAD + footerLeftW + 6;
+    const footerRightW = CARD_W - PAD - footerRightX + x;
+
+    doc
+      .lineWidth(0.5)
+      .moveTo(x + PAD + footerLeftW + 2, footerTop)
+      .lineTo(x + PAD + footerLeftW + 2, y + CARD_H - 4)
+      .stroke('#c7cede');
+    doc.lineWidth(1);
+
+    let fyLeft = footerTop;
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(5.4)
+      .fillColor(ACCENT)
+      .text('ADRESSE', x + PAD, fyLeft, { width: footerLeftW });
+    doc.fillColor('#000000');
+    fyLeft += 5;
+    doc
+      .font('Helvetica')
+      .fontSize(6)
+      .text(data.localite, x + PAD, fyLeft, { width: footerLeftW });
+    fyLeft += 8;
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(5.4)
+      .fillColor(ACCENT)
+      .text('CONTACT', x + PAD, fyLeft, { width: footerLeftW });
+    doc.fillColor('#000000');
+    fyLeft += 5;
+    doc
+      .font('Helvetica')
+      .fontSize(6)
+      .text(data.contact, x + PAD, fyLeft, { width: footerLeftW });
+
+    let fyRight = footerTop;
+    doc
+      .font('Helvetica')
+      .fontSize(5.4)
+      .text(
+        `Fait a ${data.localite}, le ${data.issueDateLabel}`,
+        footerRightX,
+        fyRight,
+        {
+          width: footerRightW,
+          align: 'right',
+        },
+      );
+    fyRight += 7;
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(6.2)
+      .text(data.chefEtablissementNom, footerRightX, fyRight, {
+        width: footerRightW,
+        align: 'right',
+      });
+    fyRight += 8;
+    doc
+      .lineWidth(0.5)
+      .moveTo(footerRightX + footerRightW * 0.25, fyRight)
+      .lineTo(footerRightX + footerRightW, fyRight)
+      .stroke('#000000');
+    doc.lineWidth(1);
+    fyRight += 2;
+    doc
+      .font('Helvetica-Oblique')
+      .fontSize(5.4)
+      .text('Le Proviseur', footerRightX, fyRight, {
+        width: footerRightW,
+        align: 'right',
+      });
+  }
+
+  // Lays out up to 10 cards per A4 page (2 columns x 5 rows), separated by
+  // dashed cut-guide lines - the standard "print sheet, then cut" layout
+  // for CR80-sized cards, matching the client's explicit request. Used by
+  // both the single-student route (2 copies, for a print-and-cut pair) and
+  // the class/batch routes (one entry per selected student, paginated).
+  private renderIdCardsGrid(
+    doc: PdfDocumentInstance,
+    dataList: StudentIdCardData[],
+  ): void {
+    const CARD_W = 241;
+    const CARD_H = 156;
+    const COLS = 2;
+    const ROWS = 5;
+    const PER_PAGE = COLS * ROWS;
+    const COL_GAP = 20;
+    const ROW_GAP = 3;
+    const gridW = COLS * CARD_W + (COLS - 1) * COL_GAP;
+    const gridH = ROWS * CARD_H + (ROWS - 1) * ROW_GAP;
+    const startX = (doc.page.width - gridW) / 2;
+    const startY = (doc.page.height - gridH) / 2;
+
+    const drawSeparators = () => {
+      doc.dash(2, { space: 2 });
+      for (let col = 1; col < COLS; col += 1) {
+        const lineX = startX + col * CARD_W + (col - 0.5) * COL_GAP;
+        doc
+          .moveTo(lineX, startY - 6)
+          .lineTo(lineX, startY + gridH + 6)
+          .stroke('#666666');
+      }
+      for (let row = 1; row < ROWS; row += 1) {
+        const lineY = startY + row * CARD_H + (row - 0.5) * ROW_GAP;
+        doc
+          .moveTo(startX - 6, lineY)
+          .lineTo(startX + gridW + 6, lineY)
+          .stroke('#666666');
+      }
+      doc.undash();
+    };
+
+    dataList.forEach((data, index) => {
+      const pageIndex = Math.floor(index / PER_PAGE);
+      const slotIndex = index % PER_PAGE;
+      if (slotIndex === 0) {
+        if (pageIndex > 0) {
+          doc.addPage();
+        }
+        drawSeparators();
+      }
+      const col = slotIndex % COLS;
+      const row = Math.floor(slotIndex / COLS);
+      const cardX = startX + col * (CARD_W + COL_GAP);
+      const cardY = startY + row * (CARD_H + ROW_GAP);
+      this.drawIdCard(doc, data, cardX, cardY);
+    });
+  }
+
+  async renderStudentIdCardPdf(data: StudentIdCardData): Promise<Buffer> {
+    const chunks: Buffer[] = [];
+    const doc = new PDFDocument({ margin: 20, size: 'A4' });
+    doc.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+
+    return await new Promise<Buffer>((resolve) => {
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      // Two copies of the same card, for a print-and-cut pair.
+      this.renderIdCardsGrid(doc, [data, data]);
+      doc.end();
+    });
+  }
+
+  // One 10-card grid page per 10 students - see renderIdCardsGrid.
+  async renderClassIdCardsPdf(dataList: StudentIdCardData[]): Promise<Buffer> {
+    const chunks: Buffer[] = [];
+    const doc = new PDFDocument({ margin: 20, size: 'A4' });
+    doc.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+
+    return await new Promise<Buffer>((resolve) => {
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      this.renderIdCardsGrid(doc, dataList);
+      if (dataList.length === 0) {
+        doc
+          .font('Helvetica')
+          .fontSize(12)
+          .text('Aucun eleve dans cette classe.');
+      }
       doc.end();
     });
   }

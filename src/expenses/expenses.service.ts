@@ -11,7 +11,7 @@ import {
   ExpenseCategory,
   ExpenseCategoryDocument,
 } from './schemas/expense-category.schema';
-import { SettingsService } from '../settings/settings.service';
+import { EcolesService } from '../ecoles/ecoles.service';
 import {
   SchoolYear,
   SchoolYearDocument,
@@ -29,7 +29,7 @@ export class ExpensesService {
     private readonly categoryModel: Model<ExpenseCategoryDocument>,
     @InjectModel(SchoolYear.name)
     private readonly schoolYearModel: Model<SchoolYearDocument>,
-    private readonly settingsService: SettingsService,
+    private readonly ecolesService: EcolesService,
   ) {}
 
   private generateOrderNumber() {
@@ -276,7 +276,7 @@ export class ExpensesService {
     categoryName?: string,
     schoolYearLabel?: string,
   ) {
-    const schoolName = await this.settingsService.getSchoolName();
+    const schoolName = await this.ecolesService.getCurrentSchoolName();
     const chunks: Buffer[] = [];
     const doc = new PDFDocument({ margin: 40, size: 'A4' });
     doc.on('data', (chunk) => chunks.push(Buffer.from(chunk)));

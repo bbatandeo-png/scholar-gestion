@@ -1,4 +1,5 @@
 {% extends "layout.njk" %}
+{% import "partials/legend.njk" as legend %}
 {% block content %}
   <section class="grid cols-2">
     <div class="panel">
@@ -10,14 +11,13 @@
         <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
         <div class="form-grid">
           <label>Libelle<input name="label" value="{{ editYear and editYear.label or '' }}" required /></label>
-          <label>Date debut<input type="date" name="startDate" value="{% if editYear %}{{ editYear.startDate | slice(0, 10) }}{% endif %}" required /></label>
-          <label>Date fin<input type="date" name="endDate" value="{% if editYear %}{{ editYear.endDate | slice(0, 10) }}{% endif %}" required /></label>
+          <label>Date debut<input type="date" name="startDate" value="{% if editYear %}{{ editYear.startDate | inputDate }}{% endif %}" required /></label>
+          <label>Date fin<input type="date" name="endDate" value="{% if editYear %}{{ editYear.endDate | inputDate }}{% endif %}" required /></label>
           <label>Statut
             <select name="status">
-              <option value="draft" {% if editYear and editYear.status == 'draft' %}selected{% endif %}>draft</option>
-              {% if editYear and editYear.status == 'open' %}<option value="open" selected>open</option>{% endif %}
-              <option value="closed" {% if editYear and editYear.status == 'closed' %}selected{% endif %}>closed</option>
-              <option value="archived" {% if editYear and editYear.status == 'archived' %}selected{% endif %}>archived</option>
+              {% for key, meta in ENUM_META.schoolYearStatus %}
+                <option value="{{ key }}" {% if editYear and editYear.status == key %}selected{% endif %} title="{{ meta.description }}">{{ meta.label }}</option>
+              {% endfor %}
             </select>
           </label>
         </div>
@@ -28,6 +28,7 @@
           {% endif %}
         </div>
       </form>
+      {{ legend.render(['schoolYearStatus']) }}
     </div>
     <div class="panel">
       <div class="panel-heading">
@@ -37,42 +38,46 @@
         </div>
         <a class="button secondary" href="/settings/school-years/export">Exporter Excel</a>
       </div>
-      <table>
-        <thead><tr><th>Libelle</th><th>Debut</th><th>Fin</th><th>Statut</th><th>Actions</th></tr></thead>
-        <tbody>
-          {% for item in schoolYears %}
-            <tr>
-              <td>{{ item.label }}</td>
-              <td>{{ item.startDate }}</td>
-              <td>{{ item.endDate }}</td>
-              <td>{% set value = item.status %}{% include "partials/status-badge.njk" %}</td>
-              <td>
-                <a class="button btn-sm" href="/settings/school-years/{{ item._id }}/edit">Modifier</a>
-                <form method="post" action="/settings/school-years/select" style="display:inline-flex;gap:8px;flex-wrap:wrap;">
-                  <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
-                  <input type="hidden" name="schoolYearId" value="{{ item._id }}" />
-                  <input type="hidden" name="returnTo" value="/dashboard" />
-                  <button type="submit" class="button btn-sm secondary">Consulter</button>
-                </form>
-                {% if item.status == 'draft' %}<a class="button btn-sm" href="/promotions">Préparer et activer</a>{% endif %}
-                {% if item.status == 'open' %}
-                  <form method="post" action="/settings/school-years/{{ item._id }}/status" style="display:inline-flex;gap:8px;flex-wrap:wrap;">
-                    <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
-                    <input type="hidden" name="status" value="closed" />
-                    <button type="submit" class="button btn-sm secondary">Clôturer</button>
-                  </form>
-                {% elif item.status == 'closed' and not openSchoolYear %}
-                  <form method="post" action="/settings/school-years/{{ item._id }}/status" style="display:inline-flex;gap:8px;flex-wrap:wrap;">
-                    <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
-                    <input type="hidden" name="status" value="open" />
-                    <button type="submit" class="button btn-sm">Ouvrir</button>
-                  </form>
-                {% endif %}
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      <div class="table-shell">
+        <table class="table-report">
+          <thead><tr><th>Libelle</th><th>Debut</th><th>Fin</th><th>Statut</th><th>Actions</th></tr></thead>
+          <tbody>
+            {% for item in schoolYears %}
+              <tr>
+                <td>{{ item.label }}</td>
+                <td>{{ item.startDate | formatDate }}</td>
+                <td>{{ item.endDate | formatDate }}</td>
+                <td>{% set value = item.status %}{% set group = 'schoolYearStatus' %}{% include "partials/status-badge.njk" %}</td>
+                <td>
+                  <div class="table-actions">
+                    <a class="button btn-sm" href="/settings/school-years/{{ item._id }}/edit">Modifier</a>
+                    <form method="post" action="/settings/school-years/select" class="inline-form">
+                      <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+                      <input type="hidden" name="schoolYearId" value="{{ item._id }}" />
+                      <input type="hidden" name="returnTo" value="/dashboard" />
+                      <button type="submit" class="button btn-sm secondary">Consulter</button>
+                    </form>
+                    {% if item.status == 'draft' %}<a class="button btn-sm" href="/promotions">Préparer et activer</a>{% endif %}
+                    {% if item.status == 'open' %}
+                      <form method="post" action="/settings/school-years/{{ item._id }}/status" class="inline-form">
+                        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+                        <input type="hidden" name="status" value="closed" />
+                        <button type="submit" class="button btn-sm secondary">Clôturer</button>
+                      </form>
+                    {% elif (item.status == 'closed' or item.status == 'draft') and not openSchoolYear %}
+                      <form method="post" action="/settings/school-years/{{ item._id }}/status" class="inline-form">
+                        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+                        <input type="hidden" name="status" value="open" />
+                        <button type="submit" class="button btn-sm">Ouvrir</button>
+                      </form>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
   </section>
 {% endblock %}

@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { CurrentEcole } from '../common/decorators/current-ecole.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role, UserStatus } from '../common/enums/domain.enums';
 import { AuthenticatedGuard } from '../common/guards/authenticated.guard';
@@ -26,6 +27,14 @@ function parsePositiveInt(value: string | undefined, fallback: number) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+// PLATFORM_ADMIN is a cross-tenant, SaaS-operator role - it must never be
+// grantable from a single school's own user-management screen (that would
+// let any SUPER_ADMIN mint themselves platform-wide access). Accounts with
+// that role are created out-of-band (see scripts/create-platform-admin.ts).
+const SCHOOL_ROLE_OPTIONS: Role[] = Object.values(Role).filter(
+  (role) => role !== Role.PLATFORM_ADMIN,
+);
+
 @Controller('/users')
 @UseGuards(AuthenticatedGuard, RolesGuard)
 @Roles(Role.SUPER_ADMIN)
@@ -35,6 +44,7 @@ export class UsersController {
   @Get()
   @Render('users/index')
   async index(
+    @CurrentEcole() ecoleId: string | null,
     @Query('q') q = '',
     @Query('role') role = '',
     @Query('status') status = '',
@@ -44,13 +54,18 @@ export class UsersController {
     const page = parsePositiveInt(pageRaw, 1);
     const pageSize = Math.min(parsePositiveInt(pageSizeRaw, 10), 100);
 
-    const roleValues = Object.values(Role);
+    const roleValues = SCHOOL_ROLE_OPTIONS;
     const statusValues = Object.values(UserStatus);
 
-    const selectedRole = roleValues.includes(role as Role) ? (role as Role) : '';
-    const selectedStatus = statusValues.includes(status as UserStatus) ? (status as UserStatus) : '';
+    const selectedRole = roleValues.includes(role as Role)
+      ? (role as Role)
+      : '';
+    const selectedStatus = statusValues.includes(status as UserStatus)
+      ? (status as UserStatus)
+      : '';
 
     const { items, total } = await this.usersService.listPaginated({
+      ecoleId: ecoleId as string,
       q,
       role: selectedRole || undefined,
       status: selectedStatus || undefined,
@@ -82,9 +97,19 @@ export class UsersController {
   }
 
   @Post()
-  async create(@Body() dto: CreateUserDto, @Req() req: Request, @Res() res: Response) {
+  async create(
+    @Body() dto: CreateUserDto,
+    @CurrentEcole() ecoleId: string | null,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    if (dto.role === Role.PLATFORM_ADMIN) {
+      setFlash(req, 'error', 'Role invalide');
+      return res.redirect('/users');
+    }
+
     try {
-      await this.usersService.create(dto);
+      await this.usersService.create({ ...dto, ecoleId });
       setFlash(req, 'success', 'Utilisateur cree avec succes');
     } catch (error: any) {
       if (error?.code === 11000) {
@@ -104,6 +129,11 @@ export class UsersController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
+    if (dto.role === Role.PLATFORM_ADMIN) {
+      setFlash(req, 'error', 'Role invalide');
+      return res.redirect('/users');
+    }
+
     const currentUserId = (req.session as any)?.user?.id;
     if (currentUserId === id && dto.status === UserStatus.DISABLED) {
       setFlash(req, 'error', 'Impossible de desactiver votre propre compte');

@@ -17,16 +17,25 @@ import { StudentsService } from '../students/students.service';
 import { LevelsService } from '../levels/levels.service';
 import { SchoolYearsService } from '../school-years/school-years.service';
 import { Roles } from '../common/decorators/roles.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { RequireModule } from '../common/decorators/require-module.decorator';
 import { Role } from '../common/enums/domain.enums';
 import { AuthenticatedGuard } from '../common/guards/authenticated.guard';
+import { ModuleGuard } from '../common/guards/module.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { setFlash } from '../common/utils/flash.util';
 import { buildExcelBuffer } from '../common/utils/excel.util';
 import { CreateEnrollmentDto } from './dto/create-enrollment.dto';
 import { EnrollmentsService } from './enrollments.service';
+import { SessionUser } from '../common/types/session-user.type';
 
+// NOTE: enrolling/updating a student is deliberately NOT gated by the
+// Finance module - it's a core, everyday academic action, even though
+// EnrollmentsService.createEnrollment() always creates an invoice as a
+// side effect internally. Only the explicitly financial sub-action below
+// (fee/discount/paid-amount adjustment) is gated.
 @Controller('/enrollments')
-@UseGuards(AuthenticatedGuard, RolesGuard)
+@UseGuards(AuthenticatedGuard, RolesGuard, ModuleGuard)
 export class EnrollmentsController {
   constructor(
     private readonly enrollmentsService: EnrollmentsService,
@@ -64,7 +73,6 @@ export class EnrollmentsController {
     return {
       title: 'Inscriptions',
       enrollments: result.items,
-      students: await this.studentsService.list(),
       selectedYear,
       levels: await this.levelsService.listForSchoolYear(schoolYearId),
       pagination: {
@@ -124,11 +132,12 @@ export class EnrollmentsController {
     @Body() dto: CreateEnrollmentDto,
     @Req() req: Request,
     @Res() res: Response,
+    @CurrentUser() user: SessionUser | undefined,
   ) {
     const open = await this.schoolYearsService.requireOpen();
     const result = await this.enrollmentsService.createEnrollment(
       { ...dto, schoolYearId: String(open._id) },
-      req.session.user?.id,
+      user?.id,
     );
     setFlash(req, 'success', 'Inscription creee');
     return res.redirect(`/enrollments/${result.enrollmentId}`);
@@ -184,18 +193,16 @@ export class EnrollmentsController {
     @Body() dto: CreateEnrollmentDto,
     @Req() req: Request,
     @Res() res: Response,
+    @CurrentUser() user: SessionUser | undefined,
   ) {
-    await this.enrollmentsService.updateEnrollment(
-      id,
-      dto,
-      req.session.user?.id,
-    );
+    await this.enrollmentsService.updateEnrollment(id, dto, user?.id);
     setFlash(req, 'success', 'Inscription mise a jour');
     return res.redirect(req.get('referer') || `/enrollments/${id}`);
   }
 
   @Post('/:id/financial-details')
   @Roles(Role.SUPER_ADMIN, Role.COMPTABILITE)
+  @RequireModule('FINANCE')
   async updateFinancialDetails(
     @Param('id') id: string,
     @Body()
@@ -207,8 +214,9 @@ export class EnrollmentsController {
     },
     @Req() req: Request,
     @Res() res: Response,
+    @CurrentUser() user: SessionUser | undefined,
   ) {
-    const actorRole = req.session?.user?.role;
+    const actorRole = user?.role;
     if (actorRole !== Role.SUPER_ADMIN && actorRole !== Role.COMPTABILITE) {
       throw new ForbiddenException('Acces refuse pour ce role');
     }
@@ -228,7 +236,7 @@ export class EnrollmentsController {
           dto.paidAmount !== undefined ? Number(dto.paidAmount) : undefined,
         reason: dto.reason,
       },
-      req.session.user?.id,
+      user?.id,
       actorRole,
     );
 

@@ -11,8 +11,11 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { Roles } from '../common/decorators/roles.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { RequireModule } from '../common/decorators/require-module.decorator';
 import { AuditAction, Role } from '../common/enums/domain.enums';
 import { AuthenticatedGuard } from '../common/guards/authenticated.guard';
+import { ModuleGuard } from '../common/guards/module.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { setFlash } from '../common/utils/flash.util';
 import { buildExcelBuffer } from '../common/utils/excel.util';
@@ -20,9 +23,11 @@ import { AuditService } from '../audit/audit.service';
 import { CarryForwardArrearsDto } from './dto/carry-forward-arrears.dto';
 import { ArrearsService } from './arrears.service';
 import { SchoolYearsService } from '../school-years/school-years.service';
+import { SessionUser } from '../common/types/session-user.type';
 
 @Controller('/arrears')
-@UseGuards(AuthenticatedGuard, RolesGuard)
+@UseGuards(AuthenticatedGuard, RolesGuard, ModuleGuard)
+@RequireModule('FINANCE')
 export class ArrearsController {
   constructor(
     private readonly arrearsService: ArrearsService,
@@ -78,8 +83,8 @@ export class ArrearsController {
         eleve:
           `${item.studentId?.lastname ?? ''} ${item.studentId?.firstname ?? ''}`.trim(),
         matricule: item.studentId?.matricule ?? '',
-        inscription_source: item.sourceEnrollmentId ?? '',
-        annee_source: item.sourceSchoolYearId ?? '',
+        classe_source: item.sourceEnrollmentId?.levelId?.label ?? '',
+        annee_source: item.sourceSchoolYearId?.label ?? '',
         montant_initial: item.amountInitial,
         montant_restant: item.amountRemaining,
         statut: item.status,
@@ -100,6 +105,7 @@ export class ArrearsController {
     @Body() dto: CarryForwardArrearsDto,
     @Req() req: Request,
     @Res() res: Response,
+    @CurrentUser() user: SessionUser | undefined,
   ) {
     const result = await this.arrearsService.carryForwardToEnrollment(
       dto.studentId,
@@ -107,7 +113,7 @@ export class ArrearsController {
       String((await this.schoolYearsService.requireOpen())._id),
     );
     await this.auditService.log({
-      actorId: req.session.user?.id,
+      actorId: user?.id,
       action: AuditAction.ARREAR_CARRIED_FORWARD,
       entityType: 'Arrear',
       entityId: dto.sourceEnrollmentId,

@@ -1,5 +1,6 @@
-import { Type } from 'class-transformer';
-import { IsInt, IsString, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { LevelCycle } from '../../common/enums/domain.enums';
 
 export class CreateLevelDto {
   @IsString()
@@ -12,4 +13,11 @@ export class CreateLevelDto {
   @IsInt()
   @Min(1)
   sortOrder: number;
+
+  @IsOptional()
+  @Transform(({ value }) =>
+    value === '' || value === undefined ? undefined : Number(value),
+  )
+  @IsIn([LevelCycle.COLLEGE, LevelCycle.LYCEE])
+  cycle?: LevelCycle;
 }

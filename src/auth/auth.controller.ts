@@ -17,6 +17,7 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { AuthenticatedGuard } from '../common/guards/authenticated.guard';
+import { Role } from '../common/enums/domain.enums';
 import { setFlash } from '../common/utils/flash.util';
 import { LoginDto } from './dto/login.dto';
 import { AuthService } from './auth.service';
@@ -44,17 +45,24 @@ export class AuthController {
 
   @Post('/login')
   @UseFilters(LoginValidationFilter)
-  async login(@Body() dto: LoginDto, @Req() req: Request, @Res() res: Response) {
+  async login(
+    @Body() dto: LoginDto,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
     try {
       const user = await this.authService.validateUser(dto.email, dto.password);
-      (req.session as any).user = {
+      req.session.user = {
         id: String(user._id),
         name: user.name,
         email: user.email,
         role: user.role,
+        ecoleId: user.ecoleId ? String(user.ecoleId) : null,
       };
       setFlash(req, 'success', 'Connexion reussie');
-      return res.redirect('/dashboard');
+      const landingPage =
+        user.role === Role.PLATFORM_ADMIN ? '/platform/ecoles' : '/dashboard';
+      return res.redirect(landingPage);
     } catch {
       setFlash(req, 'error', 'Email ou mot de passe invalide');
       return res.redirect('/login');

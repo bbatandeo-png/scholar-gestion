@@ -5,6 +5,7 @@ import {
   EnrollmentType,
   FinalDecision,
 } from '../../common/enums/domain.enums';
+import { ecoleScopePlugin } from '../../common/mongoose/ecole-scope.plugin';
 
 export type EnrollmentDocument = HydratedDocument<Enrollment>;
 
@@ -63,8 +64,9 @@ export class Enrollment {
 }
 
 export const EnrollmentSchema = SchemaFactory.createForClass(Enrollment);
+EnrollmentSchema.plugin(ecoleScopePlugin);
 EnrollmentSchema.index(
-  { studentId: 1, schoolYearId: 1, status: 1 },
+  { ecoleId: 1, studentId: 1, schoolYearId: 1, status: 1 },
   { unique: true, partialFilterExpression: { status: 'active' } },
 );
 EnrollmentSchema.index({ schoolYearId: 1, levelId: 1, status: 1 });

@@ -1,0 +1,71 @@
+{% extends "layout.njk" %}
+{% block content %}
+<div class="panel">
+  <h2>Nouvelle session de bulletins</h2>
+  <form method="post" action="/bulletins" class="stack">
+    <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+    <div class="form-grid">
+      <label>Annee scolaire
+        <select name="schoolYearId" required>
+          {% for year in schoolYears %}<option value="{{ year._id }}">{{ year.label }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Classe
+        <select name="levelId" id="bulletin-level-select" required>
+          <option value="">Choisir une classe</option>
+          {% for level in levels %}
+            <option value="{{ level._id }}" data-cycle="{{ level.cycle }}">{{ level.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Periode
+        <select name="periode" id="bulletin-periode-select" required>
+          <option value="">Choisir d'abord une classe</option>
+        </select>
+      </label>
+    </div>
+    <fieldset class="stack">
+      <legend>Correspondance des eleves</legend>
+      <label class="toggle-option">
+        <input type="radio" name="studentMatchingMode" value="reconcile" checked />
+        Rapprocher aux eleves existants (comportement actuel)
+      </label>
+      <label class="toggle-option">
+        <input type="radio" name="studentMatchingMode" value="auto_create" />
+        Creer automatiquement les eleves depuis le fichier (aucun eleve existant requis)
+      </label>
+      <p class="notice notice-info">Ce choix est definitif pour la session : en creation automatique, chaque ligne du fichier creera un nouvel eleve et une nouvelle inscription, sans verification par rapport aux eleves deja enregistres.</p>
+    </fieldset>
+    <button type="submit">Creer la session</button>
+  </form>
+  <p class="notice notice-info">Si la classe choisie n'a pas de cycle configure (college/lycee), configurez-le dans Parametres &gt; Niveaux avant de continuer.</p>
+</div>
+
+<script>
+  (() => {
+    const periodesByCycle = {
+      1: [{% for p in periodesByCycle[1] %}{ value: "{{ p }}", label: "{{ periodeLabels[p] }}" }{% if not loop.last %},{% endif %}{% endfor %}],
+      2: [{% for p in periodesByCycle[2] %}{ value: "{{ p }}", label: "{{ periodeLabels[p] }}" }{% if not loop.last %},{% endif %}{% endfor %}],
+    };
+    const levelSelect = document.getElementById('bulletin-level-select');
+    const periodeSelect = document.getElementById('bulletin-periode-select');
+
+    levelSelect?.addEventListener('change', () => {
+      const option = levelSelect.selectedOptions[0];
+      const cycle = option ? option.dataset.cycle : '';
+      periodeSelect.innerHTML = '';
+      const options = periodesByCycle[cycle];
+      if (!options) {
+        periodeSelect.innerHTML = '<option value="">Cycle non configure pour cette classe</option>';
+        return;
+      }
+      for (const p of options) {
+        const el = document.createElement('option');
+        el.value = p.value;
+        el.textContent = p.label;
+        periodeSelect.appendChild(el);
+      }
+    });
+  })();
+</script>
+{% endblock %}

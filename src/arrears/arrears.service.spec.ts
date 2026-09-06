@@ -1,7 +1,8 @@
 import { Test } from '@nestjs/testing';
 import { getModelToken, MongooseModule } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { startMongoReplSet } from '../../test/mongo-replset';
+import { runWithTenant } from '../common/tenant/tenant-context';
 import { ArrearsService } from './arrears.service';
 import { Arrear, ArrearSchema } from './schemas/arrear.schema';
 import {
@@ -37,21 +38,25 @@ describe('ArrearsService', () => {
   });
 
   it('ne duplique pas un impaye materialise depuis la meme inscription source', async () => {
-    const first = await service.createFromOutstanding({
-      studentId: '507f1f77bcf86cd799439011',
-      sourceEnrollmentId: '507f1f77bcf86cd799439012',
-      sourceSchoolYearId: '507f1f77bcf86cd799439013',
-      amount: 30000,
-    });
+    const ecoleId = new Types.ObjectId().toHexString();
 
-    const second = await service.createFromOutstanding({
-      studentId: '507f1f77bcf86cd799439011',
-      sourceEnrollmentId: '507f1f77bcf86cd799439012',
-      sourceSchoolYearId: '507f1f77bcf86cd799439013',
-      amount: 30000,
-    });
+    await runWithTenant({ ecoleId }, async () => {
+      const first = await service.createFromOutstanding({
+        studentId: '507f1f77bcf86cd799439011',
+        sourceEnrollmentId: '507f1f77bcf86cd799439012',
+        sourceSchoolYearId: '507f1f77bcf86cd799439013',
+        amount: 30000,
+      });
 
-    expect(String(first?._id)).toBe(String(second?._id));
-    expect(await model.countDocuments()).toBe(1);
+      const second = await service.createFromOutstanding({
+        studentId: '507f1f77bcf86cd799439011',
+        sourceEnrollmentId: '507f1f77bcf86cd799439012',
+        sourceSchoolYearId: '507f1f77bcf86cd799439013',
+        amount: 30000,
+      });
+
+      expect(String(first?._id)).toBe(String(second?._id));
+      expect(await model.countDocuments()).toBe(1);
+    });
   });
 });

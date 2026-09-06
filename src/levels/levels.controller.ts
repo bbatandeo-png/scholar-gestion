@@ -73,12 +73,24 @@ export class LevelsController {
     @Res() res: Response,
   ) {
     const year = await this.schoolYearsService.requireOpen();
-    const level = await this.levelsService.create(dto);
-    await this.levelsService.enableForSchoolYear(
-      String(year._id),
-      String(level._id),
-    );
-    setFlash(req, 'success', 'Niveau enregistre');
+    try {
+      const level = await this.levelsService.create(dto);
+      await this.levelsService.enableForSchoolYear(
+        String(year._id),
+        String(level._id),
+      );
+      setFlash(req, 'success', 'Niveau enregistre');
+    } catch (error: any) {
+      if (error?.code === 11000) {
+        setFlash(
+          req,
+          'error',
+          'Un niveau avec ce code ou cet ordre existe deja',
+        );
+        return res.redirect('/settings/levels');
+      }
+      throw error;
+    }
     return res.redirect('/settings/levels');
   }
 

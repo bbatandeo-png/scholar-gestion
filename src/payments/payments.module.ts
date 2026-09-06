@@ -3,6 +3,8 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { ArrearsModule } from '../arrears/arrears.module';
 import { AuditModule } from '../audit/audit.module';
 import { BillingModule } from '../billing/billing.module';
+import { EcoleModulesModule } from '../ecole-modules/ecole-modules.module';
+import { EcolesModule } from '../ecoles/ecoles.module';
 import { SettingsModule } from '../settings/settings.module';
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
@@ -17,6 +19,8 @@ import { SchoolYearsModule } from '../school-years/school-years.module';
     SettingsModule,
     AuditModule,
     SchoolYearsModule,
+    EcoleModulesModule,
+    EcolesModule,
   ],
   controllers: [PaymentsController],
   providers: [PaymentsService],

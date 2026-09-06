@@ -1,13 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { Model } from 'mongoose';
 import { Role, UserStatus } from '../common/enums/domain.enums';
 import { User, UserDocument } from './schemas/user.schema';
 
 @Injectable()
 export class UsersService {
-  constructor(@InjectModel(User.name) private readonly userModel: Model<UserDocument>) {}
+  constructor(
+    @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+  ) {}
 
   async findByEmail(email: string) {
     return this.userModel.findOne({ email: email.toLowerCase() }).exec();
@@ -25,9 +27,9 @@ export class UsersService {
       .exec();
   }
 
-  async list() {
+  async list(ecoleId: string) {
     return this.userModel
-      .find()
+      .find({ ecoleId })
       .sort({ name: 1 })
       .select({ name: 1, email: 1, role: 1, status: 1, createdAt: 1 })
       .lean()
@@ -35,13 +37,14 @@ export class UsersService {
   }
 
   async listPaginated(payload: {
+    ecoleId: string;
     q?: string;
     role?: Role;
     status?: UserStatus;
     page: number;
     pageSize: number;
   }) {
-    const filter: Record<string, any> = {};
+    const filter: Record<string, any> = { ecoleId: payload.ecoleId };
     const q = (payload.q ?? '').trim();
 
     if (q) {
@@ -62,7 +65,7 @@ export class UsersService {
     const [items, total] = await Promise.all([
       this.userModel
         .find(filter)
-        .sort({ name: 1 })
+        .sort({ createdAt: -1 })
         .skip((payload.page - 1) * payload.pageSize)
         .limit(payload.pageSize)
         .select({ name: 1, email: 1, role: 1, status: 1, createdAt: 1 })
@@ -80,6 +83,7 @@ export class UsersService {
     password: string;
     role: Role;
     status: UserStatus;
+    ecoleId: string | null;
   }) {
     const passwordHash = await bcrypt.hash(payload.password, 10);
     return this.userModel.create({
@@ -88,10 +92,14 @@ export class UsersService {
       passwordHash,
       role: payload.role,
       status: payload.status,
+      ecoleId: payload.ecoleId,
     });
   }
 
-  async updateAccess(userId: string, payload: { role: Role; status: UserStatus }) {
+  async updateAccess(
+    userId: string,
+    payload: { role: Role; status: UserStatus },
+  ) {
     return this.userModel
       .findByIdAndUpdate(
         userId,
@@ -120,6 +128,7 @@ export class UsersService {
     email: string;
     passwordHash: string;
     role?: Role;
+    ecoleId: string | null;
   }) {
     const existing = await this.findByEmail(payload.email);
     if (existing) {

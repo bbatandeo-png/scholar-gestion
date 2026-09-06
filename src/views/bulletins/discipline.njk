@@ -1,0 +1,51 @@
+{% extends "layout.njk" %}
+{% block content %}
+<div class="panel">
+  <div class="panel-heading">
+    <div>
+      <h2>Discipline — {{ session.levelId.label }} — {{ periodeLabels[session.periode] }}</h2>
+      <p class="muted">Retards, absences, exclusion et decision du conseil des profs, par eleve — a renseigner avant la validation de la session.</p>
+    </div>
+    <a class="button secondary" href="/bulletins/{{ session._id }}">Retour a la session</a>
+  </div>
+
+  <div class="table-shell">
+    <table class="table-report">
+      <thead>
+        <tr>
+          <th>Eleve</th>
+          <th>Retards (fois)</th>
+          <th>Absences (heures)</th>
+          <th>Exclusion</th>
+          <th>Decision du conseil</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          {% set formId = 'discipline-' + row._id %}
+          <tr>
+            <td>{{ row.studentId.lastname }} {{ row.studentId.firstname }}</td>
+            <td><input type="number" name="retards" min="0" value="{{ row.retards }}" form="{{ formId }}" /></td>
+            <td><input type="number" name="absences" min="0" value="{{ row.absences }}" form="{{ formId }}" /></td>
+            <td><input type="text" name="exclusion" value="{{ row.exclusion or '' }}" form="{{ formId }}" /></td>
+            <td><input type="text" name="decisionConseil" value="{{ row.decisionConseil or '' }}" form="{{ formId }}" /></td>
+            <td><button type="submit" class="btn-sm" form="{{ formId }}">Enregistrer</button></td>
+          </tr>
+        {% else %}
+          <tr><td colspan="6">Aucun eleve rapproche pour l'instant.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {# Each row's inputs reference their form by id (the "form" attribute
+     above) rather than nesting a <form> inside <tr>/<td>, which HTML
+     doesn't allow - see MDN on the form-associated-elements "form" attribute. #}
+  {% for row in rows %}
+    <form id="discipline-{{ row._id }}" method="post" action="/bulletins/{{ session._id }}/rows/{{ row._id }}/discipline" style="display:none;">
+      <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+    </form>
+  {% endfor %}
+</div>
+{% endblock %}

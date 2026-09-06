@@ -16,6 +16,7 @@ import {
 } from '../common/enums/domain.enums';
 import { runWithMongoTransactionFallback } from '../common/utils/mongo-transaction.util';
 import { SettingsService } from '../settings/settings.service';
+import { EcolesService } from '../ecoles/ecoles.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { Payment, PaymentDocument } from './schemas/payment.schema';
 
@@ -27,6 +28,7 @@ export class PaymentsService {
     private readonly billingService: BillingService,
     private readonly arrearsService: ArrearsService,
     private readonly settingsService: SettingsService,
+    private readonly ecolesService: EcolesService,
     private readonly auditService: AuditService,
     @InjectConnection() private readonly connection: Connection,
   ) {}
@@ -300,21 +302,25 @@ export class PaymentsService {
     };
   }
 
+  // Two identical copies stacked on one A4 page, separated by a dashed cut
+  // line - mirrors the carbon-copy paper receipt booklets this digitizes:
+  // "SOUCHE" (top) stays with the school, "REÇU CLIENT" (bottom) is handed
+  // to the payer after the page is cut in half.
   async renderReceiptPdf(
     id: string,
     receiptMode: ReceiptMode = ReceiptMode.TUITION_ONLY,
   ) {
     const receipt = await this.findReceiptById(id);
     const chunks: Buffer[] = [];
-    const doc = new PDFDocument({ margin: 40 });
+    const doc = new PDFDocument({ margin: 24, size: 'A4' });
     doc.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
 
-    const storedSchoolName = await this.settingsService.getSchoolName();
+    const storedSchoolName = await this.ecolesService.getCurrentSchoolName();
     const schoolName =
       storedSchoolName || process.env.SCHOOL_NAME || "Nom de l'école";
     const invoice = receipt.invoiceId as any;
-    const enrollment = invoice?.enrollmentId as any;
-    const student = enrollment?.studentId as any;
+    const enrollment = invoice?.enrollmentId;
+    const student = enrollment?.studentId;
     const schoolYearLabel = enrollment?.schoolYearId?.label ?? '-';
     const levelLabel = enrollment?.levelId?.label ?? '-';
     const gender = student?.gender ?? '-';
@@ -333,75 +339,116 @@ export class PaymentsService {
       .toString()
       .padStart(2, '0')}`;
 
-    return await new Promise<Buffer>((resolve) => {
-      doc.on('end', () => resolve(Buffer.concat(chunks)));
+    // Same netting rules as the HTML receipt (receiptMode-aware discount/
+    // registration-fee handling) - computing "Total paye"/"Reste a payer"
+    // straight from raw invoice fields here would silently disagree with
+    // what the HTML page shows for the same receipt.
+    const receiptSummary = this.getReceiptAmounts(invoice, receiptMode);
 
-      doc.font('Times-Bold').fontSize(18).text(schoolName, { align: 'center' });
-      doc.moveDown(0.5);
+    const rows = [
+      ['Référence ou Numéro de reçu', receipt.receiptNumber ?? '-'],
+      ['Année scolaire', schoolYearLabel],
+      ['Nom et prénoms de l’élève', studentFullName],
+      ['N° Matricule', student?.matricule ?? '-'],
+      ['Sexe', gender],
+      ['Classe', levelLabel],
+    ];
+    if (receiptMode === ReceiptMode.TUITION_AND_REGISTRATION) {
+      rows.push(["Frais d'inscription", receiptSummary.registrationFee ?? '-']);
+    }
+    rows.push(['Montant de l’écolage', receiptSummary.tuitionFee]);
+    rows.push(['Nouveau paiement', receipt.amount ?? '-']);
+    rows.push(['Total payé', receiptSummary.totalPaid]);
+    rows.push(['Reste à payer', receiptSummary.balanceDue]);
+
+    const startX = doc.page.margins.left;
+    const usableWidth =
+      doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    const labelWidth = 160;
+    const valueWidth = usableWidth - labelWidth;
+    const rowHeight = 14;
+
+    // Draws one full copy of the receipt starting at topY, compact enough
+    // that two of them plus the cut line fit in one page's usable height.
+    // Returns the y just past the copy's content.
+    const drawCopy = (topY: number, copyLabel: string): number => {
+      let y = topY;
       doc
         .font('Times-Bold')
-        .fontSize(14)
-        .text('REÇU DE PAIEMENT DES FRAIS DE SCOLARITE', { align: 'center' });
-      doc.moveDown(1);
+        .fontSize(8)
+        .text(copyLabel, startX, y, { width: usableWidth, align: 'center' });
+      y += 12;
+      doc
+        .font('Times-Bold')
+        .fontSize(12)
+        .text(schoolName, startX, y, { width: usableWidth, align: 'center' });
+      y += 15;
+      doc
+        .font('Times-Bold')
+        .fontSize(10)
+        .text('REÇU DE PAIEMENT DES FRAIS DE SCOLARITE', startX, y, {
+          width: usableWidth,
+          align: 'center',
+        });
+      y += 18;
 
-      const rows = [
-        ['Référence ou Numéro de reçu', receipt.receiptNumber ?? '-'],
-        ['Année scolaire', schoolYearLabel],
-        ['Nom et prénoms de l’élève', studentFullName],
-        ['N° Matricule', student?.matricule ?? '-'],
-        ['Sexe', gender],
-        ['Classe', levelLabel],
-      ];
-
-      if (receiptMode === ReceiptMode.TUITION_AND_REGISTRATION) {
-        rows.push(["Frais d'inscription", invoice?.registrationFee ?? '-']);
-      }
-
-      rows.push(['Montant de l’écolage', invoice?.tuitionFee ?? '-']);
-      rows.push(['Nouveau paiement', receipt.amount ?? '-']);
-      rows.push(['Total payé', invoice?.paidAmount ?? '-']);
-      rows.push(['Reste à payer', invoice?.balanceDue ?? '-']);
-
-      const rowHeight = 22;
-      const startX = doc.page.margins.left;
-      const labelWidth = 190;
-      const valueWidth =
-        doc.page.width -
-        doc.page.margins.left -
-        doc.page.margins.right -
-        labelWidth;
-      let y = doc.y;
-
-      rows.forEach(([label, value], index) => {
+      rows.forEach(([label, value]) => {
         doc.rect(startX, y, labelWidth, rowHeight).stroke('#000000');
         doc
           .rect(startX + labelWidth, y, valueWidth, rowHeight)
           .stroke('#000000');
-
         doc
           .font('Times-Bold')
-          .fontSize(11)
-          .text(label, startX + 6, y + 6, {
-            width: labelWidth - 12,
+          .fontSize(8)
+          .text(label, startX + 5, y + 3, {
+            width: labelWidth - 10,
             align: 'left',
           });
         doc
           .font('Times-Roman')
-          .fontSize(11)
-          .text(String(value), startX + labelWidth + 6, y + 6, {
-            width: valueWidth - 12,
+          .fontSize(8)
+          .text(String(value), startX + labelWidth + 5, y + 3, {
+            width: valueWidth - 10,
             align: 'left',
           });
-
         y += rowHeight;
       });
 
-      doc.y = y + 10;
+      y += 8;
       doc
         .font('Times-Roman')
-        .text(`Lomé, le ${formattedDate}`, { align: 'right' });
-      doc.moveDown(2);
-      doc.font('Times-Roman').text('L’économe', { align: 'right' });
+        .fontSize(8)
+        .text(`Lomé, le ${formattedDate}`, startX, y, {
+          width: usableWidth,
+          align: 'right',
+        });
+      y += 20;
+      doc
+        .font('Times-Roman')
+        .fontSize(8)
+        .text('L’économe', startX, y, { width: usableWidth, align: 'right' });
+      y += 12;
+      return y;
+    };
+
+    return await new Promise<Buffer>((resolve) => {
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+
+      const topY = doc.page.margins.top;
+      const bottomY = doc.page.height - doc.page.margins.bottom;
+      const halfHeight = (bottomY - topY) / 2;
+      const cutLineY = topY + halfHeight;
+
+      drawCopy(topY, 'SOUCHE (à conserver par l’école)');
+
+      doc
+        .dash(4, { space: 3 })
+        .moveTo(startX, cutLineY)
+        .lineTo(startX + usableWidth, cutLineY)
+        .stroke('#000000')
+        .undash();
+
+      drawCopy(cutLineY + 12, 'REÇU CLIENT (à remettre au parent)');
 
       doc.end();
     });

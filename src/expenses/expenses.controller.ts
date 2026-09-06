@@ -14,8 +14,10 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { Roles } from '../common/decorators/roles.decorator';
+import { RequireModule } from '../common/decorators/require-module.decorator';
 import { Role } from '../common/enums/domain.enums';
 import { AuthenticatedGuard } from '../common/guards/authenticated.guard';
+import { ModuleGuard } from '../common/guards/module.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { setFlash } from '../common/utils/flash.util';
 import { buildExcelBuffer } from '../common/utils/excel.util';
@@ -25,7 +27,8 @@ import { ExpensesService } from './expenses.service';
 import { SchoolYearsService } from '../school-years/school-years.service';
 
 @Controller('/expenses')
-@UseGuards(AuthenticatedGuard, RolesGuard)
+@UseGuards(AuthenticatedGuard, RolesGuard, ModuleGuard)
+@RequireModule('FINANCE')
 export class ExpensesController {
   constructor(
     private readonly expensesService: ExpensesService,

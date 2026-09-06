@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, SchemaTypes } from 'mongoose';
 import { PaymentMethod } from '../../common/enums/domain.enums';
+import { ecoleScopePlugin } from '../../common/mongoose/ecole-scope.plugin';
 
 export type PaymentDocument = HydratedDocument<Payment>;
 
@@ -31,7 +32,7 @@ export class Payment {
   @Prop({ trim: true })
   reference?: string;
 
-  @Prop({ required: true, unique: true, index: true })
+  @Prop({ required: true, trim: true })
   receiptNumber: string;
 
   @Prop({ type: SchemaTypes.Mixed, default: [] })
@@ -45,4 +46,6 @@ export class Payment {
 }
 
 export const PaymentSchema = SchemaFactory.createForClass(Payment);
+PaymentSchema.plugin(ecoleScopePlugin);
 PaymentSchema.index({ schoolYearId: 1, paidAt: -1 });
+PaymentSchema.index({ ecoleId: 1, receiptNumber: 1 }, { unique: true });

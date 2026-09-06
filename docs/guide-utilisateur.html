@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Guide Scolar-Gestion</title>
+<style>
+  :root {
+    --paper: #f2efe3;
+    --paper-raised: #fbf9f2;
+    --ink: #24261f;
+    --ink-soft: #55564a;
+    --line: #d9d3bd;
+    --vert: #1e5b3f;
+    --vert-soft: #e4ede7;
+    --ocre: #a1731f;
+    --ocre-soft: #f3e8d3;
+    --argile: #93412f;
+    --argile-soft: #f2e2dc;
+    --shadow: 0 1px 2px rgba(36, 38, 31, 0.06), 0 8px 24px -12px rgba(36, 38, 31, 0.18);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #171b16;
+      --paper-raised: #1e2320;
+      --ink: #eae6d8;
+      --ink-soft: #b3ae9c;
+      --line: #333a30;
+      --vert: #5fa47e;
+      --vert-soft: #202b24;
+      --ocre: #d3a34e;
+      --ocre-soft: #2b2419;
+      --argile: #d68871;
+      --argile-soft: #2c211d;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { height: 100%; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Segoe UI", "Noto Sans", system-ui, -apple-system, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+  }
+
+  h1, h2, h3 {
+    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Noto Serif", serif;
+    color: var(--ink);
+    text-wrap: balance;
+    font-weight: 600;
+  }
+
+  a { color: var(--vert); }
+
+  code, .kbd {
+    font-family: "Cascadia Code", Consolas, "Courier New", monospace;
+    font-size: 0.9em;
+  }
+
+  .kbd {
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 0.05em 0.45em;
+  }
+
+  .shell {
+    max-width: 1180px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 260px minmax(0, 1fr);
+    gap: 0;
+    min-height: 100vh;
+  }
+
+  /* ---------- Sidebar ---------- */
+
+  .side {
+    padding: 2.5rem 1.5rem 2.5rem 0;
+    position: sticky;
+    top: 0;
+    align-self: start;
+    max-height: 100vh;
+    overflow-y: auto;
+  }
+
+  .side-brand {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin: 0 0 0.3rem;
+  }
+
+  .side-brand .mark {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    background: var(--vert);
+    display: inline-block;
+    transform: translateY(-1px);
+  }
+
+  .side-brand-text {
+    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    font-weight: 700;
+    font-size: 1.15rem;
+    letter-spacing: 0.01em;
+  }
+
+  .side-tag {
+    color: var(--ink-soft);
+    font-size: 0.82rem;
+    margin: 0 0 1.75rem;
+  }
+
+  .side nav {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  .side-group {
+    margin: 1.1rem 0 0.35rem;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-soft);
+    font-weight: 600;
+  }
+
+  .side nav a {
+    text-decoration: none;
+    color: var(--ink-soft);
+    font-size: 0.9rem;
+    padding: 0.3rem 0.6rem;
+    border-radius: 6px;
+    border-left: 2px solid transparent;
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+
+  .side nav a .num {
+    font-variant-numeric: tabular-nums;
+    color: var(--vert);
+    margin-right: 0.5em;
+    font-weight: 600;
+  }
+
+  .side nav a:hover {
+    background: var(--vert-soft);
+    color: var(--ink);
+  }
+
+  /* ---------- Main content ---------- */
+
+  main {
+    padding: 3.5rem 2.5rem 6rem 2.5rem;
+    border-left: 1px solid var(--line);
+    min-width: 0;
+  }
+
+  .cover {
+    margin-bottom: 3.5rem;
+  }
+
+  .cover .eyebrow {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--vert);
+    font-weight: 600;
+    margin: 0 0 0.9rem;
+  }
+
+  .cover h1 {
+    font-size: 2.5rem;
+    margin: 0 0 0.75rem;
+    line-height: 1.15;
+  }
+
+  .cover p.lede {
+    max-width: 62ch;
+    color: var(--ink-soft);
+    font-size: 1.08rem;
+    margin: 0;
+  }
+
+  .cover-meta {
+    display: flex;
+    gap: 1.5rem;
+    margin-top: 1.75rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--line);
+    flex-wrap: wrap;
+  }
+
+  .cover-meta div { font-size: 0.85rem; color: var(--ink-soft); }
+  .cover-meta strong { display: block; color: var(--ink); font-family: "Iowan Old Style", Georgia, serif; font-size: 1rem; margin-bottom: 0.15rem; }
+
+  section.chapter {
+    max-width: 68ch;
+    margin: 0 0 4rem;
+    scroll-margin-top: 2rem;
+  }
+
+  section.chapter .chapter-head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.85rem;
+    margin-bottom: 0.3rem;
+  }
+
+  section.chapter .chapter-num {
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 1.05rem;
+    color: var(--vert);
+    font-weight: 600;
+  }
+
+  section.chapter h2 {
+    font-size: 1.55rem;
+    margin: 0;
+  }
+
+  section.chapter .dek {
+    color: var(--ink-soft);
+    font-size: 0.98rem;
+    margin: 0.4rem 0 1.6rem;
+    max-width: 58ch;
+  }
+
+  section.chapter h3 {
+    font-size: 1.08rem;
+    margin: 1.8rem 0 0.6rem;
+  }
+
+  section.chapter p { margin: 0 0 1rem; }
+
+  .steps {
+    list-style: none;
+    counter-reset: step;
+    margin: 0 0 1.3rem;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+  }
+
+  .steps li {
+    counter-increment: step;
+    position: relative;
+    padding-left: 2.3rem;
+  }
+
+  .steps li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0;
+    top: 0.05em;
+    width: 1.55rem;
+    height: 1.55rem;
+    border-radius: 50%;
+    background: var(--vert-soft);
+    color: var(--vert);
+    font-size: 0.8rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  ul.plain {
+    margin: 0 0 1.3rem;
+    padding-left: 1.2rem;
+  }
+
+  ul.plain li { margin-bottom: 0.4rem; }
+
+  .path {
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-style: italic;
+    color: var(--vert);
+  }
+
+  .card {
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 1.1rem 1.3rem;
+    margin: 0 0 1.3rem;
+    box-shadow: var(--shadow);
+  }
+
+  .card h4 {
+    margin: 0 0 0.5rem;
+    font-size: 0.95rem;
+    font-family: "Segoe UI", sans-serif;
+    font-weight: 700;
+  }
+
+  .note {
+    border-left: 3px solid var(--vert);
+    background: var(--vert-soft);
+    padding: 0.9rem 1.1rem;
+    border-radius: 0 8px 8px 0;
+    margin: 0 0 1.3rem;
+    font-size: 0.93rem;
+  }
+
+  .warn {
+    border-left: 3px solid var(--argile);
+    background: var(--argile-soft);
+    padding: 0.9rem 1.1rem;
+    border-radius: 0 8px 8px 0;
+    margin: 0 0 1.3rem;
+    font-size: 0.93rem;
+  }
+
+  .tip {
+    border-left: 3px solid var(--ocre);
+    background: var(--ocre-soft);
+    padding: 0.9rem 1.1rem;
+    border-radius: 0 8px 8px 0;
+    margin: 0 0 1.3rem;
+    font-size: 0.93rem;
+  }
+
+  .note strong, .warn strong, .tip strong { display: block; margin-bottom: 0.2rem; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  .note strong { color: var(--vert); }
+  .warn strong { color: var(--argile); }
+  .tip strong { color: var(--ocre); }
+
+  .roles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin: 0 0 1.3rem;
+  }
+
+  .role-pill {
+    font-size: 0.76rem;
+    padding: 0.25rem 0.65rem;
+    border-radius: 999px;
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    color: var(--ink-soft);
+  }
+
+  .role-pill.on {
+    background: var(--vert);
+    border-color: var(--vert);
+    color: var(--paper-raised);
+  }
+
+  .field-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0 0 1.3rem;
+    font-size: 0.9rem;
+  }
+
+  .field-table th, .field-table td {
+    text-align: left;
+    padding: 0.5rem 0.7rem;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .field-table th {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-soft);
+    font-weight: 600;
+  }
+
+  .table-wrap { overflow-x: auto; }
+
+  footer.doc-footer {
+    max-width: 68ch;
+    border-top: 1px solid var(--line);
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    color: var(--ink-soft);
+    font-size: 0.85rem;
+  }
+
+  @media (max-width: 860px) {
+    .shell { grid-template-columns: 1fr; }
+    .side { position: static; max-height: none; padding: 1.5rem 1.5rem 0; }
+    main { border-left: none; padding: 2rem 1.4rem 4rem; }
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="side">
+    <div class="side-brand"><span class="mark"></span><span class="side-brand-text">Scolar&#8209;Gestion</span></div>
+    <p class="side-tag">Guide du personnel</p>
+    <nav>
+      <a href="#connexion"><span class="num">1</span>Connexion</a>
+      <a href="#tableau-de-bord"><span class="num">2</span>Tableau de bord</a>
+
+      <div class="side-group">Élèves</div>
+      <a href="#eleves"><span class="num">3</span>Fiches élèves</a>
+      <a href="#cartes"><span class="num">4</span>Cartes scolaires</a>
+
+      <div class="side-group">Scolarité</div>
+      <a href="#inscriptions"><span class="num">5</span>Inscriptions &amp; paiements</a>
+      <a href="#facturation"><span class="num">6</span>Facturation</a>
+      <a href="#impayes"><span class="num">7</span>Impayés &amp; dépenses</a>
+      <a href="#bulletins"><span class="num">8</span>Bulletins</a>
+      <a href="#promotions"><span class="num">9</span>Promotions</a>
+
+      <div class="side-group">Pilotage</div>
+      <a href="#rapports"><span class="num">10</span>Rapports</a>
+      <a href="#parametres"><span class="num">11</span>Paramètres</a>
+      <a href="#utilisateurs"><span class="num">12</span>Utilisateurs</a>
+    </nav>
+  </aside>
+
+  <main>
+    <div class="cover">
+      <p class="eyebrow">Manuel du personnel</p>
+      <h1>Utiliser Scolar&#8209;Gestion au quotidien</h1>
+      <p class="lede">Ce guide couvre les tâches courantes de gestion scolaire : élèves, inscriptions, paiements, bulletins et cartes d'identité scolaires. Il suit l'ordre du menu de gauche dans l'application.</p>
+      <div class="cover-meta">
+        <div><strong>Accès</strong>http://localhost:3000 depuis un navigateur, sur le poste où l'application est installée</div>
+        <div><strong>Public</strong>Direction, secrétariat, comptabilité</div>
+        <div><strong>Prérequis</strong>Un compte créé par un administrateur</div>
+      </div>
+    </div>
+
+    <section class="chapter" id="connexion">
+      <div class="chapter-head"><span class="chapter-num">01</span><h2>Connexion</h2></div>
+      <p class="dek">Chaque membre du personnel se connecte avec son propre compte — les droits affichés dans le menu dépendent du rôle qui lui a été attribué.</p>
+
+      <ol class="steps">
+        <li>Ouvrir un navigateur sur <span class="path">http://localhost:3000</span>.</li>
+        <li>Saisir l'adresse e-mail et le mot de passe fournis par l'administrateur.</li>
+        <li>À la première connexion, aller dans <span class="path">Utilisateurs</span> pour changer son mot de passe.</li>
+      </ol>
+
+      <div class="warn">
+        <strong>Mot de passe oublié</strong>
+        Seul un administrateur (rôle Direction ou Super-admin) peut réinitialiser le mot de passe d'un compte, depuis l'écran <span class="path">Utilisateurs</span>.
+      </div>
+    </section>
+
+    <section class="chapter" id="tableau-de-bord">
+      <div class="chapter-head"><span class="chapter-num">02</span><h2>Tableau de bord</h2></div>
+      <p class="dek">Première page après connexion — une vue d'ensemble de l'année scolaire en cours : effectifs, situation des paiements, alertes.</p>
+      <p>C'est le bon réflexe en début de journée : il signale en un coup d'œil ce qui a évolué (nouvelles inscriptions, paiements reçus, retards) sans avoir à ouvrir chaque module.</p>
+    </section>
+
+    <section class="chapter" id="eleves">
+      <div class="chapter-head"><span class="chapter-num">03</span><h2>Fiches élèves</h2></div>
+      <p class="dek">Menu <span class="path">Élèves</span> — création, recherche et mise à jour du dossier de chaque élève.</p>
+
+      <h3>Créer un élève</h3>
+      <p>Le formulaire de création se trouve en bas de la page <span class="path">Élèves</span>. Champs à renseigner :</p>
+
+      <div class="table-wrap">
+        <table class="field-table">
+          <thead><tr><th>Champ</th><th>Détail</th></tr></thead>
+          <tbody>
+            <tr><td>Matricule</td><td>Laisser vide pour une génération automatique</td></tr>
+            <tr><td>Nom, Prénoms</td><td>Obligatoires</td></tr>
+            <tr><td>Sexe, Date et lieu de naissance</td><td>Obligatoires</td></tr>
+            <tr><td>Quartier</td><td>Obligatoire</td></tr>
+            <tr><td>Photo</td><td>Utilisée sur la carte scolaire — voir chapitre suivant</td></tr>
+            <tr><td>Tuteurs (père / mère)</td><td>Nom complet, contact, adresse</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Rechercher un élève</h3>
+      <ul class="plain">
+        <li>Recherche rapide en haut de la liste : nom, prénom ou matricule.</li>
+        <li>Filtres détaillés : niveau, statut, matricule exact, année scolaire.</li>
+        <li><span class="path">Recherche ancien élève</span> (sous-menu Élèves) pour retrouver le dossier d'un élève qui n'est plus inscrit l'année en cours.</li>
+      </ul>
+
+      <div class="tip">
+        <strong>Photo et carte scolaire</strong>
+        Une photo ajoutée sur la fiche élève apparaît automatiquement sur sa carte scolaire — pas besoin de la re-téléverser ailleurs.
+      </div>
+    </section>
+
+    <section class="chapter" id="cartes">
+      <div class="chapter-head"><span class="chapter-num">04</span><h2>Cartes scolaires</h2></div>
+      <p class="dek">Menu <span class="path">Cartes scolaires</span> — génère la carte d'identité de l'élève au format PDF, prête à découper et plastifier.</p>
+
+      <ol class="steps">
+        <li>Choisir une classe dans la liste déroulante, cliquer sur <span class="path">Afficher</span>.</li>
+        <li>Pour un seul élève : cliquer sur <span class="path">Carte</span> sur sa ligne.</li>
+        <li>Pour plusieurs élèves : cocher les cases voulues, puis <span class="path">Télécharger la sélection</span>.</li>
+        <li>Pour toute la classe : <span class="path">Télécharger toutes les cartes de la classe</span>, en haut de la page.</li>
+      </ol>
+
+      <p>Le PDF imprime 10 cartes par page, séparées par des pointillés de découpe.</p>
+
+      <div class="note">
+        <strong>Logo de l'établissement</strong>
+        Le logo affiché sur la carte est celui importé sur la fiche de l'établissement (écran <span class="path">Écoles</span> / paramètres d'établissement) — aucune photo n'apparaît si aucun logo n'a été importé.
+      </div>
+    </section>
+
+    <section class="chapter" id="inscriptions">
+      <div class="chapter-head"><span class="chapter-num">05</span><h2>Inscriptions &amp; paiements</h2></div>
+      <p class="dek">Menu <span class="path">Inscriptions et paiements</span> — rattache un élève à une année scolaire et un niveau, puis enregistre les paiements associés (frais d'inscription, scolarité).</p>
+      <p>Une inscription doit exister avant qu'un paiement puisse lui être rattaché — c'est elle qui détermine les frais applicables, définis au préalable dans <span class="path">Paramètres &rarr; Frais</span>.</p>
+    </section>
+
+    <section class="chapter" id="facturation">
+      <div class="chapter-head"><span class="chapter-num">06</span><h2>Facturation</h2></div>
+      <p class="dek">Menu <span class="path">Facturation</span> — consultation et impression des factures générées à partir des inscriptions et paiements.</p>
+    </section>
+
+    <section class="chapter" id="impayes">
+      <div class="chapter-head"><span class="chapter-num">07</span><h2>Impayés &amp; dépenses</h2></div>
+      <p class="dek">Deux écrans de suivi financier distincts du côté recettes.</p>
+      <ul class="plain">
+        <li><span class="path">Impayés</span> — élèves avec un solde restant dû, reportable d'une année sur l'autre.</li>
+        <li><span class="path">Dépenses</span> — sorties de caisse de l'établissement (fournitures, entretien, salaires...).</li>
+      </ul>
+    </section>
+
+    <section class="chapter" id="bulletins">
+      <div class="chapter-head"><span class="chapter-num">08</span><h2>Bulletins</h2></div>
+      <p class="dek">Menu <span class="path">Sessions de bulletins</span> — importe les notes par classe et période, calcule les moyennes, puis génère le bulletin PDF de chaque élève.</p>
+
+      <ol class="steps">
+        <li><span class="path">Nouvelle session</span> : choisir la classe et la période.</li>
+        <li>Importer le fichier de notes (Excel) — l'application rapproche chaque ligne avec un élève inscrit.</li>
+        <li>Résoudre les lignes signalées (élève non trouvé, doublon...).</li>
+        <li>Compléter, si besoin, les champs de discipline (retards, absences) avant validation.</li>
+        <li>Valider la session — les moyennes et rangs sont calculés à ce moment, et ne sont plus modifiables après.</li>
+        <li>Télécharger le bulletin d'un élève, ou celui de toute la classe en un seul PDF.</li>
+      </ol>
+
+      <div class="warn">
+        <strong>Validation définitive</strong>
+        Une fois une session validée, les notes ne peuvent plus être corrigées depuis cet écran. Vérifier les lignes importées avant de valider.
+      </div>
+
+      <p><span class="path">Matières</span> (sous-menu) sert à définir la liste des matières et leur coefficient par classe, en amont d'une session d'import.</p>
+    </section>
+
+    <section class="chapter" id="promotions">
+      <div class="chapter-head"><span class="chapter-num">09</span><h2>Promotions</h2></div>
+      <p class="dek">Menu <span class="path">Promotions</span> — fait passer les élèves d'une année scolaire à la suivante, classe par classe, en fin d'année.</p>
+    </section>
+
+    <section class="chapter" id="rapports">
+      <div class="chapter-head"><span class="chapter-num">10</span><h2>Rapports</h2></div>
+      <p class="dek">Menu <span class="path">Rapports</span> — états exportables pour le pilotage : recettes, inscriptions payées, situation financière par classe.</p>
+    </section>
+
+    <section class="chapter" id="parametres">
+      <div class="chapter-head"><span class="chapter-num">11</span><h2>Paramètres</h2></div>
+      <p class="dek">Configuration de référence de l'établissement, à tenir à jour en début d'année scolaire.</p>
+      <ul class="plain">
+        <li><span class="path">Années scolaires</span> — ouverture/clôture d'une année.</li>
+        <li><span class="path">Niveaux</span> — classes actives pour l'année en cours.</li>
+        <li><span class="path">Frais</span> — montants d'inscription et de scolarité par niveau.</li>
+      </ul>
+    </section>
+
+    <section class="chapter" id="utilisateurs">
+      <div class="chapter-head"><span class="chapter-num">12</span><h2>Utilisateurs</h2></div>
+      <p class="dek">Menu <span class="path">Utilisateurs</span> — création des comptes du personnel et attribution des rôles.</p>
+
+      <p>Chaque rôle donne accès à un sous-ensemble du menu :</p>
+      <div class="roles">
+        <span class="role-pill on">Direction</span>
+        <span class="role-pill on">Secrétariat</span>
+        <span class="role-pill on">Comptabilité</span>
+        <span class="role-pill on">Auditeur (lecture seule)</span>
+      </div>
+      <p>En cas de doute sur le rôle à attribuer à quelqu'un, privilégier le plus restrictif qui lui permet de faire son travail.</p>
+    </section>
+
+    <footer class="doc-footer">
+      Pour l'installation technique du poste (MongoDB, mise à jour de l'application), voir les guides destinés à la personne en charge de l'informatique — ce document couvre uniquement l'usage quotidien.
+    </footer>
+  </main>
+</div>
+</body>
+</html>

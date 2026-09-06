@@ -19,6 +19,7 @@ import { Model } from 'mongoose';
 import { LevelsService } from '../levels/levels.service';
 import { SchoolYearsService } from '../school-years/school-years.service';
 import { Roles } from '../common/decorators/roles.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Role } from '../common/enums/domain.enums';
 import { AuthenticatedGuard } from '../common/guards/authenticated.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -28,7 +29,12 @@ import { PreparePromotionsDto } from './dto/prepare-promotions.dto';
 import { ValidatePromotionsDto } from './dto/validate-promotions.dto';
 import { PromotionsService } from './promotions.service';
 import { Student, StudentDocument } from '../students/schemas/student.schema';
+import { SessionUser } from '../common/types/session-user.type';
 
+// Not gated here by @RequireModule('FINANCE'): the FINANCE check lives
+// inside PromotionsService.validate() itself instead (see that file), since
+// this controller's other routes (index, prepare) are core academic-year
+// functionality with no direct financial write of their own.
 @Controller('/promotions')
 @UseGuards(AuthenticatedGuard, RolesGuard)
 export class PromotionsController {
@@ -111,7 +117,7 @@ export class PromotionsController {
         'matricule',
         'code_eleve',
       ]).toLowerCase();
-      const decision = pickRowValue(row, ['decision']);
+      const decision = pickRowValue(row, ['decision']).toLowerCase();
       const targetLevel = pickRowValue(row, [
         'niveau_cible',
         'target_level',
@@ -159,8 +165,9 @@ export class PromotionsController {
     @Body() dto: ValidatePromotionsDto,
     @Req() req: Request,
     @Res() res: Response,
+    @CurrentUser() user: SessionUser | undefined,
   ) {
-    await this.promotionsService.validate(dto, req.session.user?.id);
+    await this.promotionsService.validate(dto, user?.id);
     req.session.selectedSchoolYearId = dto.targetSchoolYearId;
     setFlash(req, 'success', 'Promotion terminee et nouvelle annee activee');
     return res.redirect('/dashboard');

@@ -1,0 +1,87 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <section class="panel">
+    <div class="panel-heading">
+      <div>
+        <h2>Cartes scolaires</h2>
+        <p class="muted">Sélectionnez une classe pour générer la carte d'identité scolaire d'un élève, d'une sélection d'élèves, ou de toute la classe.</p>
+      </div>
+      {% if roster %}
+        <div class="panel-heading-actions">
+          <a class="button secondary btn-icon icon-export" href="/reports/student-cards/pdf?levelId={{ levelId }}">Télécharger toutes les cartes de la classe (PDF)</a>
+        </div>
+      {% endif %}
+    </div>
+
+    <form method="get" action="/reports/student-cards" class="toolbar-grid">
+      <label>
+        Classe
+        <select name="levelId" required>
+          <option value="">Sélectionner une classe</option>
+          {% for level in levels %}
+            <option value="{{ level._id }}" {% if levelId == level._id %}selected{% endif %}>{{ level.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button type="submit" class="button secondary">Afficher</button>
+    </form>
+
+    {% if roster %}
+      <p class="muted">{{ roster.students.length }} élève(s) dans {{ roster.levelName }}. 10 cartes par page, séparées par des pointillés pour la découpe.</p>
+      <form method="post" action="/reports/student-cards/selection" target="_blank" id="cards-selection-form">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+        <div class="table-shell">
+          <table class="table-report">
+            <thead>
+              <tr>
+                <th><input type="checkbox" id="select-all-cards" /></th>
+                <th>N°</th>
+                <th>Matricule</th>
+                <th>Nom et prénoms</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for student in roster.students %}
+                <tr>
+                  <td><input type="checkbox" class="card-checkbox" name="studentIds" value="{{ student._id }}" /></td>
+                  <td>{{ loop.index }}</td>
+                  <td>{{ student.matricule }}</td>
+                  <td>{{ student.lastname }} {{ student.firstname }}</td>
+                  <td><a class="button secondary btn-sm" target="_blank" href="/reports/student-cards/{{ student._id }}/pdf">Carte</a></td>
+                </tr>
+              {% else %}
+                <tr><td colspan="5">Aucun élève actif dans cette classe.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% if roster.students.length %}
+          <div class="toolbar compact-actions top-gap">
+            <button type="submit" class="button secondary btn-icon icon-export" id="download-selection-btn" disabled>Télécharger la sélection (PDF)</button>
+            <span class="muted" id="selection-count">0 élève(s) sélectionné(s)</span>
+          </div>
+        {% endif %}
+      </form>
+      <script>
+        (() => {
+          const selectAll = document.getElementById('select-all-cards');
+          const boxes = Array.from(document.querySelectorAll('.card-checkbox'));
+          const downloadBtn = document.getElementById('download-selection-btn');
+          const counter = document.getElementById('selection-count');
+          const refresh = () => {
+            const checked = boxes.filter((box) => box.checked).length;
+            if (downloadBtn) downloadBtn.disabled = checked === 0;
+            if (counter) counter.textContent = checked + ' élève(s) sélectionné(s)';
+          };
+          selectAll?.addEventListener('change', () => {
+            boxes.forEach((box) => { box.checked = selectAll.checked; });
+            refresh();
+          });
+          boxes.forEach((box) => box.addEventListener('change', refresh));
+          refresh();
+        })();
+      </script>
+    {% endif %}
+  </section>
+{% endblock %}

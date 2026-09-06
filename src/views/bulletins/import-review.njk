@@ -1,0 +1,73 @@
+{% extends "layout.njk" %}
+{% import "partials/legend.njk" as legend %}
+{% block content %}
+<div class="panel">
+  <div class="panel-heading">
+    <div>
+      <h2>Revue import — {{ session.levelId.label }} — {{ periodeLabels[session.periode] }}</h2>
+      <p class="muted">{{ rows.length }} ligne(s) importee(s).</p>
+    </div>
+    <a class="button secondary" href="/bulletins/{{ session._id }}">Retour a la session</a>
+  </div>
+
+  {% if unapprovedSubjects.length > 0 %}
+    <h3>Nouvelles matieres a approuver</h3>
+    {% for subject in unapprovedSubjects %}
+      <form method="post" action="/bulletins/{{ session._id }}/subjects/approve" class="inline-form top-gap">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+        <input type="hidden" name="subjectNameRaw" value="{{ subject.subjectNameRaw }}" />
+        <strong>{{ subject.subjectNameRaw }}</strong>
+        <label>Nom de la matiere
+          <input type="text" name="label" value="{{ subject.subjectNameRaw }}" required />
+        </label>
+        <label>Categorie
+          <select name="category" required>
+            {% for cat in subjectCategories %}<option value="{{ cat }}">{{ ENUM_META.subjectCategory[cat].label if ENUM_META.subjectCategory[cat] else cat }}</option>{% endfor %}
+          </select>
+        </label>
+        <label>Coefficient<input type="number" name="coefficient" min="0" step="1" required /></label>
+        <label>Professeur<input type="text" name="teacherName" value="{{ subject.profRaw }}" /></label>
+        <button type="submit" class="btn-sm">Approuver / creer</button>
+      </form>
+    {% endfor %}
+  {% endif %}
+
+  <h3 class="top-gap">Eleves</h3>
+  <div class="table-shell">
+    <table class="table-report">
+      <thead>
+        <tr><th>Nom (fichier)</th><th>Matricule</th><th>Sexe</th><th>Statut</th><th>Correspondance</th></tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td>{{ row.rawIdentity.nameRaw }}</td>
+            <td>{{ row.rawIdentity.matriculeRaw or '—' }}</td>
+            <td>{{ row.rawIdentity.sexeRaw or '—' }}</td>
+            <td>{% set value = row.matchStatus %}{% set group = 'importRowMatchStatus' %}{% include "partials/status-badge.njk" %}</td>
+            <td>
+              {% if row.matchStatus == 'matched' %}
+                {{ row.studentId.lastname }} {{ row.studentId.firstname }}
+              {% else %}
+                <form method="post" action="/bulletins/{{ session._id }}/rows/{{ row._id }}/resolve" class="inline-form no-wrap">
+                  <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+                  <select name="studentId" required>
+                    <option value="">Choisir un eleve</option>
+                    {% for candidate in roster %}
+                      <option value="{{ candidate.studentId }}">{{ candidate.lastname }} {{ candidate.firstname }} ({{ candidate.matricule }})</option>
+                    {% endfor %}
+                  </select>
+                  <button type="submit" class="btn-sm">Rapprocher</button>
+                </form>
+              {% endif %}
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="5">Aucune ligne importee.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {{ legend.render(['importRowMatchStatus']) }}
+</div>
+{% endblock %}

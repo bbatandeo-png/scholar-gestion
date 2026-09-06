@@ -1,4 +1,5 @@
 ﻿{% extends "layout.njk" %}
+{% import "partials/legend.njk" as legend %}
 {% block content %}
   <section class="panel">
     <div class="topbar">
@@ -42,7 +43,7 @@
     </div>
 
     <div class="table-shell">
-      <table class="js-sortable">
+      <table class="table-report js-sortable">
         <thead>
           <tr>
             <th class="sortable" data-column-index="0" data-sort-type="text">Matricule</th>
@@ -56,7 +57,7 @@
             <tr>
               <td>{{ student.matricule }}</td>
               <td>{{ student.lastname }} {{ student.firstname }}</td>
-              <td>{% set value = student.status %}{% include "partials/status-badge.njk" %}</td>
+              <td>{% set value = student.status %}{% set group = 'studentStatus' %}{% include "partials/status-badge.njk" %}</td>
               <td class="actions">
                 <a class="button secondary btn-sm btn-icon icon-view" href="/students/{{ student._id }}">Fiche</a>
                 <a class="button" href="/students/{{ student._id }}/reenroll">Reinscrire</a>
@@ -68,6 +69,7 @@
         </tbody>
       </table>
     </div>
+    {{ legend.render(['studentStatus']) }}
     <div class="pagination-row">
       <form method="get" action="/students/search" class="inline-form">
         <input type="hidden" name="q" value="{{ query }}" />

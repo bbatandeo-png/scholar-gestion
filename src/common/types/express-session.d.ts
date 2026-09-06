@@ -8,6 +8,13 @@ declare module 'express-session' {
       type: 'success' | 'error';
       message: string;
     };
+    // One-time reveal of a newly generated admin password (see
+    // EcolesController.create/index) - consumed and deleted by the very
+    // next page render, same lifecycle as `flash`.
+    lastCreatedCredentials?: {
+      email: string;
+      tempPassword: string;
+    };
     selectedSchoolYearId?: string;
   }
 }

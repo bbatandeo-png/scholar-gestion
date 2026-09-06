@@ -1,5 +1,10 @@
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
-import { Role } from '../enums/domain.enums';
+import {
+  CanActivate,
+  ExecutionContext,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { ensureTestSessionUser } from '../tenant/ensure-test-session-user.util';
 
 @Injectable()
 export class AuthenticatedGuard implements CanActivate {
@@ -11,15 +16,7 @@ export class AuthenticatedGuard implements CanActivate {
     }
 
     if (process.env.NODE_ENV === 'test') {
-      if (!req.session) {
-        req.session = {};
-      }
-      (req.session as any).user = {
-        id: '507f1f77bcf86cd799439011',
-        name: 'Test User',
-        email: 'test@example.com',
-        role: (req.headers['x-test-role'] as Role | undefined) ?? Role.SUPER_ADMIN,
-      };
+      ensureTestSessionUser(req);
       return true;
     }
 

@@ -1,23 +1,39 @@
 {% extends "layout.njk" %}
 
 {% block content %}
-  <section class="hero">
-    <h2>Pilotage global</h2>
-    <p class="muted">Vue synthèse de l’année {{ selectedYear.label }} : effectifs, recettes, impayés et recouvrement.</p>
-  </section>
+  {% if platformViewEcole %}
+    <section class="panel notice">
+      <p class="muted" style="margin:0;">
+        Vous consultez, en lecture, le tableau de bord de <strong>{{ platformViewEcole.nom }}</strong> depuis le compte plateforme.
+        <a href="/platform/ecoles">Retour à la liste des écoles</a>
+      </p>
+    </section>
+  {% endif %}
+  {% if not selectedYear %}
+    <section class="panel">
+      <h2>Bienvenue</h2>
+      <p class="muted">Aucune annee scolaire n'est encore configuree pour votre etablissement. Creez-en une pour commencer a utiliser la plateforme.</p>
+      <a class="button" href="/settings/school-years">Creer une annee scolaire</a>
+    </section>
+  {% else %}
+    <section class="hero">
+      <h2>Pilotage global</h2>
+      <p class="muted">Vue synthèse de l’année {{ selectedYear.label }} : effectifs, recettes, impayés et recouvrement.</p>
+    </section>
 
-  <section class="grid cols-3">
-    <article class="card"><div class="muted">Effectif total</div><div class="metric">{{ summary.totalStudents }}</div></article>
-    <article class="card"><div class="muted">Frais d'inscription encaissés</div><div class="metric">{{ summary.registrationRevenue }}</div></article>
-    <article class="card"><div class="muted">Frais d'écolage encaissés</div><div class="metric">{{ summary.tuitionRevenue }}</div></article>
-    <article class="card"><div class="muted">Dépenses</div><div class="metric">{{ summary.totalExpenses }}</div></article>
-    <article class="card"><div class="muted">Solde disponible</div><div class="metric">{{ summary.availableBalance }}</div></article>
-    <article class="card"><div class="muted">Recettes encaissees</div><div class="metric">{{ summary.revenue }}</div></article>
-    <article class="card"><div class="muted">Impayes globaux</div><div class="metric">{{ summary.totalBalance }}</div></article>
-    <article class="card"><div class="muted">Taux de recouvrement</div><div class="metric">{{ summary.recoveryRate }}%</div></article>
-    <article class="card"><div class="muted">Eleves actifs</div><div class="metric">{{ summary.activeStudents }}</div></article>
-    <article class="card"><div class="muted">Eleves archives</div><div class="metric">{{ summary.archivedStudents }}</div></article>
-    <article class="card"><div class="muted">Impayes reportes</div><div class="metric">{{ summary.arrearsOpen }}</div></article>
-    <article class="card"><div class="muted">Inscriptions actives</div><div class="metric">{{ summary.enrollmentsActive }}</div></article>
-  </section>
+    <section class="grid cols-3">
+      <article class="card"><div class="muted">Effectif total</div><div class="metric">{{ summary.totalStudents }}</div></article>
+      <article class="card"><div class="muted">Frais d'inscription encaissés</div><div class="metric">{{ summary.registrationRevenue }}</div></article>
+      <article class="card"><div class="muted">Frais d'écolage encaissés</div><div class="metric">{{ summary.tuitionRevenue }}</div></article>
+      <article class="card"><div class="muted">Dépenses</div><div class="metric">{{ summary.totalExpenses }}</div></article>
+      <article class="card"><div class="muted">Solde disponible</div><div class="metric">{{ summary.availableBalance }}</div></article>
+      <article class="card"><div class="muted">Recettes encaissees</div><div class="metric">{{ summary.revenue }}</div></article>
+      <article class="card"><div class="muted">Impayes globaux</div><div class="metric">{{ summary.totalBalance }}</div></article>
+      <article class="card"><div class="muted">Taux de recouvrement</div><div class="metric">{{ summary.recoveryRate }}%</div></article>
+      <article class="card"><div class="muted">Eleves actifs</div><div class="metric">{{ summary.activeStudents }}</div></article>
+      <article class="card"><div class="muted">Eleves archives</div><div class="metric">{{ summary.archivedStudents }}</div></article>
+      <article class="card"><div class="muted">Impayes reportes</div><div class="metric">{{ summary.arrearsOpen }}</div></article>
+      <article class="card"><div class="muted">Inscriptions actives</div><div class="metric">{{ summary.enrollmentsActive }}</div></article>
+    </section>
+  {% endif %}
 {% endblock %}

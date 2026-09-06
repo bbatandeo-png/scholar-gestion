@@ -1,4 +1,5 @@
 {% extends "layout.njk" %}
+{% import "partials/legend.njk" as legend %}
 {% block content %}
   <section class="enrollment-layout">
     {% if not schoolYearContext.isHistorical %}<div class="panel">
@@ -7,11 +8,21 @@
         <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
         <div class="form-grid">
           <label>Eleve
-            <select name="studentId" id="studentIdSelect">
-              {% for student in students %}
-                <option value="{{ student._id }}">{{ student.matricule }} - {{ student.lastname }} {{ student.firstname }}</option>
-              {% endfor %}
-            </select>
+            <div class="autocomplete-wrap">
+              <input
+                type="text"
+                id="studentSearchInput"
+                autocomplete="off"
+                placeholder="Rechercher un eleve (nom, prenom, matricule)..."
+                role="combobox"
+                aria-expanded="false"
+                aria-autocomplete="list"
+                aria-controls="studentSearchResults"
+              />
+              <div id="studentSearchResults" class="autocomplete-results" role="listbox" hidden></div>
+            </div>
+            <p id="studentSearchStatus" class="search-status muted"></p>
+            <input type="hidden" name="studentId" id="studentIdSelect" />
           </label>
           <label>Annee
             <input value="{{ selectedYear.label }}" disabled />
@@ -26,10 +37,9 @@
           </label>
           <label>Type
             <select name="type">
-              <option value="initial">initial</option>
-              <option value="re_enrollment">re_enrollment</option>
-              <option value="promotion">promotion</option>
-              <option value="repeat">repeat</option>
+              {% for key, meta in ENUM_META.enrollmentType %}
+                <option value="{{ key }}" title="{{ meta.description }}">{{ meta.label }}</option>
+              {% endfor %}
             </select>
           </label>
           <label>Reduction de frais (optionnel)
@@ -38,6 +48,7 @@
         </div>
         <button type="submit" class="btn-lg btn-icon icon-save">Creer l inscription</button>
       </form>
+      {{ legend.render(['enrollmentType', 'enrollmentStatus']) }}
     </div>{% endif %}
 
     <div class="panel status-panel">
@@ -63,22 +74,26 @@
         <a class="button secondary btn-icon icon-export" href="/enrollments/export">Exporter Excel</a>
       </div>
       <div class="table-shell">
-        <table>
-          <thead><tr><th>Eleve</th><th>Annee</th><th>Niveau</th><th>Statut</th><th></th></tr></thead>
+        <table class="table-report">
+          <thead><tr><th>N°</th><th>Eleve</th><th>Date d'enregistrement</th><th>Annee</th><th>Niveau</th><th>Statut</th><th></th></tr></thead>
           <tbody>
             {% for item in enrollments %}
               <tr>
+                <td>{{ (pagination.page - 1) * pagination.pageSize + loop.index }}</td>
                 <td>{{ item.studentSnapshot.lastname if item.studentSnapshot else item.studentId.lastname }} {{ item.studentSnapshot.firstname if item.studentSnapshot else item.studentId.firstname }}</td>
+                <td>{{ item.createdAt | formatDate }}</td>
                 <td>{{ item.schoolYearId.label if item.schoolYearId }}</td>
                 <td>{{ item.levelSnapshot.label if item.levelSnapshot else item.levelId.label }}</td>
-                <td>{% set value = item.status %}{% include "partials/status-badge.njk" %}</td>
-                <td class="table-button-group">
-                  <a class="button secondary btn-sm btn-icon icon-view" href="/enrollments/{{ item._id }}">Voir</a>
-                  <a class="button btn-sm" href="/enrollments/{{ item._id }}">Modifier</a>
+                <td>{% set value = item.status %}{% set group = 'enrollmentStatus' %}{% include "partials/status-badge.njk" %}</td>
+                <td>
+                  <div class="table-actions">
+                    <a class="button secondary btn-sm btn-icon icon-view" href="/enrollments/{{ item._id }}">Voir</a>
+                    <a class="button btn-sm" href="/enrollments/{{ item._id }}">Modifier</a>
+                  </div>
                 </td>
               </tr>
             {% else %}
-              <tr><td colspan="5">Aucune inscription.</td></tr>
+              <tr><td colspan="7">Aucune inscription.</td></tr>
             {% endfor %}
           </tbody>
         </table>

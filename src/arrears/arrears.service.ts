@@ -30,8 +30,13 @@ export class ArrearsService {
         ],
       })
       .populate({ path: 'studentId', select: 'matricule lastname firstname' })
-      .populate({ path: 'sourceEnrollmentId', select: 'schoolYearId levelId' })
+      .populate({
+        path: 'sourceEnrollmentId',
+        select: 'schoolYearId levelId',
+        populate: { path: 'levelId', select: 'label' },
+      })
       .populate({ path: 'targetEnrollmentId', select: 'schoolYearId levelId' })
+      .populate({ path: 'sourceSchoolYearId', select: 'label' })
       .sort({ createdAt: -1 })
       .lean()
       .exec();

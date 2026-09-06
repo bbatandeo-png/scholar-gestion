@@ -1,0 +1,12 @@
+{% macro render(groups, title) %}
+  <details class="legend">
+    <summary>{{ title or 'Legende des statuts' }}</summary>
+    <ul class="legend-list">
+      {% for g in groups %}
+        {% for key, meta in ENUM_META[g] %}
+          <li><span class="badge {{ key }}">{{ meta.label }}</span>{% if meta.description %} — {{ meta.description }}{% endif %}</li>
+        {% endfor %}
+      {% endfor %}
+    </ul>
+  </details>
+{% endmacro %}

@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { ArrearsModule } from '../arrears/arrears.module';
 import { AuditModule } from '../audit/audit.module';
 import { BillingModule } from '../billing/billing.module';
+import { EcoleModulesModule } from '../ecole-modules/ecole-modules.module';
 import {
   Enrollment,
   EnrollmentSchema,
@@ -31,6 +32,7 @@ import { SettingsModule } from '../settings/settings.module';
     SchoolYearsModule,
     LevelsModule,
     SettingsModule,
+    EcoleModulesModule,
   ],
   controllers: [PromotionsController],
   providers: [PromotionsService],

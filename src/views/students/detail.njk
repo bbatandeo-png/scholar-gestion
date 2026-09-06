@@ -1,10 +1,11 @@
 ﻿{% extends "layout.njk" %}
+{% import "partials/legend.njk" as legend %}
 {% block content %}
   <section class="panel">
     <h2>Synthese eleve</h2>
     {% if currentEnrollment %}
       <p><strong>Niveau actuel:</strong> {{ currentEnrollment.levelSnapshot.label if currentEnrollment.levelSnapshot else currentEnrollment.levelId.label }} - {{ currentEnrollment.schoolYearId.label if currentEnrollment.schoolYearId }}</p>
-      <p><strong>Statut inscription:</strong> {% set value = currentEnrollment.status %}{% include "partials/status-badge.njk" %}</p>
+      <p><strong>Statut inscription:</strong> {% set value = currentEnrollment.status %}{% set group = 'enrollmentStatus' %}{% include "partials/status-badge.njk" %}</p>
     {% else %}
       <p>Aucune inscription active ou historique disponible.</p>
     {% endif %}
@@ -13,7 +14,7 @@
   <section class="grid cols-2">
     <div class="panel">
       <h2>Dossier eleve</h2>
-      <form method="post" action="/students/{{ student._id }}?_method=PUT" class="stack">
+      <form method="post" action="/students/{{ student._id }}?_method=PUT" enctype="multipart/form-data" class="stack">
         <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
         <div class="form-grid">
           <label>Matricule<input name="matricule" value="{{ student.matricule }}" /></label>
@@ -25,9 +26,15 @@
               <option value="F" {% if student.gender == 'F' %}selected{% endif %}>F</option>
             </select>
           </label>
-          <label>Date de naissance<input type="date" name="birthDate" value="{{ student.birthDate | string | truncate(10, true, '') }}" /></label>
+          <label>Date de naissance<input type="date" name="birthDate" value="{{ student.birthDate | inputDate }}" /></label>
           <label>Lieu de naissance<input name="birthPlace" value="{{ student.birthPlace }}" /></label>
           <label>Quartier<input name="district" value="{{ student.district }}" /></label>
+          <label>Photo (pour la carte scolaire)
+            <input type="file" name="photo" accept="image/png,image/jpeg,image/webp,image/gif" />
+            {% if student.photo %}
+              <img src="/uploads/{{ student.photo }}" alt="Photo actuelle" style="height:64px;display:block;margin-top:4px;" />
+            {% endif %}
+          </label>
         </div>
 
         <h3>Responsables (parents / tuteur)</h3>
@@ -69,18 +76,42 @@
         <div class="actions">
           <button type="submit">Mettre a jour</button>
           <a class="button secondary" href="/students/{{ student._id }}/reenroll">Reinscription</a>
+          <a class="button secondary" target="_blank" href="/reports/student-cards/{{ student._id }}/pdf">Carte scolaire</a>
         </div>
       </form>
     </div>
     <div class="panel">
       <h2>Responsables</h2>
-      <table>
-        <thead><tr><th>Type</th><th>Nom</th><th>Contact</th></tr></thead>
+      <div class="table-shell">
+        <table>
+          <thead><tr><th>Type</th><th>Nom</th><th>Contact</th></tr></thead>
+          <tbody>
+            {% for guardian in guardians %}
+              <tr><td>{{ guardian.type }}</td><td>{{ guardian.lastname }} {{ guardian.firstname }}</td><td>{{ guardian.phone or '-' }}</td></tr>
+            {% else %}
+              <tr><td colspan="3">Aucun responsable enregistre.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Historique administratif et financier</h2>
+    <div class="table-shell">
+      <table class="table-report">
+        <thead><tr><th>Annee</th><th>Niveau</th><th>Type</th><th>Statut</th></tr></thead>
         <tbody>
-          {% for guardian in guardians %}
-            <tr><td>{{ guardian.type }}</td><td>{{ guardian.lastname }} {{ guardian.firstname }}</td><td>{{ guardian.phone or '-' }}</td></tr>
+          {% for item in history %}
+            <tr>
+              <td>{{ item.schoolYearId.label if item.schoolYearId }}</td>
+              <td>{{ item.levelSnapshot.label if item.levelSnapshot else item.levelId.label }}</td>
+              <td>{{ ENUM_META.enrollmentType[item.type].label if ENUM_META.enrollmentType[item.type] else item.type }}</td>
+              <td>{% set value = item.status %}{% set group = 'enrollmentStatus' %}{% include "partials/status-badge.njk" %}</td>
+            </tr>
           {% else %}
-            <tr><td colspan="3">Aucun responsable enregistre.</td></tr>
+            <tr><td colspan="4">Aucun historique.</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -88,42 +119,26 @@
   </section>
 
   <section class="panel">
-    <h2>Historique administratif et financier</h2>
-    <table>
-      <thead><tr><th>Annee</th><th>Niveau</th><th>Type</th><th>Statut</th></tr></thead>
-      <tbody>
-        {% for item in history %}
-          <tr>
-            <td>{{ item.schoolYearId.label if item.schoolYearId }}</td>
-            <td>{{ item.levelSnapshot.label if item.levelSnapshot else item.levelId.label }}</td>
-            <td>{{ item.type }}</td>
-            <td>{% set value = item.status %}{% include "partials/status-badge.njk" %}</td>
-          </tr>
-        {% else %}
-          <tr><td colspan="4">Aucun historique.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </section>
-
-  <section class="panel">
     <h2>Historique des paiements</h2>
-    <table>
-      <thead><tr><th>Date</th><th>Montant</th><th>Mode</th><th>Recu</th><th>Annee</th><th>Niveau</th></tr></thead>
-      <tbody>
-        {% for payment in paymentHistory %}
-          <tr>
-            <td>{{ payment.paidAt }}</td>
-            <td>{{ payment.amount }}</td>
-            <td>{{ payment.method }}</td>
-            <td><a class="button secondary" href="/receipts/{{ payment._id }}">{{ payment.receiptNumber }}</a></td>
-            <td>{{ payment.enrollment.schoolYearId.label if payment.enrollment and payment.enrollment.schoolYearId }}</td>
-            <td>{{ payment.enrollment.levelId.label if payment.enrollment and payment.enrollment.levelId }}</td>
-          </tr>
-        {% else %}
-          <tr><td colspan="6">Aucun paiement enregistre pour cet eleve.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="table-shell">
+      <table class="table-report">
+        <thead><tr><th>Date</th><th>Montant</th><th>Mode</th><th>Recu</th><th>Annee</th><th>Niveau</th></tr></thead>
+        <tbody>
+          {% for payment in paymentHistory %}
+            <tr>
+              <td>{{ payment.paidAt | formatDate }}</td>
+              <td>{{ payment.amount }}</td>
+              <td>{{ ENUM_META.paymentMethod[payment.method].label if ENUM_META.paymentMethod[payment.method] else payment.method }}</td>
+              <td><a class="button secondary" href="/receipts/{{ payment._id }}">{{ payment.receiptNumber }}</a></td>
+              <td>{{ payment.enrollment.schoolYearId.label if payment.enrollment and payment.enrollment.schoolYearId }}</td>
+              <td>{{ payment.enrollment.levelId.label if payment.enrollment and payment.enrollment.levelId }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="6">Aucun paiement enregistre pour cet eleve.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {{ legend.render(['enrollmentType', 'enrollmentStatus', 'paymentMethod']) }}
   </section>
 {% endblock %}

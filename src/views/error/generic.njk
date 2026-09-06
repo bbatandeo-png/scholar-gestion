@@ -1,0 +1,16 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <section class="panel">
+    <h2>{% if isNotFound %}Page introuvable{% else %}Une erreur est survenue{% endif %}</h2>
+    <p class="muted">
+      {% if isNotFound %}
+        La page demandée n'existe pas ou a été déplacée. Vérifiez l'adresse ou revenez au tableau de bord.
+      {% else %}
+        Une erreur inattendue s'est produite pendant le traitement de votre demande. Vos données déjà enregistrées ne sont pas affectées : vous pouvez revenir en arrière et réessayer l'action, ou contacter le support si le problème persiste.
+      {% endif %}
+    </p>
+    <div class="actions">
+      <a class="button" href="/dashboard">Retour au tableau de bord</a>
+    </div>
+  </section>
+{% endblock %}

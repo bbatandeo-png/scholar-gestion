@@ -2,155 +2,179 @@
 {% block content %}
   <section class="grid cols-2">
     <div class="panel">
-      <h2>{% if editFee %}Modifier frais{% else %}Ajouter frais{% endif %}</h2>
-      <form method="post" action="{% if editFee %}/settings/fees/{{ editFee._id }}{% else %}/settings/fees{% endif %}" class="stack">
-        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
-        {% if editFee %}
-          <input type="hidden" name="schoolYearId" value="{{ editFee.schoolYearId._id }}" />
-          <input type="hidden" name="levelId" value="{{ editFee.levelId._id }}" />
-        {% endif %}
-        <div class="form-grid">
-          <label>Annee
-            <select name="schoolYearId" {% if editFee %}disabled{% endif %}>
-              {% for year in schoolYears %}
-                <option value="{{ year._id }}" {% if editFee and editFee.schoolYearId._id == year._id %}selected{% endif %}>{{ year.label }}</option>
-              {% endfor %}
-            </select>
-          </label>
-          <label>Niveau
-            <select name="levelId" {% if editFee %}disabled{% endif %}>
-              {% for level in levels %}
-                <option value="{{ level._id }}" {% if editFee and editFee.levelId._id == level._id %}selected{% endif %}>{{ level.label }}</option>
-              {% endfor %}
-            </select>
-          </label>
-          <label>Frais inscription<input type="number" name="registrationFee" value="{{ editFee.registrationFee if editFee else '' }}" min="0" required /></label>
-          <label>Ecolage<input type="number" name="tuitionFee" value="{{ editFee.tuitionFee if editFee else '' }}" min="0" required /></label>
-        </div>
-        <div class="stack compact-actions">
-          <button type="submit" class="btn-icon icon-save">{% if editFee %}Mettre a jour{% else %}Enregistrer les frais{% endif %}</button>
-          {% if editFee %}
-            <a class="button secondary" href="/settings/fees">Annuler</a>
-          {% endif %}
-        </div>
-      </form>
-
-      <hr />
-
-      <h3>Import Excel des frais</h3>
-      <p>Colonnes attendues: annee, niveau, frais_inscription, ecolage</p>
-      <form method="post" action="/settings/fees/import" enctype="multipart/form-data" class="stack">
-        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
-        <label>Fichier Excel (.xlsx)
-          <input type="file" name="file" accept=".xlsx,.xls" required />
-        </label>
-        <button type="submit" class="secondary btn-icon icon-import">Importer les frais</button>
-      </form>
-      <hr />
-      <form method="post" action="/settings/school-name" class="stack">
-        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
-        <label>Nom de l'école
-          <input type="text" name="name" value="{{ schoolName or '' }}" required />
-        </label>
-        <button type="submit" class="secondary btn-icon icon-save">Enregistrer le nom de l'école</button>
-      </form>
-
-      <hr />
-      <form method="post" action="/settings/receipt-mode" class="stack">
-        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
-        <label>Mode du reçu de paiement
-          <select name="value" required>
-            <option value="tuition_only" {% if receiptMode == 'tuition_only' %}selected{% endif %}>Uniquement écolage</option>
-            <option value="tuition_and_registration" {% if receiptMode == 'tuition_and_registration' %}selected{% endif %}>Écolage + frais d'inscription</option>
-          </select>
-        </label>
-        <div class="muted">
-          <p><strong>Signification:</strong></p>
-          <ul class="simple-list">
-            <li><strong>Uniquement écolage</strong>: le reçu affiche uniquement le montant d'écolage.</li>
-            <li><strong>Écolage + frais d'inscription</strong>: le reçu affiche les montants de l'écolage et des frais d'inscription.</li>
-          </ul>
-        </div>
-        <button type="submit" class="secondary btn-icon icon-save">Mettre à jour le mode du reçu</button>
-      </form>
-
-      <hr />
-      <form method="post" action="/settings/payment-allocation" class="stack">
-        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
-        <label>Regle d imputation
-          <select name="value">
-            <option value="arrears_first">arrears_first</option>
-            <option value="current_fees_first">current_fees_first</option>
-          </select>
-        </label>
-        <div class="muted">
-          <p><strong>Signification:</strong></p>
-          <ul class="simple-list">
-            <li><strong>arrears_first</strong>: le paiement couvre d abord les impayes reportes, puis la facture courante.</li>
-            <li><strong>current_fees_first</strong>: le paiement couvre d abord la facture courante, puis les impayes reportes.</li>
-          </ul>
-        </div>
-        <button type="submit" class="secondary btn-icon icon-save">Mettre a jour la regle</button>
-      </form>
-
-      <hr />
-
-      <h3>Parametrage du matricule</h3>
-      <p>Format genere: <strong>{{ matriculePreview }}</strong></p>
-      <form method="post" action="/settings/matricule-rule" class="stack">
-        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
-        <div class="form-grid">
-          <label>Prefixe<input name="prefix" value="{{ matriculeRule.prefix }}" required /></label>
-          <label>Separateur<input name="separator" value="{{ matriculeRule.separator }}" required /></label>
-          <label>Nombre de chiffres<input type="number" name="padding" min="1" value="{{ matriculeRule.padding }}" required /></label>
-          <label>Debut compteur<input type="number" name="startAt" min="1" value="{{ matriculeRule.startAt }}" required /></label>
-        </div>
-        <button type="submit" class="secondary btn-icon icon-save">Mettre a jour le matricule</button>
-      </form>
-      <hr />
-
-      <h3>Catégories de dépenses</h3>
-      <p class="muted">Gérez les catégories des dépenses ici. Elles seront utilisables lors de l'enregistrement d'une dépense.</p>
-      <form method="post" action="/settings/fees/expense-categories" class="stack">
-        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
-        <div class="form-grid">
-          <label>Nom<input type="text" name="name" required /></label>
-          <label>Description<input type="text" name="description" /></label>
-        </div>
-        <button type="submit" class="btn-icon icon-save">Ajouter catégorie</button>
-      </form>
-
-      <div style="margin-top:12px">
-        <strong>Catégories existantes</strong>
-        <ul class="simple-list category-list muted">
-          {% for cat in expenseCategories %}
-            <li id="cat-{{ cat._id }}" class="category-list-item">
-              <div class="category-item-copy">
-                <span class="cat-name">{{ cat.name }}</span>{% if cat.description %}<span class="cat-desc"> — {{ cat.description }}</span>{% endif %}
-              </div>
-              <button data-id="{{ cat._id }}" data-name="{{ cat.name }}" data-desc="{{ cat.description }}" class="button btn-sm js-edit-cat">Modifier</button>
-            </li>
-          {% else %}
-            <li>Aucune catégorie enregistrée.</li>
-          {% endfor %}
-        </ul>
-      </div>
-
-      {% if editCategory %}
-        <hr />
-        <h3>Modifier la catégorie</h3>
-        <form method="post" action="/settings/fees/expense-categories/{{ editCategory._id }}" class="stack">
+      <div class="form-section">
+        <span class="form-section-title">{% if editFee %}Modifier un frais{% else %}Ajouter un frais{% endif %}</span>
+        <p class="form-section-desc">Frais d'inscription et écolage pour une année scolaire et un niveau donnés.</p>
+        <form method="post" action="{% if editFee %}/settings/fees/{{ editFee._id }}{% else %}/settings/fees{% endif %}" class="stack">
           <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+          {% if editFee %}
+            <input type="hidden" name="schoolYearId" value="{{ editFee.schoolYearId._id }}" />
+            <input type="hidden" name="levelId" value="{{ editFee.levelId._id }}" />
+          {% endif %}
           <div class="form-grid">
-            <label>Nom<input type="text" name="name" value="{{ editCategory.name }}" required /></label>
-            <label>Description<input type="text" name="description" value="{{ editCategory.description }}" /></label>
+            <label>Annee
+              <select name="schoolYearId" {% if editFee %}disabled{% endif %}>
+                {% for year in schoolYears %}
+                  <option value="{{ year._id }}" {% if editFee and editFee.schoolYearId._id == year._id %}selected{% endif %}>{{ year.label }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <label>Niveau
+              <select name="levelId" {% if editFee %}disabled{% endif %}>
+                {% for level in levels %}
+                  <option value="{{ level._id }}" {% if editFee and editFee.levelId._id == level._id %}selected{% endif %}>{{ level.label }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <label>Frais inscription<input type="number" name="registrationFee" value="{{ editFee.registrationFee if editFee else '' }}" min="0" required /></label>
+            <label>Ecolage<input type="number" name="tuitionFee" value="{{ editFee.tuitionFee if editFee else '' }}" min="0" required /></label>
           </div>
-          <div class="compact-actions">
-            <button type="submit" class="btn-icon icon-save">Mettre à jour</button>
-            <a class="button secondary" href="/settings/fees">Annuler</a>
+          <div class="stack compact-actions">
+            <button type="submit" class="btn-icon icon-save">{% if editFee %}Mettre a jour{% else %}Enregistrer les frais{% endif %}</button>
+            {% if editFee %}
+              <a class="button secondary" href="/settings/fees">Annuler</a>
+            {% endif %}
           </div>
         </form>
-      {% endif %}
+      </div>
+
+      <div class="form-section">
+        <span class="form-section-title">Import Excel des frais</span>
+        <p class="form-section-desc">Colonnes attendues: annee, niveau, frais_inscription, ecolage</p>
+        <form method="post" action="/settings/fees/import" enctype="multipart/form-data" class="stack">
+          <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+          <label>Fichier Excel (.xlsx)
+            <input type="file" name="file" accept=".xlsx,.xls" required />
+          </label>
+          <button type="submit" class="secondary btn-icon icon-import">Importer les frais</button>
+        </form>
+      </div>
+
+      <div class="form-section">
+        <span class="form-section-title">Identité de l'école</span>
+        <form method="post" action="/settings/school-name" class="stack">
+          <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+          <label>Nom de l'école
+            <input type="text" name="name" value="{{ schoolName or '' }}" required />
+          </label>
+          <button type="submit" class="secondary btn-icon icon-save">Enregistrer le nom de l'école</button>
+        </form>
+      </div>
+
+      <div class="form-section">
+        <span class="form-section-title">Mode du reçu de paiement</span>
+        <form method="post" action="/settings/receipt-mode" class="stack">
+          <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+          <label>Mode du reçu de paiement
+            <select name="value" required>
+              <option value="tuition_only" {% if receiptMode == 'tuition_only' %}selected{% endif %}>Uniquement écolage</option>
+              <option value="tuition_and_registration" {% if receiptMode == 'tuition_and_registration' %}selected{% endif %}>Écolage + frais d'inscription</option>
+            </select>
+          </label>
+          <div class="muted">
+            <p><strong>Signification:</strong></p>
+            <ul class="simple-list">
+              <li><strong>Uniquement écolage</strong>: le reçu affiche uniquement le montant d'écolage.</li>
+              <li><strong>Écolage + frais d'inscription</strong>: le reçu affiche les montants de l'écolage et des frais d'inscription.</li>
+            </ul>
+          </div>
+          <button type="submit" class="secondary btn-icon icon-save">Mettre à jour le mode du reçu</button>
+        </form>
+      </div>
+
+      <div class="form-section">
+        <span class="form-section-title">Règle d'imputation des paiements</span>
+        <form method="post" action="/settings/payment-allocation" class="stack">
+          <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+          <label>Regle d imputation
+            <select name="value">
+              <option value="arrears_first" {% if paymentAllocationRule == 'arrears_first' %}selected{% endif %}>arrears_first</option>
+              <option value="current_fees_first" {% if paymentAllocationRule == 'current_fees_first' %}selected{% endif %}>current_fees_first</option>
+            </select>
+          </label>
+          <div class="muted">
+            <p><strong>Signification:</strong></p>
+            <ul class="simple-list">
+              <li><strong>arrears_first</strong>: le paiement couvre d abord les impayes reportes, puis la facture courante.</li>
+              <li><strong>current_fees_first</strong>: le paiement couvre d abord la facture courante, puis les impayes reportes.</li>
+            </ul>
+          </div>
+          <button type="submit" class="secondary btn-icon icon-save">Mettre a jour la regle</button>
+        </form>
+      </div>
+
+      <div class="form-section">
+        <span class="form-section-title">Chef d'établissement</span>
+        <p class="form-section-desc">Utilisé sur les documents officiels imprimés (cartes scolaires, etc.) pour la signature du chef d'établissement.</p>
+        <form method="post" action="/settings/chef-etablissement" class="stack">
+          <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+          <label>Nom du chef d'etablissement (proviseur)
+            <input name="value" value="{{ chefEtablissementNom }}" placeholder="Ex : KOMENATI Koffi Alfred" required />
+          </label>
+          <button type="submit" class="secondary btn-icon icon-save">Mettre a jour</button>
+        </form>
+      </div>
+
+      <div class="form-section">
+        <span class="form-section-title">Paramétrage du matricule</span>
+        <p class="form-section-desc">Format généré: <strong>{{ matriculePreview }}</strong></p>
+        <form method="post" action="/settings/matricule-rule" class="stack">
+          <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+          <div class="form-grid">
+            <label>Prefixe<input name="prefix" value="{{ matriculeRule.prefix }}" required /></label>
+            <label>Separateur<input name="separator" value="{{ matriculeRule.separator }}" required /></label>
+            <label>Nombre de chiffres<input type="number" name="padding" min="1" value="{{ matriculeRule.padding }}" required /></label>
+            <label>Debut compteur<input type="number" name="startAt" min="1" value="{{ matriculeRule.startAt }}" required /></label>
+          </div>
+          <button type="submit" class="secondary btn-icon icon-save">Mettre a jour le matricule</button>
+        </form>
+      </div>
+
+      <div class="form-section">
+        <span class="form-section-title">Catégories de dépenses</span>
+        <p class="form-section-desc">Gérez les catégories des dépenses ici. Elles seront utilisables lors de l'enregistrement d'une dépense.</p>
+        <form method="post" action="/settings/fees/expense-categories" class="stack">
+          <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+          <div class="form-grid">
+            <label>Nom<input type="text" name="name" required /></label>
+            <label>Description<input type="text" name="description" /></label>
+          </div>
+          <button type="submit" class="btn-icon icon-save">Ajouter catégorie</button>
+        </form>
+
+        <div class="top-gap">
+          <strong>Catégories existantes</strong>
+          <ul class="simple-list category-list muted">
+            {% for cat in expenseCategories %}
+              <li id="cat-{{ cat._id }}" class="category-list-item">
+                <div class="category-item-copy">
+                  <span class="cat-name">{{ cat.name }}</span>{% if cat.description %}<span class="cat-desc"> — {{ cat.description }}</span>{% endif %}
+                </div>
+                <button data-id="{{ cat._id }}" data-name="{{ cat.name }}" data-desc="{{ cat.description }}" class="button btn-sm js-edit-cat">Modifier</button>
+              </li>
+            {% else %}
+              <li>Aucune catégorie enregistrée.</li>
+            {% endfor %}
+          </ul>
+        </div>
+
+        {% if editCategory %}
+          <div class="top-gap">
+            <strong>Modifier la catégorie</strong>
+            <form method="post" action="/settings/fees/expense-categories/{{ editCategory._id }}" class="stack">
+              <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+              <div class="form-grid">
+                <label>Nom<input type="text" name="name" value="{{ editCategory.name }}" required /></label>
+                <label>Description<input type="text" name="description" value="{{ editCategory.description }}" /></label>
+              </div>
+              <div class="compact-actions">
+                <button type="submit" class="btn-icon icon-save">Mettre à jour</button>
+                <a class="button secondary" href="/settings/fees">Annuler</a>
+              </div>
+            </form>
+          </div>
+        {% endif %}
+      </div>
     </div>
     <div class="panel">
       <div class="panel-heading">
@@ -161,7 +185,7 @@
         <a class="button secondary btn-icon icon-export" href="/settings/fees/export">Exporter Excel</a>
       </div>
       <div class="table-shell">
-        <table>
+        <table class="table-report">
           <thead><tr><th>Annee</th><th>Niveau</th><th>Inscription</th><th>Ecolage</th><th>Actions</th></tr></thead>
           <tbody>
             {% for item in feeSchedules %}

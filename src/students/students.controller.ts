@@ -11,31 +11,32 @@ import {
   Req,
   Res,
   UseGuards,
-  UploadedFile,
-  UseInterceptors,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
-import { FileInterceptor } from '@nestjs/platform-express';
 import { EnrollmentsService } from '../enrollments/enrollments.service';
 import { LevelsService } from '../levels/levels.service';
 import { BillingService } from '../billing/billing.service';
 import { PaymentsService } from '../payments/payments.service';
 import { SchoolYearsService } from '../school-years/school-years.service';
 import { Roles } from '../common/decorators/roles.decorator';
-import { Role } from '../common/enums/domain.enums';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { GuardianType, Role } from '../common/enums/domain.enums';
 import { AuthenticatedGuard } from '../common/guards/authenticated.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { setFlash } from '../common/utils/flash.util';
 import {
   buildExcelBuffer,
+  parseExcelDate,
   pickRowValue,
   readExcelRows,
 } from '../common/utils/excel.util';
+import { pickUploadedFile } from '../common/utils/multer.util';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { ReenrollStudentDto } from './dto/reenroll-student.dto';
 import { SearchStudentsDto } from './dto/search-students.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
 import { StudentsService } from './students.service';
+import { SessionUser } from '../common/types/session-user.type';
 
 @Controller('/students')
 @UseGuards(AuthenticatedGuard, RolesGuard)
@@ -184,6 +185,10 @@ export class StudentsController {
   ) {
     try {
       const student = await this.studentsService.create(dto);
+      await this.studentsService.savePhoto(
+        String(student._id),
+        pickUploadedFile(req, 'photo'),
+      );
       const guardiansCount = Number((student as any).guardiansCount ?? 0);
       setFlash(
         req,
@@ -194,21 +199,51 @@ export class StudentsController {
       setFlash(
         req,
         'error',
-        error?.message ?? 'Impossible de creer le dossier eleve',
+        error?.code === 11000
+          ? 'Ce matricule est deja utilise - reessayez'
+          : (error?.message ?? 'Impossible de creer le dossier eleve'),
       );
     }
 
     return res.redirect('/students');
   }
 
+  @Get('/import-template')
+  @Roles(Role.SUPER_ADMIN, Role.SECRETARIAT)
+  importTemplate(@Res() res: Response) {
+    const buffer = buildExcelBuffer('Eleves', [
+      {
+        matricule: '',
+        nom: 'DUPONT',
+        prenoms: 'Jean',
+        sexe: 'M',
+        date_naissance: '15/03/2015',
+        lieu_naissance: 'Lome',
+        quartier: 'Agoe',
+        nom_pere: 'DUPONT Pierre',
+        contact_pere: '90000000',
+        adresse_pere: 'Agoe',
+        nom_mere: 'DUPONT Marie',
+        contact_mere: '91000000',
+        adresse_mere: 'Agoe',
+      },
+    ]);
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="modele-import-eleves.xlsx"',
+    );
+    return res.send(buffer);
+  }
+
   @Post('/import')
   @Roles(Role.SUPER_ADMIN, Role.SECRETARIAT)
-  @UseInterceptors(FileInterceptor('file'))
-  async importStudents(
-    @UploadedFile() file: any,
-    @Req() req: Request,
-    @Res() res: Response,
-  ) {
+  async importStudents(@Req() req: Request, @Res() res: Response) {
+    const file = pickUploadedFile(req, 'file');
     if (!file?.buffer) {
       throw new BadRequestException('Fichier Excel requis');
     }
@@ -216,8 +251,55 @@ export class StudentsController {
     const rows = readExcelRows(file.buffer);
     let created = 0;
     let skipped = 0;
+    let invalidDate = 0;
+    let missingFields = 0;
+    let creationFailed = 0;
 
     for (const row of rows) {
+      const rawBirthDate = pickRowValue(row, ['birthdate', 'date_naissance']);
+      const parsedBirthDate = rawBirthDate
+        ? parseExcelDate(rawBirthDate)
+        : null;
+      // Guardians are optional per row and per parent - a row only gets a
+      // father/mother entry when its "nom_pere"/"nom_mere" column is
+      // actually filled in, matching how the create-student form only
+      // saves a guardian block when its name field was entered.
+      const guardians: CreateStudentDto['guardians'] = [];
+      const pereFullname = pickRowValue(row, [
+        'nom_pere',
+        'pere',
+        'nom_complet_pere',
+      ]);
+      if (pereFullname) {
+        guardians.push({
+          type: GuardianType.FATHER,
+          fullname: pereFullname,
+          phone: pickRowValue(row, [
+            'contact_pere',
+            'telephone_pere',
+            'tel_pere',
+          ]),
+          address: pickRowValue(row, ['adresse_pere']),
+        });
+      }
+      const mereFullname = pickRowValue(row, [
+        'nom_mere',
+        'mere',
+        'nom_complet_mere',
+      ]);
+      if (mereFullname) {
+        guardians.push({
+          type: GuardianType.MOTHER,
+          fullname: mereFullname,
+          phone: pickRowValue(row, [
+            'contact_mere',
+            'telephone_mere',
+            'tel_mere',
+          ]),
+          address: pickRowValue(row, ['adresse_mere']),
+        });
+      }
+
       const dto: CreateStudentDto = {
         matricule: pickRowValue(row, ['matricule', 'code_eleve']),
         lastname: pickRowValue(row, ['lastname', 'nom']),
@@ -226,10 +308,17 @@ export class StudentsController {
           .toString()
           .trim()
           .toUpperCase(),
-        birthDate: pickRowValue(row, ['birthdate', 'date_naissance']),
+        birthDate: parsedBirthDate ?? '',
         birthPlace: pickRowValue(row, ['birthplace', 'lieu_naissance']),
         district: pickRowValue(row, ['district', 'quartier']),
+        guardians: guardians.length ? guardians : undefined,
       };
+
+      if (rawBirthDate && !parsedBirthDate) {
+        skipped += 1;
+        invalidDate += 1;
+        continue;
+      }
 
       if (
         !dto.lastname ||
@@ -241,6 +330,7 @@ export class StudentsController {
         !dto.district
       ) {
         skipped += 1;
+        missingFields += 1;
         continue;
       }
 
@@ -249,13 +339,26 @@ export class StudentsController {
         created += 1;
       } catch {
         skipped += 1;
+        creationFailed += 1;
       }
     }
+
+    const reasons: string[] = [];
+    if (missingFields) {
+      reasons.push(`${missingFields} champ(s) obligatoire(s) manquant(s)`);
+    }
+    if (invalidDate) {
+      reasons.push(`${invalidDate} date de naissance illisible`);
+    }
+    if (creationFailed) {
+      reasons.push(`${creationFailed} en echec (doublon probable)`);
+    }
+    const reasonSuffix = reasons.length ? ` (${reasons.join(', ')})` : '';
 
     setFlash(
       req,
       'success',
-      `Import eleves termine: ${created} crees, ${skipped} ignores`,
+      `Import eleves termine: ${created} crees, ${skipped} ignores${reasonSuffix}`,
     );
     return res.redirect('/students');
   }
@@ -336,6 +439,8 @@ export class StudentsController {
     };
   }
 
+  // Not gated by @RequireModule('FINANCE'): read-only, lives on the core
+  // Students controller which must stay reachable regardless of module state.
   @Get('/:id/financial-status')
   @Roles(
     Role.SUPER_ADMIN,
@@ -391,6 +496,7 @@ export class StudentsController {
     @Res() res: Response,
   ) {
     await this.studentsService.update(id, dto);
+    await this.studentsService.savePhoto(id, pickUploadedFile(req, 'photo'));
     setFlash(req, 'success', 'Dossier eleve mis a jour');
     return res.redirect(`/students/${id}`);
   }
@@ -420,6 +526,7 @@ export class StudentsController {
     @Body() dto: ReenrollStudentDto,
     @Req() req: Request,
     @Res() res: Response,
+    @CurrentUser() user: SessionUser | undefined,
   ) {
     const open = await this.schoolYearsService.requireOpen();
     const result = await this.enrollmentsService.reenrollStudent(id, {
@@ -427,7 +534,7 @@ export class StudentsController {
       targetLevelId: dto.targetLevelId,
       carryOverArrears: dto.carryOverArrears !== 'false',
       reason: dto.reason,
-      actorId: req.session.user?.id,
+      actorId: user?.id,
     });
     setFlash(req, 'success', 'Reinscription effectuee');
     return res.redirect(`/enrollments/${result.enrollmentId}`);
