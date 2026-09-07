@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { Connection, Model } from 'mongoose';
+import { Connection, Model, Types } from 'mongoose';
 import * as fs from 'fs';
 import * as path from 'path';
 import PDFDocument from 'pdfkit';
@@ -86,6 +86,20 @@ type RowMatch = {
   matchStatus: ImportRowMatchStatus;
   studentId: string | null;
   matchCandidates: string[];
+};
+
+// listRows()'s actual shape once .populate('studentId')/.populate(
+// 'matchCandidates') + .lean() have run - the schema's own studentId:
+// string/matchCandidates: string[] describe the unpopulated document, not
+// what callers (controller view, tests) actually get back here.
+type PopulatedStudentLean = Student & { _id: Types.ObjectId };
+export type PopulatedImportRow = Omit<
+  BulletinImportRow,
+  'studentId' | 'matchCandidates'
+> & {
+  _id: Types.ObjectId;
+  studentId: PopulatedStudentLean | null;
+  matchCandidates: PopulatedStudentLean[];
 };
 
 const SUGGESTION_THRESHOLD = 0.5;
@@ -721,13 +735,13 @@ export class BulletinsService {
     return this.getRoster(session.schoolYearId, session.levelId);
   }
 
-  async listRows(sessionId: string) {
+  async listRows(sessionId: string): Promise<PopulatedImportRow[]> {
     return this.rowModel
       .find({ sessionId })
       .populate('studentId')
       .populate('matchCandidates')
       .lean()
-      .exec();
+      .exec() as unknown as Promise<PopulatedImportRow[]>;
   }
 
   // Retards/absences/exclusion/decision du conseil: not calculable, entered
@@ -2331,7 +2345,7 @@ export class BulletinsService {
       size: 'A4',
       layout: 'portrait',
     });
-    doc.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
     return new Promise<Buffer>((resolve) => {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       this.renderBulletinPage(doc, data);
@@ -2389,7 +2403,7 @@ export class BulletinsService {
       size: 'A4',
       layout: 'portrait',
     });
-    doc.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
     return new Promise<Buffer>((resolve, reject) => {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       void (async () => {

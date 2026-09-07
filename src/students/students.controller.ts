@@ -31,6 +31,8 @@ import {
   readExcelRows,
 } from '../common/utils/excel.util';
 import { pickUploadedFile } from '../common/utils/multer.util';
+import { toDisplayString } from '../common/utils/safe-string.util';
+import { PopulatedEnrollmentLean } from '../common/types/populated-refs.types';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { ReenrollStudentDto } from './dto/reenroll-student.dto';
 import { SearchStudentsDto } from './dto/search-students.dto';
@@ -101,7 +103,7 @@ export class StudentsController {
     );
     const buffer = buildExcelBuffer(
       'Eleves',
-      students.map((student: any) => ({
+      students.map((student) => ({
         matricule: student.matricule,
         nom: student.lastname,
         prenoms: student.firstname,
@@ -189,19 +191,25 @@ export class StudentsController {
         String(student._id),
         pickUploadedFile(req, 'photo'),
       );
-      const guardiansCount = Number((student as any).guardiansCount ?? 0);
+      const guardiansCount = student.guardiansCount;
       setFlash(
         req,
         'success',
         `Dossier eleve cree avec le matricule ${student.matricule}. Responsables enregistres: ${guardiansCount}`,
       );
-    } catch (error: any) {
+    } catch (error) {
+      const isDuplicateKey =
+        typeof error === 'object' &&
+        error !== null &&
+        (error as { code?: number }).code === 11000;
       setFlash(
         req,
         'error',
-        error?.code === 11000
+        isDuplicateKey
           ? 'Ce matricule est deja utilise - reessayez'
-          : (error?.message ?? 'Impossible de creer le dossier eleve'),
+          : error instanceof Error
+            ? error.message
+            : 'Impossible de creer le dossier eleve',
       );
     }
 
@@ -372,41 +380,48 @@ export class StudentsController {
     Role.AUDITEUR,
   )
   @Render('students/detail')
-  async detail(@Param('id') id: string, @Req() req: Request) {
+  async detail(
+    @Param('id') id: string,
+    @Req() req: Request,
+  ): Promise<Record<string, unknown>> {
     const selectedYear = await this.schoolYearsService.resolveSelected(
       req.session.selectedSchoolYearId,
     );
     const detail = await this.studentsService.detail(id);
     const guardians = detail.guardians ?? [];
     const fatherGuardian =
-      guardians.find((item: any) => item.type === 'father') ?? null;
+      guardians.find((item) => item.type === GuardianType.FATHER) ?? null;
     const motherGuardian =
-      guardians.find((item: any) => item.type === 'mother') ?? null;
+      guardians.find((item) => item.type === GuardianType.MOTHER) ?? null;
     const tutorGuardian =
-      guardians.find((item: any) => item.type === 'tutor') ?? null;
+      guardians.find((item) => item.type === GuardianType.TUTOR) ?? null;
     const history = await this.enrollmentsService.findStudentHistory(id);
     const invoices = await Promise.all(
-      history.map((item: any) =>
+      history.map((item) =>
         this.billingService.findInvoiceByEnrollment(String(item._id)),
       ),
     );
     const invoiceById = new Map(
       invoices
-        .filter(Boolean)
-        .map((invoice: any) => [String(invoice._id), invoice]),
+        .filter((invoice) => Boolean(invoice))
+        .map((invoice) => [String(invoice?._id), invoice]),
     );
     const enrollmentByInvoiceId = new Map(
       invoices
-        .map((invoice: any, index) =>
-          invoice ? [String(invoice._id), history[index]] : undefined,
+        .map((invoice, index) =>
+          invoice
+            ? ([String(invoice._id), history[index]] as const)
+            : undefined,
         )
-        .filter(Boolean) as Array<[string, any]>,
+        .filter((entry): entry is readonly [string, PopulatedEnrollmentLean] =>
+          Boolean(entry),
+        ),
     );
 
     const payments = await this.paymentsService.listByInvoiceIds(
       Array.from(invoiceById.keys()),
     );
-    const paymentHistory = payments.map((payment: any) => {
+    const paymentHistory = payments.map((payment) => {
       const invoice = invoiceById.get(String(payment.invoiceId));
       const enrollment = enrollmentByInvoiceId.get(String(payment.invoiceId));
       return {
@@ -417,8 +432,8 @@ export class StudentsController {
     });
 
     const currentEnrollment = history.find(
-      (item: any) =>
-        String(item.schoolYearId?._id ?? item.schoolYearId) ===
+      (item) =>
+        toDisplayString(item.schoolYearId?._id ?? item.schoolYearId) ===
         String(selectedYear._id),
     );
 
@@ -459,14 +474,14 @@ export class StudentsController {
       String(selectedYear._id),
     );
     const invoices = await Promise.all(
-      history.map((item: any) =>
+      history.map((item) =>
         this.billingService.findInvoiceByEnrollment(String(item._id)),
       ),
     );
     const currentEnrollment = history[0] ?? null;
     const currentInvoice = currentEnrollment
       ? (invoices.find(
-          (invoice: any, index: number) =>
+          (_invoice, index) =>
             String(history[index]?._id) === String(currentEnrollment._id),
         ) ?? null)
       : null;

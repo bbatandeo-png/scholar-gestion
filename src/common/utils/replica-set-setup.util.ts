@@ -12,9 +12,7 @@ const CHECK_INTERVAL_MS = 3000;
 const MAX_ATTEMPTS = 100;
 
 function stripReplicaSetParam(uri: string): string {
-  return uri
-    .replace(/([?&])replicaSet=[^&]+&?/, '$1')
-    .replace(/[?&]$/, '');
+  return uri.replace(/([?&])replicaSet=[^&]+&?/, '$1').replace(/[?&]$/, '');
 }
 
 function resolveSetupScriptPath(): string | null {
@@ -110,9 +108,7 @@ export async function ensureReplicaSetReady(mongoUri: string): Promise<void> {
       // log line so the exe's console window doesn't look frozen during a
       // slow start.
       if (attempt === 0) {
-        console.log(
-          '[licence-mongo] En attente du demarrage de MongoDB...',
-        );
+        console.log('[licence-mongo] En attente du demarrage de MongoDB...');
       }
       await sleep(CHECK_INTERVAL_MS);
       continue;

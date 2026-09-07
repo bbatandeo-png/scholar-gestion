@@ -4,7 +4,10 @@ import { EcolesModule } from '../ecoles/ecoles.module';
 import { FacturationController } from './facturation.controller';
 import { FacturationService } from './facturation.service';
 import { PlatformFacturationController } from './platform-facturation.controller';
-import { Consommation, ConsommationSchema } from './schemas/consommation.schema';
+import {
+  Consommation,
+  ConsommationSchema,
+} from './schemas/consommation.schema';
 import { Facture, FactureSchema } from './schemas/facture.schema';
 import {
   ParametreFacturation,

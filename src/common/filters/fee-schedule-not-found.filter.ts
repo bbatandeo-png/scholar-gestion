@@ -18,7 +18,7 @@ export class FeeScheduleNotFoundFilter implements ExceptionFilter {
     // If the client expects HTML, set a flash message and redirect to enrollments page
     if (accept.includes('text/html')) {
       if (req.session) {
-        (req.session as any).flash = {
+        req.session.flash = {
           type: 'error',
           message:
             "Parametrage des frais introuvable pour cette classe. Veuillez configurer les frais de scolarite avant de faire l'inscription. Allez a Frais dans les parametrages.",

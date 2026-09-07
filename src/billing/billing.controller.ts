@@ -28,6 +28,13 @@ import { setFlash } from '../common/utils/flash.util';
 import { buildExcelBuffer } from '../common/utils/excel.util';
 import { UpsertFeeScheduleDto } from './dto/upsert-fee-schedule.dto';
 import { BillingService } from './billing.service';
+
+// FileInterceptor's own upload typing needs @types/multer, not installed in
+// this project (see multer.util.ts) - this is the minimal shape actually
+// read from the uploaded file here.
+interface UploadedExcelFile {
+  buffer?: Buffer;
+}
 import { SettingsService } from '../settings/settings.service';
 import { ExpensesService } from '../expenses/expenses.service';
 import { EcolesService } from '../ecoles/ecoles.service';
@@ -126,7 +133,7 @@ export class BillingController {
     );
     const buffer = buildExcelBuffer(
       'Frais',
-      feeSchedules.map((item: any) => ({
+      feeSchedules.map((item) => ({
         annee: item.schoolYearId?.label ?? '',
         niveau: item.levelId?.label ?? '',
         frais_inscription: item.registrationFee,
@@ -163,7 +170,7 @@ export class BillingController {
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION)
   @UseInterceptors(FileInterceptor('file'))
   async importFees(
-    @UploadedFile() file: any,
+    @UploadedFile() file: UploadedExcelFile,
     @Req() req: Request,
     @Res() res: Response,
   ) {
@@ -178,7 +185,7 @@ export class BillingController {
     ]);
 
     const levelByLabel = new Map(
-      levels.map((item: any) => [String(item.label).toLowerCase(), item]),
+      levels.map((item) => [item.label.toLowerCase(), item]),
     );
 
     let imported = 0;

@@ -18,6 +18,13 @@ import { SettingsService } from '../settings/settings.service';
 import { resolveUploadedImagePath } from '../common/utils/uploaded-image.util';
 import { resolveStaticAssetPath } from '../common/utils/runtime-paths.util';
 import { getReadableTextColor } from '../common/utils/color.util';
+import { toDisplayString } from '../common/utils/safe-string.util';
+import {
+  PopulatedEnrollmentLean,
+  PopulatedInvoiceLean,
+  PopulatedLevelLean,
+  PopulatedStudentLean,
+} from '../common/types/populated-refs.types';
 
 type PdfDocumentInstance = InstanceType<typeof PDFDocument>;
 export type RegistrationPaidFilter =
@@ -43,6 +50,22 @@ export type StudentIdCardData = {
   issueDateLabel: string;
   photoPath: string | null;
 };
+
+export interface RegistrationPaidRow extends PopulatedInvoiceLean {
+  amountDue: number;
+  amountPaid: number;
+}
+
+export interface ClassFinancialSituationRow {
+  enrollment: PopulatedEnrollmentLean;
+  student?: PopulatedStudentLean | Record<string, unknown> | null;
+  level?: PopulatedLevelLean | Record<string, unknown> | null;
+  registrationFee: number;
+  tuitionFee: number;
+  paidAmount: number;
+  balanceDue: number;
+  totalDue: number;
+}
 
 export type NominalRoll = {
   schoolName: string;
@@ -74,8 +97,10 @@ export class ReportsService {
     private readonly settingsService: SettingsService,
   ) {}
 
-  private applyEnrollmentSnapshots(invoices: any[]) {
-    return invoices.map((invoice: any) => {
+  private applyEnrollmentSnapshots(
+    invoices: PopulatedInvoiceLean[],
+  ): PopulatedInvoiceLean[] {
+    return invoices.map((invoice) => {
       const enrollment = invoice.enrollmentId;
       if (!enrollment) {
         return invoice;
@@ -96,7 +121,7 @@ export class ReportsService {
   }
 
   async studentsByLevel(schoolYearId: string) {
-    return this.enrollmentModel.aggregate([
+    return this.enrollmentModel.aggregate<{ _id: string; total: number }>([
       {
         $match: {
           schoolYearId: new Types.ObjectId(schoolYearId),
@@ -108,7 +133,7 @@ export class ReportsService {
   }
 
   async paidStudents(schoolYearId: string) {
-    const invoices = await this.invoiceModel
+    const invoices = (await this.invoiceModel
       .find({ schoolYearId, status: 'paid' })
       .populate({
         path: 'enrollmentId',
@@ -119,12 +144,12 @@ export class ReportsService {
         ],
       })
       .lean()
-      .exec();
+      .exec()) as PopulatedInvoiceLean[];
     return this.applyEnrollmentSnapshots(invoices);
   }
 
   async unpaidStudents(schoolYearId: string) {
-    const invoices = await this.invoiceModel
+    const invoices = (await this.invoiceModel
       .find({ schoolYearId, status: { $in: ['unpaid', 'partial'] } })
       .populate({
         path: 'enrollmentId',
@@ -135,7 +160,7 @@ export class ReportsService {
         ],
       })
       .lean()
-      .exec();
+      .exec()) as PopulatedInvoiceLean[];
     return this.applyEnrollmentSnapshots(invoices);
   }
 
@@ -144,7 +169,7 @@ export class ReportsService {
     levelId?: string,
     schoolYearId?: string,
   ) {
-    const invoices = await this.invoiceModel
+    const invoices = (await this.invoiceModel
       .find(schoolYearId ? { schoolYearId } : {})
       .populate({
         path: 'enrollmentId',
@@ -155,17 +180,20 @@ export class ReportsService {
         ],
       })
       .lean()
-      .exec();
+      .exec()) as PopulatedInvoiceLean[];
 
-    const toEntityId = (value: any) => {
+    const toEntityId = (value: unknown): string => {
       if (!value) return '';
       if (typeof value === 'string') return value;
-      if (typeof value === 'object' && value._id) return String(value._id);
-      return String(value);
+      if (typeof value === 'object') {
+        const id = (value as { _id?: unknown })._id;
+        if (id) return toDisplayString(id);
+      }
+      return toDisplayString(value);
     };
 
     return this.applyEnrollmentSnapshots(invoices)
-      .map((invoice: any) => {
+      .map((invoice) => {
         const paidAmount = Math.max(Number(invoice.paidAmount ?? 0), 0);
         const registrationFee = Math.max(
           Number(invoice.registrationFee ?? 0),
@@ -199,7 +227,7 @@ export class ReportsService {
           balanceDue: Math.max(amountDue - amountPaid, 0),
         };
       })
-      .filter((invoice: any) => {
+      .filter((invoice) => {
         const enrollment = invoice.enrollmentId;
         const matchesLevel =
           !levelId || toEntityId(enrollment?.levelId) === String(levelId);
@@ -226,7 +254,7 @@ export class ReportsService {
         }
         return invoice.amountPaid > 0;
       })
-      .sort((a: any, b: any) => {
+      .sort((a, b) => {
         const aStudent = a.enrollmentId?.studentId;
         const bStudent = b.enrollmentId?.studentId;
         const aName =
@@ -238,7 +266,7 @@ export class ReportsService {
   }
 
   async classFinancialSituation(schoolYearId: string) {
-    const enrollments = await this.enrollmentModel
+    const enrollments = (await this.enrollmentModel
       .find({ schoolYearId, status: 'active' })
       .populate([
         { path: 'studentId' },
@@ -246,27 +274,29 @@ export class ReportsService {
         { path: 'schoolYearId' },
       ])
       .lean()
-      .exec();
+      .exec()) as PopulatedEnrollmentLean[];
 
-    const invoices = await this.invoiceModel
-      .find({ enrollmentId: { $in: enrollments.map((item: any) => item._id) } })
+    const invoices = (await this.invoiceModel
+      .find({ enrollmentId: { $in: enrollments.map((item) => item._id) } })
       .populate({
         path: 'enrollmentId',
         populate: [{ path: 'studentId' }, { path: 'levelId' }],
       })
       .lean()
-      .exec();
+      .exec()) as PopulatedInvoiceLean[];
 
     const invoiceByEnrollment = new Map(
-      invoices.map((invoice: any) => [
-        String(invoice.enrollmentId?._id ?? invoice.enrollmentId),
+      invoices.map((invoice) => [
+        toDisplayString(invoice.enrollmentId?._id ?? invoice.enrollmentId),
         invoice,
       ]),
     );
 
     return enrollments
-      .map((enrollment: any) => {
-        const invoice = invoiceByEnrollment.get(String(enrollment._id));
+      .map((enrollment) => {
+        const invoice = invoiceByEnrollment.get(
+          toDisplayString(enrollment._id),
+        );
         const student = enrollment.studentSnapshot ?? enrollment.studentId;
         const level = enrollment.levelSnapshot ?? enrollment.levelId;
         return {
@@ -280,12 +310,13 @@ export class ReportsService {
           totalDue: invoice?.totalDue ?? 0,
         };
       })
-      .sort((a, b) =>
-        `${a.student?.lastname ?? ''} ${a.student?.firstname ?? ''}`.localeCompare(
-          `${b.student?.lastname ?? ''} ${b.student?.firstname ?? ''}`,
-          'fr',
-        ),
-      );
+      .sort((a, b) => {
+        const aName =
+          `${toDisplayString(a.student?.lastname)} ${toDisplayString(a.student?.firstname)}`.trim();
+        const bName =
+          `${toDisplayString(b.student?.lastname)} ${toDisplayString(b.student?.firstname)}`.trim();
+        return aName.localeCompare(bName, 'fr');
+      });
   }
 
   async listLevels() {
@@ -329,7 +360,7 @@ export class ReportsService {
       throw new BadRequestException("Aucune année scolaire n'est disponible");
     }
 
-    const enrollments = await this.enrollmentModel
+    const enrollments = (await this.enrollmentModel
       .find({
         levelId,
         schoolYearId: schoolYear._id,
@@ -340,16 +371,18 @@ export class ReportsService {
         select: 'lastname firstname matricule gender',
       })
       .lean()
-      .exec();
+      .exec()) as unknown as Array<
+      PopulatedEnrollmentLean & { createdAt: Date }
+    >;
 
     const students = enrollments
-      .map((enrollment: any) => ({
+      .map((enrollment) => ({
         ...(enrollment.studentId ?? {}),
         ...(enrollment.studentSnapshot ?? {}),
         enrolledAt: enrollment.createdAt,
       }))
-      .filter((student: any) => student.lastname || student.firstname)
-      .map((student: any) => ({
+      .filter((student) => student.lastname || student.firstname)
+      .map((student) => ({
         lastname: String(student.lastname ?? ''),
         firstname: String(student.firstname ?? ''),
         matricule: String(student.matricule ?? ''),
@@ -375,7 +408,7 @@ export class ReportsService {
       schoolYearLabel:
         schoolYear.label ||
         `${new Date(schoolYear.startDate).getFullYear()} – ${new Date(schoolYear.endDate).getFullYear()}`,
-      levelName: (level as any).label,
+      levelName: level.label,
       students,
       boys: students.filter((student) => student.gender === 'M').length,
       girls: students.filter((student) => student.gender === 'F').length,
@@ -402,35 +435,38 @@ export class ReportsService {
       throw new BadRequestException("Aucune année scolaire n'est disponible");
     }
 
-    const enrollments = await this.enrollmentModel
+    const enrollments = (await this.enrollmentModel
       .find({ levelId, schoolYearId: schoolYear._id, status: 'active' })
       .populate({
         path: 'studentId',
         select: 'lastname firstname matricule',
       })
       .lean()
-      .exec();
+      .exec()) as unknown as Array<
+      PopulatedEnrollmentLean & { createdAt: Date }
+    >;
 
     const students = enrollments
       .slice()
       .sort(
-        (a: any, b: any) =>
-          new Date(b.createdAt ?? 0).getTime() -
-          new Date(a.createdAt ?? 0).getTime(),
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       )
-      .map((enrollment: any) => ({
-        _id: String(enrollment.studentId?._id ?? enrollment.studentId ?? ''),
-        lastname: String(
+      .map((enrollment) => ({
+        _id: toDisplayString(
+          enrollment.studentId?._id ?? enrollment.studentId ?? '',
+        ),
+        lastname: toDisplayString(
           enrollment.studentSnapshot?.lastname ??
             enrollment.studentId?.lastname ??
             '',
         ),
-        firstname: String(
+        firstname: toDisplayString(
           enrollment.studentSnapshot?.firstname ??
             enrollment.studentId?.firstname ??
             '',
         ),
-        matricule: String(
+        matricule: toDisplayString(
           enrollment.studentSnapshot?.matricule ??
             enrollment.studentId?.matricule ??
             '',
@@ -439,8 +475,8 @@ export class ReportsService {
       .filter((student) => student._id);
 
     return {
-      levelName: (level as any).label as string,
-      schoolYearId: String(schoolYear._id),
+      levelName: level.label,
+      schoolYearId: toDisplayString(schoolYear._id),
       students,
     };
   }
@@ -464,7 +500,7 @@ export class ReportsService {
     const schoolYear = await schoolYearQuery.exec();
 
     const enrollment = schoolYear
-      ? await this.enrollmentModel
+      ? ((await this.enrollmentModel
           .findOne({
             studentId,
             schoolYearId: schoolYear._id,
@@ -472,11 +508,11 @@ export class ReportsService {
           })
           .populate({ path: 'levelId', select: 'label' })
           .lean()
-          .exec()
+          .exec()) as PopulatedEnrollmentLean | null)
       : null;
     const levelLabel =
-      (enrollment as any)?.levelSnapshot?.label ??
-      (enrollment as any)?.levelId?.label ??
+      (enrollment?.levelSnapshot?.label as string | undefined) ??
+      enrollment?.levelId?.label ??
       '-';
 
     const [ecole, chefEtablissementNom] = await Promise.all([
@@ -485,40 +521,35 @@ export class ReportsService {
     ]);
 
     const genderLabel =
-      String((student as any).gender ?? '').toUpperCase() === 'F'
+      String(student.gender ?? '').toUpperCase() === 'F'
         ? 'Féminin'
         : 'Masculin';
-    const birthDate = (student as any).birthDate
-      ? new Date((student as any).birthDate)
-      : null;
+    const birthDate = student.birthDate ? new Date(student.birthDate) : null;
     const birthDateLabel =
       birthDate && !Number.isNaN(birthDate.getTime())
         ? `${String(birthDate.getDate()).padStart(2, '0')}/${String(birthDate.getMonth() + 1).padStart(2, '0')}/${birthDate.getFullYear()}`
         : '-';
-    const birthPlace = (student as any).birthPlace
-      ? ` à ${(student as any).birthPlace}`
-      : '';
+    const birthPlace = student.birthPlace ? ` à ${student.birthPlace}` : '';
 
     const today = new Date();
     const issueDateLabel = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
 
     return {
-      schoolName: (ecole as any)?.nom || (await this.getSchoolName()),
+      schoolName: ecole?.nom || (await this.getSchoolName()),
       schoolLogoPath: this.ecolesService.resolveLogoAbsolutePath(ecole),
-      headerColor: (ecole as any)?.couleurCarte || null,
+      headerColor: ecole?.couleurCarte || null,
       ministereTutelle:
-        (ecole as any)?.ministereTutelle ||
-        "MINISTERE DE L'EDUCATION NATIONALE",
-      localite: (ecole as any)?.localite || '-',
-      contact: (ecole as any)?.contact || '-',
+        ecole?.ministereTutelle || "MINISTERE DE L'EDUCATION NATIONALE",
+      localite: ecole?.localite || '-',
+      contact: ecole?.contact || '-',
       chefEtablissementNom: chefEtablissementNom || '-',
-      lastname: (student as any).lastname ?? '',
-      firstname: (student as any).firstname ?? '',
+      lastname: student.lastname ?? '',
+      firstname: student.firstname ?? '',
       birthDateAndPlaceLabel: `${birthDateLabel}${birthPlace}`,
       genderLabel,
       levelLabel,
       issueDateLabel,
-      photoPath: resolveUploadedImagePath((student as any).photo),
+      photoPath: resolveUploadedImagePath(student.photo),
     };
   }
 
@@ -584,7 +615,7 @@ export class ReportsService {
 
   async revenue(schoolYearId: string) {
     const [aggregation, payments] = await Promise.all([
-      this.invoiceModel.aggregate([
+      this.invoiceModel.aggregate<{ outstanding: number; totalDue: number }>([
         { $match: { schoolYearId: new Types.ObjectId(schoolYearId) } },
         {
           $group: {
@@ -600,11 +631,11 @@ export class ReportsService {
     const aggregated = aggregation[0];
     let collected = 0;
     let currentFeesCollected = 0;
-    for (const payment of payments as any[]) {
+    for (const payment of payments) {
       collected += Number(payment.amount ?? 0);
       currentFeesCollected += (payment.allocation ?? [])
-        .filter((item: any) => item.type === 'current_fees')
-        .reduce((sum: number, item: any) => sum + Number(item.amount ?? 0), 0);
+        .filter((item) => item.type === 'current_fees')
+        .reduce((sum: number, item) => sum + Number(item.amount ?? 0), 0);
     }
     return {
       collected,
@@ -616,7 +647,7 @@ export class ReportsService {
   }
 
   async renderRegistrationPaidPdf(
-    report: any[],
+    report: RegistrationPaidRow[],
     filter:
       | 'registration'
       | 'tuition'
@@ -634,7 +665,7 @@ export class ReportsService {
       layout: 'landscape',
       bufferPages: true,
     });
-    doc.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
 
     return await new Promise<Buffer>((resolve) => {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
@@ -723,7 +754,7 @@ export class ReportsService {
           .text('Aucun résultat pour ce filtre.', { align: 'left' });
       } else {
         drawHeader();
-        report.forEach((item: any, index: number) => {
+        report.forEach((item) => {
           if (doc.y + rowHeight > bottomLimit) {
             doc.addPage();
             drawHeader();
@@ -750,14 +781,14 @@ export class ReportsService {
   }
 
   async renderClassFinancialSituationPdf(
-    report: any[],
+    report: ClassFinancialSituationRow[],
     levelName?: string,
     schoolYearLabel?: string,
   ) {
     const schoolName = await this.ecolesService.getCurrentSchoolName();
     const chunks: Buffer[] = [];
     const doc = new PDFDocument({ margin: 40, size: 'A4' });
-    doc.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
 
     return await new Promise<Buffer>((resolve) => {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
@@ -827,21 +858,22 @@ export class ReportsService {
 
       drawHeader();
 
-      report.forEach((item: any) => {
+      report.forEach((item) => {
         if (doc.y + rowHeight > bottomLimit) {
           doc.addPage();
           drawHeader();
         }
 
+        const student = item.student as PopulatedStudentLean | null | undefined;
         const values = [
-          item.student?.matricule ?? '',
-          `${item.student?.lastname ?? ''} ${item.student?.firstname ?? ''}`.trim(),
-          item.student?.gender ?? '',
-          (item.registrationFee ?? 0).toFixed(2),
-          (item.tuitionFee ?? 0).toFixed(2),
-          (item.totalDue ?? 0).toFixed(2),
-          (item.paidAmount ?? 0).toFixed(2),
-          (item.balanceDue ?? 0).toFixed(2),
+          student?.matricule ?? '',
+          `${student?.lastname ?? ''} ${student?.firstname ?? ''}`.trim(),
+          student?.gender ?? '',
+          item.registrationFee.toFixed(2),
+          item.tuitionFee.toFixed(2),
+          item.totalDue.toFixed(2),
+          item.paidAmount.toFixed(2),
+          item.balanceDue.toFixed(2),
         ];
 
         drawRow(values);
@@ -854,7 +886,7 @@ export class ReportsService {
   async renderStudentListPdf(roll: NominalRoll) {
     const chunks: Buffer[] = [];
     const doc = new PDFDocument({ margin: 36, size: 'A4', bufferPages: true });
-    doc.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
 
     return await new Promise<Buffer>((resolve) => {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
@@ -1322,7 +1354,7 @@ export class ReportsService {
   async renderStudentIdCardPdf(data: StudentIdCardData): Promise<Buffer> {
     const chunks: Buffer[] = [];
     const doc = new PDFDocument({ margin: 20, size: 'A4' });
-    doc.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
 
     return await new Promise<Buffer>((resolve) => {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
@@ -1336,7 +1368,7 @@ export class ReportsService {
   async renderClassIdCardsPdf(dataList: StudentIdCardData[]): Promise<Buffer> {
     const chunks: Buffer[] = [];
     const doc = new PDFDocument({ margin: 20, size: 'A4' });
-    doc.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
 
     return await new Promise<Buffer>((resolve) => {
       doc.on('end', () => resolve(Buffer.concat(chunks)));

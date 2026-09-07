@@ -5,7 +5,6 @@ import {
   Param,
   Post,
   Query,
-  Render,
   Req,
   Res,
   UseGuards,
@@ -52,7 +51,7 @@ export class PaymentsController {
     await this.schoolYearsService.assertWritable(invoice);
     const result = await this.paymentsService.createPayment(dto, user?.id);
     setFlash(req, 'success', 'Paiement enregistre');
-    return res.redirect(`/receipts/${result.payment._id}`);
+    return res.redirect(`/receipts/${result.payment._id.toString()}`);
   }
 
   @Get('/receipts/:id')

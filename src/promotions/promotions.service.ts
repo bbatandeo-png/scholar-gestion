@@ -31,6 +31,8 @@ import {
 import { Student, StudentDocument } from '../students/schemas/student.schema';
 import { LevelsService } from '../levels/levels.service';
 import { SettingsService } from '../settings/settings.service';
+import { PopulatedEnrollmentLean } from '../common/types/populated-refs.types';
+import { toDisplayString } from '../common/utils/safe-string.util';
 
 @Injectable()
 export class PromotionsService {
@@ -51,7 +53,7 @@ export class PromotionsService {
   ) {}
 
   async prepare(sourceSchoolYearId: string) {
-    const candidates = await this.enrollmentModel
+    const candidates = (await this.enrollmentModel
       .find({
         schoolYearId: sourceSchoolYearId,
         status: EnrollmentStatus.ACTIVE,
@@ -60,11 +62,11 @@ export class PromotionsService {
       .populate('levelId')
       .sort({ createdAt: -1 })
       .lean()
-      .exec();
+      .exec()) as PopulatedEnrollmentLean[];
     return Promise.all(
-      candidates.map(async (candidate: any) => {
+      candidates.map(async (candidate) => {
         const next = await this.levelsService.findNextLevel(
-          String(candidate.levelId?._id ?? candidate.levelId),
+          toDisplayString(candidate.levelId?._id ?? candidate.levelId),
         );
         return {
           ...candidate,
@@ -213,8 +215,7 @@ export class PromotionsService {
             session,
           );
           const priorArrearsRemaining = priorArrears.reduce(
-            (sum: number, arrear: any) =>
-              sum + Number(arrear.amountRemaining ?? 0),
+            (sum: number, arrear) => sum + Number(arrear.amountRemaining ?? 0),
             0,
           );
           const currentFeesOutstanding = sourceInvoice

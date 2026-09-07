@@ -1,4 +1,10 @@
+import { Connection, Model } from 'mongoose';
 import { StudentsService } from './students.service';
+import { StudentDocument } from './schemas/student.schema';
+import { EnrollmentDocument } from '../enrollments/schemas/enrollment.schema';
+import { LevelDocument } from '../levels/schemas/level.schema';
+import { GuardiansService } from '../guardians/guardians.service';
+import { SettingsService } from '../settings/settings.service';
 
 describe('StudentsService autocomplete', () => {
   const exec = jest.fn();
@@ -7,12 +13,12 @@ describe('StudentsService autocomplete', () => {
     return { exec };
   });
   const service = new StudentsService(
-    { aggregate } as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
+    { aggregate } as unknown as Model<StudentDocument>,
+    {} as unknown as Model<EnrollmentDocument>,
+    {} as unknown as Model<LevelDocument>,
+    {} as unknown as GuardiansService,
+    {} as unknown as SettingsService,
+    {} as unknown as Connection,
   );
 
   beforeEach(() => {

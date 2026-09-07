@@ -9,6 +9,18 @@ import {
 } from './schemas/fee-schedule.schema';
 import { Invoice, InvoiceDocument } from './schemas/invoice.schema';
 import { UpsertFeeScheduleDto } from './dto/upsert-fee-schedule.dto';
+import {
+  PopulatedLevelLean,
+  PopulatedSchoolYearLean,
+} from '../common/types/populated-refs.types';
+
+export interface PopulatedFeeScheduleLean {
+  _id?: unknown;
+  registrationFee?: number;
+  tuitionFee?: number;
+  schoolYearId?: PopulatedSchoolYearLean | null;
+  levelId?: PopulatedLevelLean | null;
+}
 
 @Injectable()
 export class BillingService {
@@ -30,14 +42,16 @@ export class BillingService {
       .exec();
   }
 
-  async listFeeSchedules(schoolYearId?: string) {
+  async listFeeSchedules(
+    schoolYearId?: string,
+  ): Promise<PopulatedFeeScheduleLean[]> {
     return this.feeScheduleModel
       .find(schoolYearId ? { schoolYearId } : {})
       .populate('schoolYearId')
       .populate('levelId')
       .sort({ createdAt: -1 })
       .lean()
-      .exec();
+      .exec() as unknown as Promise<PopulatedFeeScheduleLean[]>;
   }
 
   async getFeeSchedule(

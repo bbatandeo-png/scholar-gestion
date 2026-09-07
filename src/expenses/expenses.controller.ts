@@ -21,9 +21,10 @@ import { ModuleGuard } from '../common/guards/module.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { setFlash } from '../common/utils/flash.util';
 import { buildExcelBuffer } from '../common/utils/excel.util';
+import { toDisplayString } from '../common/utils/safe-string.util';
 import { CreateExpenseCategoryDto } from './dto/create-expense-category.dto';
 import { CreateExpenseDto } from './dto/create-expense.dto';
-import { ExpensesService } from './expenses.service';
+import { ExpensesService, PopulatedExpenseLean } from './expenses.service';
 import { SchoolYearsService } from '../school-years/school-years.service';
 
 @Controller('/expenses')
@@ -68,14 +69,16 @@ export class ExpensesController {
     @Res() res: Response,
   ) {
     const year = await this.schoolYearsService.requireOpen();
-    const body = req.body || {};
+    const body = (req.body ?? {}) as Record<string, unknown>;
     const payload = {
-      expenseDate: dto.expenseDate ?? body.expenseDate,
-      label: dto.label ?? body.label ?? body.libelle ?? body.Libellé,
-      amount: dto.amount ?? body.amount,
-      beneficiary: dto.beneficiary ?? body.beneficiary,
-      categoryId: dto.categoryId ?? body.categoryId,
-    } as any;
+      expenseDate: String(dto.expenseDate ?? body.expenseDate ?? ''),
+      label: String(
+        dto.label ?? body.label ?? body.libelle ?? body.Libellé ?? '',
+      ),
+      amount: Number(dto.amount ?? body.amount ?? 0),
+      beneficiary: String(dto.beneficiary ?? body.beneficiary ?? ''),
+      categoryId: String(dto.categoryId ?? body.categoryId ?? ''),
+    };
 
     try {
       await this.expensesService.create(String(year._id), payload);
@@ -88,7 +91,7 @@ export class ExpensesController {
         'dto:',
         dto,
         'error:',
-        (err as any)?.message ?? err,
+        err instanceof Error ? err.message : err,
       );
       throw err;
     }
@@ -163,7 +166,7 @@ export class ExpensesController {
       this.expensesService.listCategories(),
     ]);
     const category = categoryId
-      ? categories.find((item: any) => String(item._id) === String(categoryId))
+      ? categories.find((item) => String(item._id) === categoryId)
       : undefined;
     const pdf = await this.expensesService.renderPdf(
       expenses,
@@ -194,13 +197,16 @@ export class ExpensesController {
     );
     const buffer = buildExcelBuffer(
       'Depenses',
-      expenses.map((item: any) => ({
+      expenses.map((item: PopulatedExpenseLean) => ({
         numero: item.orderNumber,
-        date: new Date(item.expenseDate).toLocaleDateString('fr-FR'),
+        date: item.expenseDate
+          ? new Date(item.expenseDate).toLocaleDateString('fr-FR')
+          : '',
         libelle: item.label,
         montant: item.amount,
         beneficiaire: item.beneficiary,
-        categorie: item.categoryId?.name ?? '',
+        categorie:
+          (typeof item.categoryId === 'object' && item.categoryId?.name) || '',
       })),
     );
 
@@ -224,22 +230,25 @@ export class ExpensesController {
     @Res() res: Response,
   ) {
     const year = await this.schoolYearsService.requireOpen();
-    const body = req.body || {};
+    const body = (req.body ?? {}) as Record<string, unknown>;
     const payload = {
-      expenseDate: dto.expenseDate ?? body.expenseDate,
-      label: dto.label ?? body.label ?? body.libelle ?? body.Libellé,
-      amount: dto.amount ?? body.amount,
-      beneficiary: dto.beneficiary ?? body.beneficiary,
-      categoryId: dto.categoryId ?? body.categoryId,
-    } as any;
+      expenseDate: String(dto.expenseDate ?? body.expenseDate ?? ''),
+      label: String(
+        dto.label ?? body.label ?? body.libelle ?? body.Libellé ?? '',
+      ),
+      amount: Number(dto.amount ?? body.amount ?? 0),
+      beneficiary: String(dto.beneficiary ?? body.beneficiary ?? ''),
+      categoryId: String(dto.categoryId ?? body.categoryId ?? ''),
+      modificationReason: undefined as string | undefined,
+    };
 
     try {
       // require modification reason
-      const reason = (
+      const reason = toDisplayString(
         body.modificationReason ??
-        body.modification_reason ??
-        body.reason ??
-        ''
+          body.modification_reason ??
+          body.reason ??
+          '',
       ).trim();
       if (!reason) {
         throw new BadRequestException(
@@ -259,7 +268,7 @@ export class ExpensesController {
         'dto:',
         dto,
         'error:',
-        (err as any)?.message ?? err,
+        err instanceof Error ? err.message : err,
       );
       throw err;
     }
@@ -318,10 +327,11 @@ export class ExpensesController {
     @Res() res: Response,
   ) {
     const year = await this.schoolYearsService.requireOpen();
+    const body = (req.body ?? {}) as Record<string, unknown>;
     await this.expensesService.delete(
       String(year._id),
       id,
-      String(req.body?.reason ?? 'Annulation demandee'),
+      toDisplayString(body.reason ?? 'Annulation demandee'),
     );
     setFlash(req, 'success', 'Dépense supprimée');
     return res.redirect('/expenses');

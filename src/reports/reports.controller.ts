@@ -17,6 +17,7 @@ import { Role } from '../common/enums/domain.enums';
 import { AuthenticatedGuard } from '../common/guards/authenticated.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { buildExcelBuffer } from '../common/utils/excel.util';
+import { toDisplayString } from '../common/utils/safe-string.util';
 import { ReportsService } from './reports.service';
 import { SchoolYearsService } from '../school-years/school-years.service';
 
@@ -179,8 +180,8 @@ export class ReportsController {
     );
     const buffer = buildExcelBuffer(
       'Eleves_par_niveau',
-      report.map((item: any) => ({
-        niveau_id: String(item._id ?? ''),
+      report.map((item) => ({
+        niveau_id: toDisplayString(item._id ?? ''),
         total: item.total,
       })),
     );
@@ -216,7 +217,7 @@ export class ReportsController {
     );
     const buffer = buildExcelBuffer(
       'Eleves_soldes',
-      report.map((item: any) => ({
+      report.map((item) => ({
         eleve:
           `${item.enrollmentId?.studentId?.lastname ?? ''} ${item.enrollmentId?.studentId?.firstname ?? ''}`.trim(),
         matricule: item.enrollmentId?.studentId?.matricule ?? '',
@@ -343,7 +344,7 @@ export class ReportsController {
     );
     const buffer = buildExcelBuffer(
       'Eleves_impayes',
-      report.map((item: any) => ({
+      report.map((item) => ({
         eleve:
           `${item.enrollmentId?.studentId?.lastname ?? ''} ${item.enrollmentId?.studentId?.firstname ?? ''}`.trim(),
         matricule: item.enrollmentId?.studentId?.matricule ?? '',
@@ -379,8 +380,12 @@ export class ReportsController {
       await this.reportsService.classFinancialSituation(selectedYearId);
     const filtered = levelId
       ? report.filter(
-          (item: any) =>
-            String(item.level?._id ?? item.level?.id ?? '') === String(levelId),
+          (item) =>
+            toDisplayString(
+              (item.level as { _id?: unknown; id?: unknown } | null)?._id ??
+                (item.level as { _id?: unknown; id?: unknown } | null)?.id ??
+                '',
+            ) === levelId,
         )
       : report;
     return {
@@ -403,17 +408,21 @@ export class ReportsController {
     );
     const filtered = levelId
       ? report.filter(
-          (item: any) =>
-            String(item.level?._id ?? item.level?.id ?? '') === String(levelId),
+          (item) =>
+            toDisplayString(
+              (item.level as { _id?: unknown; id?: unknown } | null)?._id ??
+                (item.level as { _id?: unknown; id?: unknown } | null)?.id ??
+                '',
+            ) === levelId,
         )
       : report;
     const buffer = buildExcelBuffer(
       'Situation_financiere',
-      filtered.map((item: any) => ({
-        numero: item.student?.matricule ?? '',
+      filtered.map((item) => ({
+        numero: toDisplayString(item.student?.matricule ?? ''),
         nom_prenoms:
-          `${item.student?.lastname ?? ''} ${item.student?.firstname ?? ''}`.trim(),
-        sexe: item.student?.gender ?? '',
+          `${toDisplayString(item.student?.lastname)} ${toDisplayString(item.student?.firstname)}`.trim(),
+        sexe: toDisplayString(item.student?.gender ?? ''),
         montant_a_payer: item.totalDue,
         montant_paye: item.paidAmount,
         reste_a_payer: item.balanceDue,
@@ -446,8 +455,12 @@ export class ReportsController {
       await this.reportsService.classFinancialSituation(selectedYearId);
     const filtered = levelId
       ? report.filter(
-          (item: any) =>
-            String(item.level?._id ?? item.level?.id ?? '') === String(levelId),
+          (item) =>
+            toDisplayString(
+              (item.level as { _id?: unknown; id?: unknown } | null)?._id ??
+                (item.level as { _id?: unknown; id?: unknown } | null)?.id ??
+                '',
+            ) === levelId,
         )
       : report;
     const levelName = levelId

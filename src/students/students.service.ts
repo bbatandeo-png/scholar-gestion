@@ -6,6 +6,7 @@ import {
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Connection, Model } from 'mongoose';
 import { GuardiansService } from '../guardians/guardians.service';
+import { Guardian } from '../guardians/schemas/guardian.schema';
 import { GuardianType, StudentStatus } from '../common/enums/domain.enums';
 import { runWithMongoTransactionFallback } from '../common/utils/mongo-transaction.util';
 import {
@@ -22,6 +23,20 @@ import {
   EnrollmentDocument,
 } from '../enrollments/schemas/enrollment.schema';
 import { Level, LevelDocument } from '../levels/schemas/level.schema';
+import {
+  PopulatedEnrollmentLean,
+  PopulatedStudentLean,
+} from '../common/types/populated-refs.types';
+
+// Fields selected by search()/searchPaginated() beyond the base
+// PopulatedStudentLean shape - kept separate since most other populated-ref
+// call sites don't select (or need) these.
+export type StudentSearchRow = PopulatedStudentLean & {
+  birthDate?: Date;
+  birthPlace?: string;
+  district?: string;
+  status?: string;
+};
 
 export type StudentAutocompleteResult = {
   _id: unknown;
@@ -242,19 +257,19 @@ export class StudentsService {
       : undefined;
     const yearCriteria = studentIds ? { _id: { $in: studentIds } } : {};
     if (!query) {
-      const students = await this.studentModel
+      const students = (await this.studentModel
         .find(yearCriteria)
         .select(
           'matricule lastname firstname gender birthDate birthPlace district status',
         )
         .sort({ lastname: 1, firstname: 1 })
         .lean()
-        .exec();
+        .exec()) as StudentSearchRow[];
       return this.applyYearSnapshots(students, schoolYearId);
     }
 
     const regex = new RegExp(query.trim(), 'i');
-    const students = await this.studentModel
+    const students = (await this.studentModel
       .find({
         ...yearCriteria,
         $or: [
@@ -269,11 +284,14 @@ export class StudentsService {
       )
       .sort({ lastname: 1, firstname: 1 })
       .lean()
-      .exec();
+      .exec()) as StudentSearchRow[];
     return this.applyYearSnapshots(students, schoolYearId);
   }
 
-  private async applyYearSnapshots(students: any[], schoolYearId?: string) {
+  private async applyYearSnapshots<T extends PopulatedStudentLean>(
+    students: T[],
+    schoolYearId?: string,
+  ) {
     if (!schoolYearId || !students.length) {
       return students;
     }
@@ -286,12 +304,12 @@ export class StudentsService {
       .lean()
       .exec();
     const snapshots = new Map(
-      enrollments.map((enrollment: any) => [
+      enrollments.map((enrollment) => [
         String(enrollment.studentId),
         enrollment.studentSnapshot,
       ]),
     );
-    return students.map((student: any) => ({
+    return students.map((student) => ({
       ...student,
       ...(snapshots.get(String(student._id)) ?? {}),
     }));
@@ -335,21 +353,21 @@ export class StudentsService {
         .skip(skip)
         .limit(pageSize)
         .lean()
-        .exec(),
+        .exec() as Promise<Array<StudentSearchRow & { createdAt?: Date }>>,
       this.studentModel.countDocuments(criteria),
     ]);
 
     // Lookup current level for each student
     const studentsWithLevel = await Promise.all(
-      items.map(async (student: any) => {
-        const enrollment: any = await this.enrollmentModel
+      items.map(async (student) => {
+        const enrollment = (await this.enrollmentModel
           .findOne({
             studentId: student._id,
             ...(schoolYearId ? { schoolYearId } : {}),
           })
           .populate('levelId')
           .lean()
-          .exec();
+          .exec()) as PopulatedEnrollmentLean | null;
 
         return {
           ...student,
@@ -357,7 +375,7 @@ export class StudentsService {
             ? enrollment.studentSnapshot
             : {}),
           currentLevel:
-            enrollment?.levelSnapshot?.label ||
+            (enrollment?.levelSnapshot?.label as string | undefined) ||
             enrollment?.levelId?.label ||
             '-',
         };
@@ -373,8 +391,10 @@ export class StudentsService {
     };
   }
 
-  async findById(id: string) {
-    const student = await this.studentModel.findById(id).lean().exec();
+  async findById(id: string): Promise<Student & { _id: unknown }> {
+    const student = (await this.studentModel.findById(id).lean().exec()) as
+      | (Student & { _id: unknown })
+      | null;
     if (!student) {
       throw new NotFoundException('Eleve introuvable');
     }
@@ -382,7 +402,9 @@ export class StudentsService {
     return student;
   }
 
-  async create(dto: CreateStudentDto) {
+  async create(
+    dto: CreateStudentDto,
+  ): Promise<Student & { _id: unknown; guardiansCount: number }> {
     const normalizedGuardians = this.normalizeGuardians(dto.guardians);
 
     const matricule =
@@ -475,10 +497,15 @@ export class StudentsService {
     return resolveUploadedImagePath(student?.photo);
   }
 
-  async detail(id: string) {
+  async detail(id: string): Promise<{
+    student: Student & { _id: unknown };
+    guardians: Array<Guardian & { _id: unknown }>;
+  }> {
     const [student, guardians] = await Promise.all([
       this.findById(id),
-      this.guardiansService.findByStudentId(id),
+      this.guardiansService.findByStudentId(id) as Promise<
+        Array<Guardian & { _id: unknown }>
+      >,
     ]);
 
     return { student, guardians };

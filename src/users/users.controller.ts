@@ -111,8 +111,12 @@ export class UsersController {
     try {
       await this.usersService.create({ ...dto, ecoleId });
       setFlash(req, 'success', 'Utilisateur cree avec succes');
-    } catch (error: any) {
-      if (error?.code === 11000) {
+    } catch (error) {
+      const isDuplicateKey =
+        typeof error === 'object' &&
+        error !== null &&
+        (error as { code?: number }).code === 11000;
+      if (isDuplicateKey) {
         setFlash(req, 'error', 'Cet email est deja utilise');
         return res.redirect('/users');
       }
@@ -134,7 +138,7 @@ export class UsersController {
       return res.redirect('/users');
     }
 
-    const currentUserId = (req.session as any)?.user?.id;
+    const currentUserId = req.session?.user?.id;
     if (currentUserId === id && dto.status === UserStatus.DISABLED) {
       setFlash(req, 'error', 'Impossible de desactiver votre propre compte');
       return res.redirect('/users');

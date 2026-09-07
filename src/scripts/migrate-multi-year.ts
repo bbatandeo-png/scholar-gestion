@@ -1,3 +1,10 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument */
+// One-off migration script working directly against the MongoDB driver
+// (db.collection(...)), not Mongoose models - documents are plain,
+// schema-less objects across 7+ collections here. Modeling each collection's
+// shape just for this single-use script isn't worth it; the explicit
+// optional-chaining and orphan/ambiguous-record checks throughout already
+// guard the actual runtime behavior.
 import { NestFactory } from '@nestjs/core';
 import { Connection } from 'mongoose';
 import { getConnectionToken } from '@nestjs/mongoose';

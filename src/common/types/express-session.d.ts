@@ -24,6 +24,24 @@ declare global {
     interface Request {
       csrfToken?: () => string;
     }
+    // Populated by the res.locals middleware in main.ts, read back by the
+    // Nunjucks views (layout.njk et al.) - typed here so that same
+    // middleware doesn't have to treat res.locals as an untyped bag.
+    interface Locals {
+      currentUser?: SessionUser;
+      flash?: { type: 'success' | 'error'; message: string };
+      currentPath?: string;
+      csrfToken?: string;
+      schoolYearContext?: {
+        years: unknown[];
+        open: unknown;
+        selected: unknown;
+        isHistorical: boolean;
+      };
+      activeModules?: { finance: boolean; bulletins: boolean } | null;
+      licenseEnforcementEnabled?: boolean;
+      licenseStatus?: unknown;
+    }
   }
 }
 

@@ -34,6 +34,17 @@ export function readExcelRows(
   });
 }
 
+// Cell values come back from readExcelRows() as `unknown` - almost always a
+// string, but defend against a stray object (e.g. a rich-text/formula cell)
+// rather than asserting a shape the type checker can't confirm here.
+function cellToString(value: unknown): string {
+  return typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+    ? String(value)
+    : JSON.stringify(value);
+}
+
 export function pickRowValue(
   row: Record<string, unknown>,
   keys: string[],
@@ -41,8 +52,12 @@ export function pickRowValue(
   for (const key of keys) {
     const normalizedKey = normalizeKey(key);
     const value = row[normalizedKey];
-    if (value !== undefined && value !== null && String(value).trim() !== '') {
-      return String(value).trim();
+    if (
+      value !== undefined &&
+      value !== null &&
+      cellToString(value).trim() !== ''
+    ) {
+      return cellToString(value).trim();
     }
   }
   return '';
@@ -91,7 +106,7 @@ export function buildExcelBuffer(
   sheetName: string,
   rows: Array<Record<string, unknown>>,
   title?: string,
-) {
+): Buffer {
   const worksheet = XLSX.utils.json_to_sheet(rows);
   const workbook = XLSX.utils.book_new();
 
@@ -101,5 +116,7 @@ export function buildExcelBuffer(
     XLSX.utils.sheet_add_aoa(worksheet, [[title]], { origin: 'A1' });
   }
 
-  return XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' });
+  // xlsx's own type declarations return `any` regardless of options - with
+  // { type: 'buffer' } this is genuinely a Node Buffer at runtime.
+  return XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' }) as Buffer;
 }

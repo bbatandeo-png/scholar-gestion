@@ -18,7 +18,11 @@ import {
   Consommation,
   ConsommationDocument,
 } from './schemas/consommation.schema';
-import { Facture, FactureDocument, FactureLigne } from './schemas/facture.schema';
+import {
+  Facture,
+  FactureDocument,
+  FactureLigne,
+} from './schemas/facture.schema';
 import {
   ParametreFacturation,
   ParametreFacturationDocument,
@@ -195,7 +199,7 @@ export class FacturationService {
             'Aucune consommation facturable pour cette periode/classe',
           );
         }
-        consommationIds = rows.map((row) => row._id as Types.ObjectId);
+        consommationIds = rows.map((row) => row._id);
         const quantite = rows.length;
         montantTotal = quantite * parametre.montantUnitaire;
         lignes = [
@@ -242,7 +246,7 @@ export class FacturationService {
     const facture = await this.findFactureById(id);
     const chunks: Buffer[] = [];
     const doc = new PDFDocument({ margin: 40, size: 'A4' });
-    doc.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
 
     return await new Promise<Buffer>((resolve) => {
       doc.on('end', () => resolve(Buffer.concat(chunks)));

@@ -5,7 +5,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
 import session from 'express-session';
 import MongoStore from 'connect-mongo';
-import { urlencoded } from 'express';
+import { NextFunction, Request, Response, urlencoded } from 'express';
 import methodOverride from 'method-override';
 import * as nunjucks from 'nunjucks';
 import * as fs from 'fs';
@@ -15,7 +15,6 @@ import csurf from 'csurf';
 import { AppModule } from './app.module';
 import { FeeScheduleNotFoundFilter } from './common/filters/fee-schedule-not-found.filter';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
-import { SessionUser } from './common/types/session-user.type';
 import { runSeed, shouldRunSeed } from './scripts/seed';
 import { SchoolYearsService } from './school-years/school-years.service';
 import { applyTenantMiddleware } from './common/tenant/apply-tenant-middleware';
@@ -143,7 +142,11 @@ async function bootstrap() {
   // multipart/form-data request (any file upload form) needs its body
   // parsed here first, or csurf can never find the CSRF token and every
   // such submission gets treated as a forged/stale request.
+  // multipartUpload is deliberately untyped (require('multer'), no
+  // @types/multer installed - see multer.util.ts's own comment on why).
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
   app.use('/platform/ecoles', multipartUpload.any());
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
   app.use('/students', multipartUpload.any());
 
   if (!isTest) {
@@ -157,9 +160,9 @@ async function bootstrap() {
   const ecoleModulesService = app.get(EcoleModulesService);
   const licensingService = app.get(LicensingService);
   const LICENSE_WRITE_ALLOWLIST = ['/licence', '/logout'];
-  app.use(async (req, res, next) => {
+  app.use(async (req: Request, res: Response, next: NextFunction) => {
     const flash = req.session?.flash;
-    const user = req.session?.user as SessionUser | undefined;
+    const user = req.session?.user;
 
     res.locals.currentUser = user;
     res.locals.flash = flash;
@@ -284,7 +287,10 @@ async function bootstrap() {
   // whose @Catch() types match the thrown exception, so FeeScheduleNotFoundFilter
   // (narrow) must come before HttpExceptionFilter (catch-all) or the latter
   // would shadow it entirely - see HttpExceptionFilter's own comment.
-  app.useGlobalFilters(new FeeScheduleNotFoundFilter(), new HttpExceptionFilter());
+  app.useGlobalFilters(
+    new FeeScheduleNotFoundFilter(),
+    new HttpExceptionFilter(),
+  );
 
   if (shouldRunSeed()) {
     await runSeed();

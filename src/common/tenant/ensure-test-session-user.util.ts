@@ -16,7 +16,10 @@ export function ensureTestSessionUser(req: Request): void {
   }
 
   if (!req.session) {
-    (req as any).session = {};
+    // Test-only fallback for a request that never went through the real
+    // express-session middleware - a plain object stands in for the full
+    // Session class (its .save()/.destroy()/etc methods are never used here).
+    (req as unknown as { session: object }).session = {};
   }
 
   if (req.session.user) {

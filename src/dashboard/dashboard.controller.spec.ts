@@ -1,4 +1,19 @@
+import { Request } from 'express';
 import { DashboardController } from './dashboard.controller';
+import { DashboardService } from './dashboard.service';
+import { SchoolYearsService } from '../school-years/school-years.service';
+
+function buildController(
+  dashboardService: Pick<DashboardService, 'getSummary'>,
+  schoolYearsService: Pick<SchoolYearsService, 'resolveSelected'>,
+): DashboardController {
+  return new DashboardController(
+    dashboardService as unknown as DashboardService,
+    schoolYearsService as unknown as SchoolYearsService,
+  );
+}
+
+const fakeRequest = { session: {} } as unknown as Request;
 
 describe('DashboardController.index', () => {
   it("affiche un etat de bienvenue au lieu de planter quand aucune annee scolaire n'est ouverte", async () => {
@@ -8,12 +23,9 @@ describe('DashboardController.index', () => {
         .fn()
         .mockRejectedValue(new Error('Aucune annee scolaire ouverte')),
     };
-    const controller = new DashboardController(
-      dashboardService as any,
-      schoolYearsService as any,
-    );
+    const controller = buildController(dashboardService, schoolYearsService);
 
-    const result = await controller.index({ session: {} } as any);
+    const result = await controller.index(fakeRequest);
 
     expect(result).toEqual({
       title: 'Dashboard',
@@ -31,12 +43,9 @@ describe('DashboardController.index', () => {
     const schoolYearsService = {
       resolveSelected: jest.fn().mockResolvedValue(year),
     };
-    const controller = new DashboardController(
-      dashboardService as any,
-      schoolYearsService as any,
-    );
+    const controller = buildController(dashboardService, schoolYearsService);
 
-    const result = await controller.index({ session: {} } as any);
+    const result = await controller.index(fakeRequest);
 
     expect(dashboardService.getSummary).toHaveBeenCalledWith('year-1');
     expect(result).toEqual({

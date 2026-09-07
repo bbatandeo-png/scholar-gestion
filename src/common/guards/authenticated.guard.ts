@@ -4,12 +4,13 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
+import { Request } from 'express';
 import { ensureTestSessionUser } from '../tenant/ensure-test-session-user.util';
 
 @Injectable()
 export class AuthenticatedGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
-    const req = context.switchToHttp().getRequest();
+    const req = context.switchToHttp().getRequest<Request>();
 
     if (req.session?.user) {
       return true;

@@ -1,12 +1,24 @@
-import { ForbiddenException } from '@nestjs/common';
+import { ExecutionContext, ForbiddenException } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { ModuleGuard } from './module.guard';
+import { EcoleModulesService } from '../../ecole-modules/ecole-modules.service';
 
-function buildContext(req: Record<string, unknown>) {
+function buildContext(req: Record<string, unknown>): ExecutionContext {
   return {
     getHandler: () => ({}),
     getClass: () => ({}),
     switchToHttp: () => ({ getRequest: () => req }),
-  } as any;
+  } as unknown as ExecutionContext;
+}
+
+function buildGuard(
+  reflector: Pick<Reflector, 'getAllAndOverride'>,
+  ecoleModulesService: Pick<EcoleModulesService, 'isActive'>,
+): ModuleGuard {
+  return new ModuleGuard(
+    reflector as unknown as Reflector,
+    ecoleModulesService as unknown as EcoleModulesService,
+  );
 }
 
 describe('ModuleGuard', () => {
@@ -15,7 +27,7 @@ describe('ModuleGuard', () => {
       getAllAndOverride: jest.fn().mockReturnValue(undefined),
     };
     const ecoleModulesService = { isActive: jest.fn() };
-    const guard = new ModuleGuard(reflector as any, ecoleModulesService as any);
+    const guard = buildGuard(reflector, ecoleModulesService);
 
     const result = await guard.canActivate(
       buildContext({ method: 'POST', session: { user: { ecoleId: 'e1' } } }),
@@ -32,7 +44,7 @@ describe('ModuleGuard', () => {
     const ecoleModulesService = {
       isActive: jest.fn().mockResolvedValue(false),
     };
-    const guard = new ModuleGuard(reflector as any, ecoleModulesService as any);
+    const guard = buildGuard(reflector, ecoleModulesService);
 
     const result = await guard.canActivate(
       buildContext({ method: 'GET', session: { user: { ecoleId: 'e1' } } }),
@@ -47,7 +59,7 @@ describe('ModuleGuard', () => {
       getAllAndOverride: jest.fn().mockReturnValue('FINANCE'),
     };
     const ecoleModulesService = { isActive: jest.fn().mockResolvedValue(true) };
-    const guard = new ModuleGuard(reflector as any, ecoleModulesService as any);
+    const guard = buildGuard(reflector, ecoleModulesService);
 
     const result = await guard.canActivate(
       buildContext({ method: 'POST', session: { user: { ecoleId: 'e1' } } }),
@@ -64,7 +76,7 @@ describe('ModuleGuard', () => {
     const ecoleModulesService = {
       isActive: jest.fn().mockResolvedValue(false),
     };
-    const guard = new ModuleGuard(reflector as any, ecoleModulesService as any);
+    const guard = buildGuard(reflector, ecoleModulesService);
 
     await expect(
       guard.canActivate(
@@ -78,7 +90,7 @@ describe('ModuleGuard', () => {
       getAllAndOverride: jest.fn().mockReturnValue('FINANCE'),
     };
     const ecoleModulesService = { isActive: jest.fn() };
-    const guard = new ModuleGuard(reflector as any, ecoleModulesService as any);
+    const guard = buildGuard(reflector, ecoleModulesService);
 
     const result = await guard.canActivate(
       buildContext({ method: 'POST', session: { user: { ecoleId: null } } }),

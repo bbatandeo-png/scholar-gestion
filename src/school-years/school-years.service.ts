@@ -78,7 +78,7 @@ export class SchoolYearsService {
     return this.schoolYearModel.findById(id).lean().exec();
   }
 
-  async updateStatus(id: string, status: string) {
+  async updateStatus(id: string, status: SchoolYearStatus) {
     if (status === SchoolYearStatus.OPEN) {
       return runWithMongoTransactionFallback(
         this.connection,
@@ -112,7 +112,7 @@ export class SchoolYearsService {
     if (!target) {
       throw new NotFoundException('Annee scolaire introuvable');
     }
-    target.status = status as SchoolYearStatus;
+    target.status = status;
     return target.save();
   }
 

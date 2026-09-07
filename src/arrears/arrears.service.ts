@@ -7,6 +7,33 @@ import {
   ArrearCarryForward,
   ArrearCarryForwardDocument,
 } from './schemas/arrear-carry-forward.schema';
+import {
+  PopulatedLevelLean,
+  PopulatedStudentLean,
+} from '../common/types/populated-refs.types';
+
+// Shape of an Arrear after list()'s populate chain + lean(). Nested
+// enrollment refs are only shallow-selected (schoolYearId stays a raw id
+// string), except levelId under sourceEnrollmentId which is itself
+// populated one level further.
+export interface PopulatedArrearLean {
+  _id?: unknown;
+  amountInitial?: number;
+  amountRemaining?: number;
+  status?: ArrearStatus;
+  studentId?: PopulatedStudentLean | null;
+  sourceEnrollmentId?: {
+    _id?: unknown;
+    schoolYearId?: string;
+    levelId?: PopulatedLevelLean | null;
+  } | null;
+  targetEnrollmentId?: {
+    _id?: unknown;
+    schoolYearId?: string;
+    levelId?: string;
+  } | null;
+  sourceSchoolYearId?: { _id?: unknown; label?: string } | null;
+}
 
 @Injectable()
 export class ArrearsService {
@@ -17,7 +44,7 @@ export class ArrearsService {
     private readonly carryForwardModel: Model<ArrearCarryForwardDocument>,
   ) {}
 
-  async list(schoolYearId: string) {
+  async list(schoolYearId: string): Promise<PopulatedArrearLean[]> {
     const carriedIds = await this.carryForwardModel
       .find({ targetSchoolYearId: schoolYearId })
       .distinct('arrearId')
@@ -39,7 +66,7 @@ export class ArrearsService {
       .populate({ path: 'sourceSchoolYearId', select: 'label' })
       .sort({ createdAt: -1 })
       .lean()
-      .exec();
+      .exec() as unknown as Promise<PopulatedArrearLean[]>;
   }
 
   async listPaginated(schoolYearId: string, page: number, pageSize: number) {

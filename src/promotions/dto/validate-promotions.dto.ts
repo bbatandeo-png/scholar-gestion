@@ -1,5 +1,11 @@
 import { Transform, Type } from 'class-transformer';
-import { IsArray, IsBoolean, IsEnum, IsMongoId, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsEnum,
+  IsMongoId,
+  ValidateNested,
+} from 'class-validator';
 import { FinalDecision } from '../../common/enums/domain.enums';
 
 class PromotionDecisionDto {

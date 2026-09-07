@@ -5,7 +5,11 @@ import { SchoolYearsController } from './school-years.controller';
 import { SchoolYearsService } from './school-years.service';
 
 @Module({
-  imports: [MongooseModule.forFeature([{ name: SchoolYear.name, schema: SchoolYearSchema }])],
+  imports: [
+    MongooseModule.forFeature([
+      { name: SchoolYear.name, schema: SchoolYearSchema },
+    ]),
+  ],
   controllers: [SchoolYearsController],
   providers: [SchoolYearsService],
   exports: [SchoolYearsService, MongooseModule],

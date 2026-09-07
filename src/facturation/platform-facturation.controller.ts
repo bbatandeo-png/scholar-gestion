@@ -39,7 +39,9 @@ export class PlatformFacturationController {
   async index(@Param('ecoleId') ecoleId: string) {
     const [ecole, parametre, factures] = await Promise.all([
       this.ecolesService.findById(ecoleId),
-      runScopedAsEcole(ecoleId, () => this.facturationService.getParametreActif()),
+      runScopedAsEcole(ecoleId, () =>
+        this.facturationService.getParametreActif(),
+      ),
       runScopedAsEcole(ecoleId, () => this.facturationService.listFactures()),
     ]);
 
@@ -81,7 +83,9 @@ export class PlatformFacturationController {
       setFlash(
         req,
         'error',
-        error instanceof Error ? error.message : 'Impossible de generer la facture',
+        error instanceof Error
+          ? error.message
+          : 'Impossible de generer la facture',
       );
     }
     return res.redirect(`/platform/facturation/${ecoleId}`);

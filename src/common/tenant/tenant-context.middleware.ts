@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
 import { Role } from '../enums/domain.enums';
-import { SessionUser } from '../types/session-user.type';
 import { tenantStorage } from './tenant-context';
 
 export function tenantContextMiddleware(

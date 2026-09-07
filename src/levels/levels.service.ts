@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { ClientSession, Model } from 'mongoose';
 import { CreateLevelDto } from './dto/create-level.dto';
 import { Level, LevelDocument } from './schemas/level.schema';
 import {
@@ -25,15 +25,15 @@ export class LevelsService {
   }
 
   async listForSchoolYear(schoolYearId: string) {
-    const links = await this.schoolYearLevelModel
+    const links = (await this.schoolYearLevelModel
       .find({ schoolYearId, isEnabled: true })
       .populate('levelId')
       .lean()
-      .exec();
+      .exec()) as unknown as Array<{ levelId?: Level & { _id: unknown } }>;
     return links
-      .map((item: any) => item.levelId)
-      .filter(Boolean)
-      .sort((a: any, b: any) => a.sortOrder - b.sortOrder);
+      .map((item) => item.levelId)
+      .filter((level): level is Level & { _id: unknown } => Boolean(level))
+      .sort((a, b) => a.sortOrder - b.sortOrder);
   }
 
   async enableForSchoolYear(schoolYearId: string, levelId: string) {
@@ -47,7 +47,7 @@ export class LevelsService {
   async copyYearConfiguration(
     sourceSchoolYearId: string,
     targetSchoolYearId: string,
-    session?: any,
+    session?: ClientSession,
   ) {
     const sourceLinks = await this.schoolYearLevelModel
       .find({ schoolYearId: sourceSchoolYearId, isEnabled: true })

@@ -31,7 +31,10 @@ export function getUploadsRoot(): string {
 // build actually sits; defaults to a folder next to the app for a local/dev
 // check.
 export function getReleaseAssetsRoot(): string {
-  return process.env.RELEASE_ASSETS_DIR ?? path.join(getRuntimeRoot(), 'release-assets');
+  return (
+    process.env.RELEASE_ASSETS_DIR ??
+    path.join(getRuntimeRoot(), 'release-assets')
+  );
 }
 
 // Resolves a bundled, read-only asset shipped with the app itself (e.g. the

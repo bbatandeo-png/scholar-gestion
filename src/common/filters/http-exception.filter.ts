@@ -49,6 +49,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
       res.status(status).render('error/generic', {
         title: 'Erreur',
         statusCode: status,
+        // no-unsafe-enum-comparison and no-unnecessary-type-assertion
+        // disagree on this expression's type (asserting it to `number`
+        // is flagged as both required and redundant) - both sides are
+        // plain numbers at runtime, so the comparison itself is safe.
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison
         isNotFound: status === HttpStatus.NOT_FOUND,
       });
       return;

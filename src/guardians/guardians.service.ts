@@ -33,6 +33,10 @@ export class GuardiansService {
   }
 
   async findByStudentId(studentId: string) {
-    return this.guardianModel.find({ studentId }).sort({ type: 1 }).lean().exec();
+    return this.guardianModel
+      .find({ studentId })
+      .sort({ type: 1 })
+      .lean()
+      .exec();
   }
 }

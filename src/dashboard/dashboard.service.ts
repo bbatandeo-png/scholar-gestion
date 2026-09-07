@@ -132,37 +132,37 @@ export class DashboardService {
 
     const totalStudents = studentIds.length;
     const revenue = payments.reduce(
-      (sum, payment: any) => sum + (payment.amount ?? 0),
+      (sum, payment) => sum + (payment.amount ?? 0),
       0,
     );
     const totalDue = invoices.reduce(
-      (sum, invoice: any) => sum + (invoice.totalDue ?? 0),
+      (sum, invoice) => sum + (invoice.totalDue ?? 0),
       0,
     );
     const totalBalance = invoices.reduce(
-      (sum, invoice: any) => sum + (invoice.balanceDue ?? 0),
+      (sum, invoice) => sum + (invoice.balanceDue ?? 0),
       0,
     );
     const totalExpenses = expenses.reduce(
-      (sum, expense: any) => sum + (expense.amount ?? 0),
+      (sum, expense) => sum + (expense.amount ?? 0),
       0,
     );
     const currentPaidByInvoice = new Map<string, number>();
-    for (const payment of payments as any[]) {
+    for (const payment of payments) {
       const currentAmount = (payment.allocation ?? [])
-        .filter((item: any) => item.type === 'current_fees')
-        .reduce((sum: number, item: any) => sum + Number(item.amount ?? 0), 0);
+        .filter((item) => item.type === 'current_fees')
+        .reduce((sum: number, item) => sum + Number(item.amount ?? 0), 0);
       const key = String(payment.invoiceId);
       currentPaidByInvoice.set(
         key,
         (currentPaidByInvoice.get(key) ?? 0) + currentAmount,
       );
     }
-    const registrationRevenue = invoices.reduce((sum, invoice: any) => {
+    const registrationRevenue = invoices.reduce((sum, invoice) => {
       const currentPaid = currentPaidByInvoice.get(String(invoice._id)) ?? 0;
       return sum + Math.min(currentPaid, invoice.registrationFee ?? 0);
     }, 0);
-    const tuitionRevenue = invoices.reduce((sum, invoice: any) => {
+    const tuitionRevenue = invoices.reduce((sum, invoice) => {
       const paidAmount = currentPaidByInvoice.get(String(invoice._id)) ?? 0;
       const registrationFee = invoice.registrationFee ?? 0;
       return (

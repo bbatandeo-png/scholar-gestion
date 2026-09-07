@@ -1,4 +1,9 @@
-import { IsBooleanString, IsMongoId, IsOptional, IsString } from 'class-validator';
+import {
+  IsBooleanString,
+  IsMongoId,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 export class ReenrollStudentDto {
   @IsMongoId()

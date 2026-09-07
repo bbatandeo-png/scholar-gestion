@@ -48,6 +48,7 @@ import {
 } from './schemas/bulletin-import-row.schema';
 import {
   BulletinResult,
+  BulletinResultDocument,
   BulletinResultSchema,
 } from './schemas/bulletin-result.schema';
 import {
@@ -58,7 +59,7 @@ import {
   ClassSubject,
   ClassSubjectSchema,
 } from './schemas/class-subject.schema';
-import { Note, NoteSchema } from './schemas/note.schema';
+import { Note, NoteDocument, NoteSchema } from './schemas/note.schema';
 import { Subject, SubjectSchema } from './schemas/subject.schema';
 
 const IDENTITY_HEADERS = [' ', 'Nom et Prénoms', 'Matricule', 'Sexe', 'N/R'];
@@ -96,8 +97,8 @@ describe('BulletinsService', () => {
   let studentModel: Model<StudentDocument>;
   let enrollmentModel: Model<EnrollmentDocument>;
   let levelModel: Model<LevelDocument>;
-  let noteModel: Model<any>;
-  let bulletinResultModel: Model<any>;
+  let noteModel: Model<NoteDocument>;
+  let bulletinResultModel: Model<BulletinResultDocument>;
 
   beforeAll(async () => {
     repl = await startMongoReplSet();
@@ -147,7 +148,9 @@ describe('BulletinsService', () => {
         Level.name,
         Student.name,
         AuditLog.name,
-      ].map((name) => moduleRef.get(getModelToken(name)).createCollection()),
+      ].map((name) =>
+        moduleRef.get<Model<unknown>>(getModelToken(name)).createCollection(),
+      ),
     );
   });
 
@@ -359,20 +362,20 @@ describe('BulletinsService', () => {
     );
     expect(rows).toHaveLength(3);
 
-    const rowByName = new Map(rows.map((r: any) => [r.rawIdentity.nameRaw, r]));
-    expect(rowByName.get('Quelqu Un').matchStatus).toBe(
+    const rowByName = new Map(rows.map((r) => [r.rawIdentity.nameRaw, r]));
+    expect(rowByName.get('Quelqu Un')!.matchStatus).toBe(
       ImportRowMatchStatus.MATCHED,
     );
-    expect(String(rowByName.get('Quelqu Un').studentId._id)).toBe(
+    expect(String(rowByName.get('Quelqu Un')!.studentId!._id)).toBe(
       String(s1._id),
     );
-    expect(rowByName.get('AFANOU Kepler').matchStatus).toBe(
+    expect(rowByName.get('AFANOU Kepler')!.matchStatus).toBe(
       ImportRowMatchStatus.MATCHED,
     );
-    expect(String(rowByName.get('AFANOU Kepler').studentId._id)).toBe(
+    expect(String(rowByName.get('AFANOU Kepler')!.studentId!._id)).toBe(
       String(s2._id),
     );
-    expect(rowByName.get('INCONNU Personne Zzz').matchStatus).toBe(
+    expect(rowByName.get('INCONNU Personne Zzz')!.matchStatus).toBe(
       ImportRowMatchStatus.UNRESOLVED,
     );
 
@@ -408,7 +411,7 @@ describe('BulletinsService', () => {
     const zandoh = roster.find((r) => r.lastname === 'ZANDOH');
     expect(zandoh).toBeDefined();
     await runWithTenant({ ecoleId }, () =>
-      service.resolveRow(String(unresolvedRow._id), zandoh!.studentId),
+      service.resolveRow(String(unresolvedRow!._id), zandoh!.studentId),
     );
 
     // Approve both subjects.
@@ -416,7 +419,7 @@ describe('BulletinsService', () => {
       service.approveSubject(String(session._id), {
         subjectNameRaw: 'Français',
         label: 'Français',
-        category: 'litteraire' as any,
+        category: SubjectCategory.LITTERAIRE,
         coefficient: 3,
         teacherName: 'PROF1',
       }),
@@ -425,7 +428,7 @@ describe('BulletinsService', () => {
       service.approveSubject(String(session._id), {
         subjectNameRaw: 'Maths',
         label: 'Maths',
-        category: 'scientifique' as any,
+        category: SubjectCategory.SCIENTIFIQUE,
         coefficient: 4,
         teacherName: 'PROF2',
       }),
@@ -451,7 +454,7 @@ describe('BulletinsService', () => {
         .exec(),
     );
     expect(notesForStudent1).toHaveLength(2);
-    const francaisNote = notesForStudent1.find((n: any) => n.i2 === 8);
+    const francaisNote = notesForStudent1.find((n) => n.i2 === 8);
     expect(francaisNote).toBeDefined();
     expect(francaisNote!.i1).toBeNull();
     expect(francaisNote!.devoir).toBe(0);
@@ -619,17 +622,17 @@ describe('BulletinsService', () => {
     expect(rowsAfterEcraser).toHaveLength(2);
 
     const rowByName = new Map(
-      rowsAfterEcraser.map((r: any) => [r.rawIdentity.nameRaw, r]),
+      rowsAfterEcraser.map((r) => [r.rawIdentity.nameRaw, r]),
     );
-    const row1 = rowByName.get('Quelqu Un');
+    const row1 = rowByName.get('Quelqu Un')!;
     expect(row1.matchStatus).toBe(ImportRowMatchStatus.MATCHED);
-    expect(String(row1.studentId._id)).toBe(String(s1._id));
+    expect(String(row1.studentId!._id)).toBe(String(s1._id));
     expect(row1.notes[0].i2).toBe(15);
     expect(row1.notes[0].compo).toBe(16);
 
-    const row2 = rowByName.get('AFANOU Kepler');
+    const row2 = rowByName.get('AFANOU Kepler')!;
     expect(row2.matchStatus).toBe(ImportRowMatchStatus.MATCHED);
-    expect(String(row2.studentId._id)).toBe(String(s2._id));
+    expect(String(row2.studentId!._id)).toBe(String(s2._id));
     expect(row2.notes[0].i2).toBe(17);
   });
 
@@ -739,10 +742,10 @@ describe('BulletinsService', () => {
     );
     expect(rows).toHaveLength(1);
     const notesByName = new Map(
-      rows[0].notes.map((n: any) => [n.subjectNameRaw, n]),
+      rows[0].notes.map((n) => [n.subjectNameRaw, n]),
     );
 
-    const francais = notesByName.get('Français');
+    const francais = notesByName.get('Français')!;
     expect(francais.i1).toBe(14);
     expect(francais.i2).toBe(10);
     expect(francais.devoir).toBe(8);
@@ -750,7 +753,7 @@ describe('BulletinsService', () => {
 
     const maths = notesByName.get('Maths');
     expect(maths).toBeDefined();
-    expect(maths.i2).toBe(16);
+    expect(maths!.i2).toBe(16);
   });
 
   it('bout en bout avec le vrai fichier fourni (BASE DE DONNEES NOTES ELEVES 5EME.xlsx) : 32 eleves, matricules vides, i1 jamais renseigne, rapprochement par nom, validation complete', async () => {
@@ -852,21 +855,21 @@ describe('BulletinsService', () => {
 
     // Known real-file quirk: matricule is blank on every row - matching
     // must succeed purely by name, never via a matricule shortcut.
-    expect(rows.every((r: any) => !r.rawIdentity.matriculeRaw)).toBe(true);
+    expect(rows.every((r) => !r.rawIdentity.matriculeRaw)).toBe(true);
     // Sexe is populated on every row and must be captured verbatim, even
     // though it isn't cross-checked against the roster's existing gender.
-    expect(rows.every((r: any) => r.rawIdentity.sexeRaw)).toBe(true);
+    expect(rows.every((r) => r.rawIdentity.sexeRaw)).toBe(true);
     expect(
-      rows.every((r: any) => r.matchStatus === ImportRowMatchStatus.MATCHED),
+      rows.every((r) => r.matchStatus === ImportRowMatchStatus.MATCHED),
     ).toBe(true);
 
     // Known real-file quirk: the i1 column is entirely empty in this sample
     // - every cell must stay null, never coerced to 0.
-    const allNotes = rows.flatMap((r: any) => r.notes);
+    const allNotes = rows.flatMap((r) => r.notes);
     expect(allNotes.length).toBe(
       parsed.rows.length * parsed.rows[0].notes.length,
     );
-    expect(allNotes.every((n: any) => n.i1 === null)).toBe(true);
+    expect(allNotes.every((n) => n.i1 === null)).toBe(true);
 
     const expectedSubjects = parsed.rows[0].notes.map((n) => n.subjectNameRaw);
     const unapproved = await runWithTenant({ ecoleId }, () =>
@@ -910,7 +913,7 @@ describe('BulletinsService', () => {
     expect(notesForFirstStudent).toHaveLength(expectedSubjects.length);
     const firstNoteExpected = parsed.rows[0].notes[0];
     const firstNoteActual = notesForFirstStudent.find(
-      (n: any) => n.i2 === firstNoteExpected.i2,
+      (n) => n.i2 === firstNoteExpected.i2,
     );
     expect(firstNoteActual).toBeDefined();
     expect(firstNoteActual!.i1).toBeNull();
@@ -925,31 +928,31 @@ describe('BulletinsService', () => {
     expect(firstNoteActual!.rang).toMatch(/^\d+(er|ère|ème)$/);
     expect(typeof firstNoteActual!.appreciation).toBe('string');
 
-    const bulletinResult: any = await runWithTenant({ ecoleId }, () =>
+    const bulletinResult = await runWithTenant({ ecoleId }, () =>
       bulletinResultModel
         .findOne({ studentId: firstStudent._id, periode: Periode.TRIMESTRE_1 })
         .lean()
         .exec(),
     );
     expect(bulletinResult).toBeTruthy();
-    expect(bulletinResult.statutNR).toBe('N');
-    expect(bulletinResult.totalCoef).toBe(expectedSubjects.length);
-    expect(bulletinResult.moyenneGenerale).toBeGreaterThanOrEqual(0);
-    expect(bulletinResult.rangGeneral).toMatch(/^\d+(er|ère|ème)$/);
-    expect(typeof bulletinResult.appreciationGenerale).toBe('string');
+    expect(bulletinResult!.statutNR).toBe('N');
+    expect(bulletinResult!.totalCoef).toBe(expectedSubjects.length);
+    expect(bulletinResult!.moyenneGenerale).toBeGreaterThanOrEqual(0);
+    expect(bulletinResult!.rangGeneral).toMatch(/^\d+(er|ère|ème)$/);
+    expect(typeof bulletinResult!.appreciationGenerale).toBe('string');
     // First validated period of the year for this student -> nothing to
     // cumulate with yet, annual average equals this period's own MGP.
-    expect(bulletinResult.moyenneAnnuelle).toBeCloseTo(
-      bulletinResult.moyenneGenerale,
+    expect(bulletinResult!.moyenneAnnuelle).toBeCloseTo(
+      bulletinResult!.moyenneGenerale,
       2,
     );
 
-    const validatedSessionForStats: any = await runWithTenant({ ecoleId }, () =>
+    const validatedSessionForStats = await runWithTenant({ ecoleId }, () =>
       service.getSession(String(session._id)),
     );
     expect(validatedSessionForStats.classStats).toBeTruthy();
-    expect(validatedSessionForStats.classStats.moyenneMin).toBeLessThanOrEqual(
-      validatedSessionForStats.classStats.moyenneMax,
+    expect(validatedSessionForStats.classStats!.moyenneMin).toBeLessThanOrEqual(
+      validatedSessionForStats.classStats!.moyenneMax,
     );
 
     // The individual bulletin PDF renders without error for a real student
@@ -1294,37 +1297,35 @@ describe('BulletinsService', () => {
     );
     expect(rows).toHaveLength(2);
     expect(
-      rows.every((r: any) => r.matchStatus === ImportRowMatchStatus.MATCHED),
+      rows.every((r) => r.matchStatus === ImportRowMatchStatus.MATCHED),
     ).toBe(true);
 
-    const ama = rows.find(
-      (r: any) => r.rawIdentity.nameRaw === 'KOFFI Ama',
-    ) as any;
+    const ama = rows.find((r) => r.rawIdentity.nameRaw === 'KOFFI Ama');
     expect(ama).toBeDefined();
-    expect(ama.studentId.lastname).toBe('KOFFI');
-    expect(ama.studentId.firstname).toBe('Ama');
-    expect(ama.studentId.gender).toBe('F');
-    expect(ama.studentId.matricule).toBeTruthy();
-    expect(ama.studentId.birthDate).toBeUndefined();
-    expect(ama.studentId.birthPlace).toBeUndefined();
-    expect(ama.studentId.district).toBeUndefined();
+    expect(ama!.studentId!.lastname).toBe('KOFFI');
+    expect(ama!.studentId!.firstname).toBe('Ama');
+    expect(ama!.studentId!.gender).toBe('F');
+    expect(ama!.studentId!.matricule).toBeTruthy();
+    expect(ama!.studentId!.birthDate).toBeUndefined();
+    expect(ama!.studentId!.birthPlace).toBeUndefined();
+    expect(ama!.studentId!.district).toBeUndefined();
 
     const enrollments = await runWithTenant({ ecoleId }, () =>
       enrollmentModel.find({ schoolYearId, levelId }).lean().exec(),
     );
     expect(enrollments).toHaveLength(2);
-    expect(
-      enrollments.every((e: any) => e.type === EnrollmentType.INITIAL),
-    ).toBe(true);
-    expect(
-      enrollments.every((e: any) => e.status === EnrollmentStatus.ACTIVE),
-    ).toBe(true);
+    expect(enrollments.every((e) => e.type === EnrollmentType.INITIAL)).toBe(
+      true,
+    );
+    expect(enrollments.every((e) => e.status === EnrollmentStatus.ACTIVE)).toBe(
+      true,
+    );
 
     await runWithTenant({ ecoleId }, () =>
       service.approveSubject(String(session._id), {
         subjectNameRaw: 'Français',
         label: 'Français',
-        category: 'litteraire' as any,
+        category: SubjectCategory.LITTERAIRE,
         coefficient: 2,
       }),
     );
@@ -1398,7 +1399,7 @@ describe('BulletinsService', () => {
       service.listRows(String(session._id)),
     );
     expect(rowsAfterFirst).toHaveLength(1);
-    const firstStudentId = String((rowsAfterFirst[0] as any).studentId._id);
+    const firstStudentId = String(rowsAfterFirst[0].studentId!._id);
 
     const secondBuffer = buildWorkbookBuffer([
       buildHeaderRow(['Français']),
@@ -1438,9 +1439,7 @@ describe('BulletinsService', () => {
       service.listRows(String(session._id)),
     );
     expect(rowsAfterSecond).toHaveLength(1);
-    expect(String((rowsAfterSecond[0] as any).studentId._id)).toBe(
-      firstStudentId,
-    );
+    expect(String(rowsAfterSecond[0].studentId!._id)).toBe(firstStudentId);
 
     const allStudents = await runWithTenant({ ecoleId }, () =>
       studentModel.find({}).lean().exec(),
@@ -1653,7 +1652,7 @@ describe('BulletinsService', () => {
 
     const session = await runWithTenant({ ecoleId }, () =>
       service.createSession(
-        { schoolYearId, levelId, periode: Periode.TRIMESTRE_1 } as any,
+        { schoolYearId, levelId, periode: Periode.TRIMESTRE_1 },
         createdBy,
       ),
     );
@@ -1759,7 +1758,7 @@ describe('BulletinsService', () => {
     );
     expect(rows).toHaveLength(parsed.rows.length);
     expect(
-      rows.every((r: any) => r.matchStatus === ImportRowMatchStatus.MATCHED),
+      rows.every((r) => r.matchStatus === ImportRowMatchStatus.MATCHED),
     ).toBe(true);
 
     const createdStudents = await runWithTenant({ ecoleId }, () =>
@@ -1769,14 +1768,12 @@ describe('BulletinsService', () => {
     // Real-file quirk: matricule is blank on every row, so every Student
     // must have gotten a freshly generated one, all unique, matching the
     // default MAT-#### rule.
-    const matricules = new Set(createdStudents.map((s: any) => s.matricule));
+    const matricules = new Set(createdStudents.map((s) => s.matricule));
     expect(matricules.size).toBe(parsed.rows.length);
-    expect(
-      createdStudents.every((s: any) => /^MAT-\d{4}$/.test(s.matricule)),
-    ).toBe(true);
-    expect(createdStudents.every((s: any) => s.birthDate === undefined)).toBe(
+    expect(createdStudents.every((s) => /^MAT-\d{4}$/.test(s.matricule))).toBe(
       true,
     );
+    expect(createdStudents.every((s) => s.birthDate === undefined)).toBe(true);
 
     const expectedSubjects = parsed.rows[0].notes.map((n) => n.subjectNameRaw);
     for (const subjectNameRaw of expectedSubjects) {
@@ -1796,8 +1793,7 @@ describe('BulletinsService', () => {
     expect(validated.status).toBe(BulletinSessionStatus.VALIDATED);
 
     const firstStudent = createdStudents.find(
-      (s: any) =>
-        `${s.lastname} ${s.firstname}`.trim() === parsed.rows[0].nameRaw,
+      (s) => `${s.lastname} ${s.firstname}`.trim() === parsed.rows[0].nameRaw,
     );
     expect(firstStudent).toBeDefined();
     const notesForFirstStudent = await runWithTenant({ ecoleId }, () =>
@@ -1807,7 +1803,7 @@ describe('BulletinsService', () => {
         .exec(),
     );
     expect(notesForFirstStudent).toHaveLength(expectedSubjects.length);
-    expect(notesForFirstStudent.every((n: any) => n.i1 === null)).toBe(true);
+    expect(notesForFirstStudent.every((n) => n.i1 === null)).toBe(true);
   });
 
   it("ecran Matieres autonome: creation d'une matiere, rejet des doublons, coefficients par classe modifiables", async () => {
@@ -1826,7 +1822,7 @@ describe('BulletinsService', () => {
     const subject = await runWithTenant({ ecoleId }, () =>
       service.createSubject({
         label: 'Philosophie',
-        category: 'litteraire' as any,
+        category: SubjectCategory.LITTERAIRE,
       }),
     );
     expect(subject.label).toBe('Philosophie');
@@ -1835,7 +1831,7 @@ describe('BulletinsService', () => {
       runWithTenant({ ecoleId }, () =>
         service.createSubject({
           label: 'philosophie',
-          category: 'litteraire' as any,
+          category: SubjectCategory.LITTERAIRE,
         }),
       ),
     ).rejects.toThrow('existe deja');
@@ -1843,7 +1839,7 @@ describe('BulletinsService', () => {
     const subjects = await runWithTenant({ ecoleId }, () =>
       service.listSubjects(),
     );
-    expect(subjects.map((s: any) => s.label)).toContain('Philosophie');
+    expect(subjects.map((s) => s.label)).toContain('Philosophie');
 
     await runWithTenant({ ecoleId }, () =>
       service.upsertClassSubject({
@@ -2005,13 +2001,13 @@ describe('BulletinsService', () => {
     const subjectA = await runWithTenant({ ecoleId: ecoleA }, () =>
       service.createSubject({
         label: 'Matiere Ecole A',
-        category: 'litteraire' as any,
+        category: SubjectCategory.LITTERAIRE,
       }),
     );
     const subjectB = await runWithTenant({ ecoleId: ecoleB }, () =>
       service.createSubject({
         label: 'Matiere Ecole B',
-        category: 'scientifique' as any,
+        category: SubjectCategory.SCIENTIFIQUE,
       }),
     );
 
@@ -2021,7 +2017,7 @@ describe('BulletinsService', () => {
     const duplicateInB = await runWithTenant({ ecoleId: ecoleB }, () =>
       service.createSubject({
         label: 'Matiere Ecole A',
-        category: 'autre' as any,
+        category: SubjectCategory.AUTRE,
       }),
     );
     expect(duplicateInB.label).toBe('Matiere Ecole A');
@@ -2033,16 +2029,16 @@ describe('BulletinsService', () => {
     const sessionsAsB = await runWithTenant({ ecoleId: ecoleB }, () =>
       service.listSessions(),
     );
-    expect(sessionsAsA.map((s: any) => String(s._id))).toContain(
+    expect(sessionsAsA.map((s) => String(s._id))).toContain(
       String(sessionA._id),
     );
-    expect(sessionsAsA.map((s: any) => String(s._id))).not.toContain(
+    expect(sessionsAsA.map((s) => String(s._id))).not.toContain(
       String(sessionB._id),
     );
-    expect(sessionsAsB.map((s: any) => String(s._id))).toContain(
+    expect(sessionsAsB.map((s) => String(s._id))).toContain(
       String(sessionB._id),
     );
-    expect(sessionsAsB.map((s: any) => String(s._id))).not.toContain(
+    expect(sessionsAsB.map((s) => String(s._id))).not.toContain(
       String(sessionA._id),
     );
 
@@ -2065,10 +2061,10 @@ describe('BulletinsService', () => {
     const subjectsAsB = await runWithTenant({ ecoleId: ecoleB }, () =>
       service.listSubjects(),
     );
-    expect(subjectsAsA.map((s: any) => String(s._id))).toEqual([
+    expect(subjectsAsA.map((s) => String(s._id))).toEqual([
       String(subjectA._id),
     ]);
-    expect(subjectsAsB.map((s: any) => String(s._id)).sort()).toEqual(
+    expect(subjectsAsB.map((s) => String(s._id)).sort()).toEqual(
       [String(subjectB._id), String(duplicateInB._id)].sort(),
     );
   });

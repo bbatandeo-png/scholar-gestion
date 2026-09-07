@@ -1,8 +1,9 @@
 import { Test } from '@nestjs/testing';
 import { getModelToken, MongooseModule } from '@nestjs/mongoose';
-import { Types } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { startMongoReplSet } from '../../test/mongo-replset';
 import { runWithTenant } from '../common/tenant/tenant-context';
+import { FacturationMode } from '../common/enums/domain.enums';
 import { FacturationService } from './facturation.service';
 import {
   Consommation,
@@ -24,7 +25,10 @@ describe('FacturationService', () => {
       imports: [
         MongooseModule.forRoot(repl.uri),
         MongooseModule.forFeature([
-          { name: ParametreFacturation.name, schema: ParametreFacturationSchema },
+          {
+            name: ParametreFacturation.name,
+            schema: ParametreFacturationSchema,
+          },
           { name: Consommation.name, schema: ConsommationSchema },
           { name: Facture.name, schema: FactureSchema },
         ]),
@@ -39,9 +43,15 @@ describe('FacturationService', () => {
     // test runs) - pre-create them here so changeParametre()/genererFacture()
     // (both transactional) never hit that as their first write.
     await Promise.all([
-      moduleRef.get(getModelToken(ParametreFacturation.name)).createCollection(),
-      moduleRef.get(getModelToken(Consommation.name)).createCollection(),
-      moduleRef.get(getModelToken(Facture.name)).createCollection(),
+      moduleRef
+        .get<Model<unknown>>(getModelToken(ParametreFacturation.name))
+        .createCollection(),
+      moduleRef
+        .get<Model<unknown>>(getModelToken(Consommation.name))
+        .createCollection(),
+      moduleRef
+        .get<Model<unknown>>(getModelToken(Facture.name))
+        .createCollection(),
     ]);
   });
 
@@ -54,15 +64,23 @@ describe('FacturationService', () => {
   it('historise le parametre de facturation au lieu de le modifier en place', async () => {
     const tenant = { ecoleId: ecoleId() };
     const first = await runWithTenant(tenant, () =>
-      service.changeParametre({ mode: 'usage_bulletin' as any, montantUnitaire: 100 }),
+      service.changeParametre({
+        mode: FacturationMode.USAGE_BULLETIN,
+        montantUnitaire: 100,
+      }),
     );
     const second = await runWithTenant(tenant, () =>
-      service.changeParametre({ mode: 'forfait' as any, montantUnitaire: 5000 }),
+      service.changeParametre({
+        mode: FacturationMode.FORFAIT,
+        montantUnitaire: 5000,
+      }),
     );
 
     expect(String(first._id)).not.toBe(String(second._id));
 
-    const actif = await runWithTenant(tenant, () => service.getParametreActif());
+    const actif = await runWithTenant(tenant, () =>
+      service.getParametreActif(),
+    );
     expect(String(actif?._id)).toBe(String(second._id));
     expect(actif?.mode).toBe('forfait');
   });
@@ -74,10 +92,20 @@ describe('FacturationService', () => {
     const anneeScolaireId = ecoleId();
 
     const first = await runWithTenant(tenant, () =>
-      service.recordBulletinGeneration({ eleveId, classeId, periode: 'T1', anneeScolaireId }),
+      service.recordBulletinGeneration({
+        eleveId,
+        classeId,
+        periode: 'T1',
+        anneeScolaireId,
+      }),
     );
     const second = await runWithTenant(tenant, () =>
-      service.recordBulletinGeneration({ eleveId, classeId, periode: 'T1', anneeScolaireId }),
+      service.recordBulletinGeneration({
+        eleveId,
+        classeId,
+        periode: 'T1',
+        anneeScolaireId,
+      }),
     );
 
     expect(String(first._id)).toBe(String(second._id));
@@ -90,10 +118,20 @@ describe('FacturationService', () => {
     const anneeScolaireId = ecoleId();
 
     const first = await runWithTenant(tenant, () =>
-      service.recordEleveUsage({ eleveId, classeId, anneeScolaireId, periode: 'T1' }),
+      service.recordEleveUsage({
+        eleveId,
+        classeId,
+        anneeScolaireId,
+        periode: 'T1',
+      }),
     );
     const second = await runWithTenant(tenant, () =>
-      service.recordEleveUsage({ eleveId, classeId, anneeScolaireId, periode: 'T2' }),
+      service.recordEleveUsage({
+        eleveId,
+        classeId,
+        anneeScolaireId,
+        periode: 'T2',
+      }),
     );
 
     expect(String(first._id)).toBe(String(second._id));
@@ -104,7 +142,12 @@ describe('FacturationService', () => {
     const classeId = ecoleId();
     const anneeScolaireId = ecoleId();
 
-    await runWithTenant(tenant, () => service.changeParametre({ mode: 'usage_bulletin' as any, montantUnitaire: 250 }));
+    await runWithTenant(tenant, () =>
+      service.changeParametre({
+        mode: FacturationMode.USAGE_BULLETIN,
+        montantUnitaire: 250,
+      }),
+    );
     for (let i = 0; i < 3; i += 1) {
       await runWithTenant(tenant, () =>
         service.recordBulletinGeneration({
@@ -128,13 +171,22 @@ describe('FacturationService', () => {
 
   it('empeche une double facturation forfait pour la meme periode', async () => {
     const tenant = { ecoleId: ecoleId() };
-    await runWithTenant(tenant, () => service.changeParametre({ mode: 'forfait' as any, montantUnitaire: 30000 }));
+    await runWithTenant(tenant, () =>
+      service.changeParametre({
+        mode: FacturationMode.FORFAIT,
+        montantUnitaire: 30000,
+      }),
+    );
 
-    const facture = await runWithTenant(tenant, () => service.genererFacture({ periode: '2026-T1' }));
+    const facture = await runWithTenant(tenant, () =>
+      service.genererFacture({ periode: '2026-T1' }),
+    );
     expect(facture.montantTotal).toBe(30000);
 
     await expect(
-      runWithTenant(tenant, () => service.genererFacture({ periode: '2026-T1' })),
+      runWithTenant(tenant, () =>
+        service.genererFacture({ periode: '2026-T1' }),
+      ),
     ).rejects.toThrow('Une facture forfait existe deja');
   });
 
@@ -142,11 +194,25 @@ describe('FacturationService', () => {
     const tenantA = { ecoleId: ecoleId() };
     const tenantB = { ecoleId: ecoleId() };
 
-    await runWithTenant(tenantA, () => service.changeParametre({ mode: 'forfait' as any, montantUnitaire: 1000 }));
-    await runWithTenant(tenantB, () => service.changeParametre({ mode: 'usage_eleve' as any, montantUnitaire: 2000 }));
+    await runWithTenant(tenantA, () =>
+      service.changeParametre({
+        mode: FacturationMode.FORFAIT,
+        montantUnitaire: 1000,
+      }),
+    );
+    await runWithTenant(tenantB, () =>
+      service.changeParametre({
+        mode: FacturationMode.USAGE_ELEVE,
+        montantUnitaire: 2000,
+      }),
+    );
 
-    const actifA = await runWithTenant(tenantA, () => service.getParametreActif());
-    const actifB = await runWithTenant(tenantB, () => service.getParametreActif());
+    const actifA = await runWithTenant(tenantA, () =>
+      service.getParametreActif(),
+    );
+    const actifB = await runWithTenant(tenantB, () =>
+      service.getParametreActif(),
+    );
 
     expect(actifA?.mode).toBe('forfait');
     expect(actifB?.mode).toBe('usage_eleve');

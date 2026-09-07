@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import PDFDocument from 'pdfkit';
-import { Connection, Model } from 'mongoose';
+import { Connection, Model, Types } from 'mongoose';
 import { ArrearsService } from '../arrears/arrears.service';
 import { AuditService } from '../audit/audit.service';
 import { BillingService } from '../billing/billing.service';
@@ -17,8 +17,22 @@ import {
 import { runWithMongoTransactionFallback } from '../common/utils/mongo-transaction.util';
 import { SettingsService } from '../settings/settings.service';
 import { EcolesService } from '../ecoles/ecoles.service';
+import { PopulatedInvoiceLean } from '../common/types/populated-refs.types';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { Payment, PaymentDocument } from './schemas/payment.schema';
+
+// Shape of a receipt after findReceiptById()'s deep populate + lean() +
+// snapshot merge - see populated-refs.types.ts for why this is asserted
+// once at the query boundary instead of threading `any` through callers.
+export type ReceiptInvoiceLean = PopulatedInvoiceLean;
+export interface ReceiptPaymentLean {
+  _id: Types.ObjectId;
+  receiptNumber?: string;
+  amount?: number;
+  paidAt?: Date;
+  schoolYearId?: string;
+  invoiceId?: ReceiptInvoiceLean | null;
+}
 
 @Injectable()
 export class PaymentsService {
@@ -70,12 +84,12 @@ export class PaymentsService {
         .lean()
         .exec();
       const currentFeesPaidBefore = previousPayments.reduce(
-        (sum, payment: any) =>
+        (sum, payment) =>
           sum +
           (payment.allocation ?? [])
-            .filter((item: any) => item.type === 'current_fees')
+            .filter((item) => item.type === 'current_fees')
             .reduce(
-              (allocationSum: number, item: any) =>
+              (allocationSum: number, item) =>
                 allocationSum + Number(item.amount ?? 0),
               0,
             ),
@@ -201,8 +215,8 @@ export class PaymentsService {
     });
   }
 
-  async findReceiptById(id: string) {
-    const payment = await this.paymentModel
+  async findReceiptById(id: string): Promise<ReceiptPaymentLean> {
+    const payment = (await this.paymentModel
       .findById(id)
       .populate({
         path: 'invoiceId',
@@ -216,11 +230,11 @@ export class PaymentsService {
         },
       })
       .lean()
-      .exec();
+      .exec()) as ReceiptPaymentLean | null;
     if (!payment) {
       throw new NotFoundException('Recu introuvable');
     }
-    const enrollment = (payment.invoiceId as any)?.enrollmentId;
+    const enrollment = payment.invoiceId?.enrollmentId;
     if (enrollment) {
       if (enrollment.studentSnapshot) {
         enrollment.studentId = {
@@ -273,7 +287,10 @@ export class PaymentsService {
       .exec();
   }
 
-  getReceiptAmounts(invoice: any, receiptMode: ReceiptMode) {
+  getReceiptAmounts(
+    invoice: ReceiptInvoiceLean | null | undefined,
+    receiptMode: ReceiptMode,
+  ) {
     const registrationFee = Math.max(Number(invoice?.registrationFee ?? 0), 0);
     const tuitionFee = Math.max(Number(invoice?.tuitionFee ?? 0), 0);
     const discountAmount = Math.max(Number(invoice?.discountAmount ?? 0), 0);
@@ -313,12 +330,12 @@ export class PaymentsService {
     const receipt = await this.findReceiptById(id);
     const chunks: Buffer[] = [];
     const doc = new PDFDocument({ margin: 24, size: 'A4' });
-    doc.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
 
     const storedSchoolName = await this.ecolesService.getCurrentSchoolName();
     const schoolName =
       storedSchoolName || process.env.SCHOOL_NAME || "Nom de l'école";
-    const invoice = receipt.invoiceId as any;
+    const invoice = receipt.invoiceId;
     const enrollment = invoice?.enrollmentId;
     const student = enrollment?.studentId;
     const schoolYearLabel = enrollment?.schoolYearId?.label ?? '-';
@@ -345,7 +362,7 @@ export class PaymentsService {
     // what the HTML page shows for the same receipt.
     const receiptSummary = this.getReceiptAmounts(invoice, receiptMode);
 
-    const rows = [
+    const rows: Array<[string, string | number]> = [
       ['Référence ou Numéro de reçu', receipt.receiptNumber ?? '-'],
       ['Année scolaire', schoolYearLabel],
       ['Nom et prénoms de l’élève', studentFullName],

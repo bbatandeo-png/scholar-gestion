@@ -50,7 +50,7 @@ export class LevelsController {
     const levels = await this.levelsService.listForSchoolYear(String(year._id));
     const buffer = buildExcelBuffer(
       'Niveaux',
-      levels.map((item: any) => ({
+      levels.map((item) => ({
         code: item.code,
         libelle: item.label,
         ordre: item.sortOrder,
@@ -80,8 +80,12 @@ export class LevelsController {
         String(level._id),
       );
       setFlash(req, 'success', 'Niveau enregistre');
-    } catch (error: any) {
-      if (error?.code === 11000) {
+    } catch (error) {
+      const isDuplicateKey =
+        typeof error === 'object' &&
+        error !== null &&
+        (error as { code?: number }).code === 11000;
+      if (isDuplicateKey) {
         setFlash(
           req,
           'error',

@@ -1,16 +1,42 @@
+import { Connection, Model } from 'mongoose';
 import { ReceiptMode } from '../common/enums/domain.enums';
+import { ArrearsService } from '../arrears/arrears.service';
+import { AuditService } from '../audit/audit.service';
+import { BillingService } from '../billing/billing.service';
+import { EcolesService } from '../ecoles/ecoles.service';
+import { SettingsService } from '../settings/settings.service';
 import { PaymentsService } from './payments.service';
+import { PaymentDocument } from './schemas/payment.schema';
+
+// Every test below only exercises one or two of PaymentsService's 7
+// constructor dependencies - this builds a fully-stubbed instance and lets
+// each test override just the mocks it actually cares about, instead of
+// repeating 7 "{} as any" placeholders (and the associated lint noise) at
+// every call site.
+function createService(
+  overrides: {
+    paymentModel?: unknown;
+    billingService?: unknown;
+    arrearsService?: unknown;
+    settingsService?: unknown;
+    ecolesService?: unknown;
+    auditService?: unknown;
+    connection?: unknown;
+  } = {},
+): PaymentsService {
+  return new PaymentsService(
+    (overrides.paymentModel ?? {}) as unknown as Model<PaymentDocument>,
+    (overrides.billingService ?? {}) as unknown as BillingService,
+    (overrides.arrearsService ?? {}) as unknown as ArrearsService,
+    (overrides.settingsService ?? {}) as unknown as SettingsService,
+    (overrides.ecolesService ?? {}) as unknown as EcolesService,
+    (overrides.auditService ?? {}) as unknown as AuditService,
+    (overrides.connection ?? {}) as unknown as Connection,
+  );
+}
 
 describe('PaymentsService receipt amounts', () => {
-  const service = new PaymentsService(
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-  );
+  const service = createService();
   const invoice = {
     tuitionFee: 80000,
     registrationFee: 6000,
@@ -40,19 +66,13 @@ describe('PaymentsService receipt amounts', () => {
   });
 
   it('renders the two receipt copies on a single A4 page', async () => {
-    const pdfService = new PaymentsService(
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {
+    const pdfService = createService({
+      ecolesService: {
         getCurrentSchoolName: jest
           .fn()
           .mockResolvedValue('Complexe scolaire Dunya'),
-      } as any,
-      {} as any,
-      {} as any,
-    );
+      },
+    });
     pdfService.findReceiptById = jest.fn().mockResolvedValue({
       receiptNumber: 'RC-TEST-001',
       amount: 10000,

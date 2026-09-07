@@ -317,7 +317,7 @@ export class EcolesService {
         path.join(process.cwd(), 'package.json'),
         'utf8',
       );
-      return JSON.parse(pkg)?.version;
+      return (JSON.parse(pkg) as { version?: string })?.version;
     } catch {
       return undefined;
     }

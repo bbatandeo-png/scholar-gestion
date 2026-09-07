@@ -3,7 +3,7 @@ import { Request } from 'express';
 // multer ships its own types since v2, but this project has no @types/multer
 // and noImplicitAny is off - `require` keeps this untyped rather than
 // fighting a module declaration that isn't installed.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+// eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-assignment
 const multer = require('multer');
 
 // A single shared instance, mounted as Express-level middleware (see
@@ -26,6 +26,7 @@ const multer = require('multer');
 // be consumed once, and this middleware already consumes it. Read the
 // uploaded file via pickUploadedFile(req, fieldname) instead of
 // @UploadedFile().
+// eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
 export const multipartUpload = multer({ storage: multer.memoryStorage() });
 
 export function pickUploadedFile(

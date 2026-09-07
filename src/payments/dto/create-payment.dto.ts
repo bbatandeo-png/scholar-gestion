@@ -1,5 +1,12 @@
 import { Type } from 'class-transformer';
-import { IsEnum, IsMongoId, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsMongoId,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 import { PaymentMethod } from '../../common/enums/domain.enums';
 
 export class CreatePaymentDto {

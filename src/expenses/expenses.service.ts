@@ -20,6 +20,22 @@ import { SchoolYearStatus } from '../common/enums/domain.enums';
 
 type PdfDocumentInstance = InstanceType<typeof PDFDocument>;
 
+// Shape of an Expense after .populate('categoryId').lean() - Mongoose's own
+// populate typings don't reflect this, so callers assert to it once at the
+// query boundary (list()/findById()) instead of treating the result as any.
+export interface PopulatedExpenseLean {
+  _id?: unknown;
+  orderNumber?: string;
+  expenseDate?: Date;
+  label?: string;
+  amount?: number;
+  beneficiary?: string;
+  categoryId?: { _id?: unknown; name?: string } | string | null;
+  lastModificationReason?: string;
+  modifiedAt?: Date;
+  isCancelled?: boolean;
+}
+
 @Injectable()
 export class ExpensesService {
   constructor(
@@ -97,12 +113,12 @@ export class ExpensesService {
       criteria.categoryId = categoryId;
     }
 
-    return this.expenseModel
+    return (await this.expenseModel
       .find(criteria)
       .populate('categoryId')
       .sort({ expenseDate: -1, createdAt: -1 })
       .lean()
-      .exec();
+      .exec()) as PopulatedExpenseLean[];
   }
 
   async create(
@@ -148,11 +164,11 @@ export class ExpensesService {
   }
 
   async findById(id: string, schoolYearId?: string) {
-    const expense = await this.expenseModel
+    const expense = (await this.expenseModel
       .findOne({ _id: id, ...(schoolYearId ? { schoolYearId } : {}) })
       .populate('categoryId')
       .lean()
-      .exec();
+      .exec()) as PopulatedExpenseLean | null;
     if (!expense) {
       throw new NotFoundException('Depense introuvable');
     }
@@ -179,7 +195,15 @@ export class ExpensesService {
       modificationReason?: string;
     },
   ) {
-    const updatePayload: any = {
+    const updatePayload: {
+      expenseDate: Date;
+      label: string;
+      amount: number;
+      beneficiary: string;
+      categoryId: string;
+      lastModificationReason?: string;
+      modifiedAt?: Date;
+    } = {
       expenseDate: new Date(dto.expenseDate),
       label: dto.label.trim(),
       amount: Number(dto.amount),
@@ -272,14 +296,14 @@ export class ExpensesService {
   }
 
   async renderPdf(
-    expenses: any[],
+    expenses: PopulatedExpenseLean[],
     categoryName?: string,
     schoolYearLabel?: string,
   ) {
     const schoolName = await this.ecolesService.getCurrentSchoolName();
     const chunks: Buffer[] = [];
     const doc = new PDFDocument({ margin: 40, size: 'A4' });
-    doc.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
 
     return await new Promise<Buffer>((resolve) => {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
@@ -334,7 +358,7 @@ export class ExpensesService {
         doc.x = startX;
       };
 
-      const drawRow = (values: any[]) => {
+      const drawRow = (values: Array<string | number>) => {
         const y = doc.y;
         let x = startX;
 
@@ -355,20 +379,24 @@ export class ExpensesService {
       drawHeader();
       let totalAmount = 0;
 
-      expenses.forEach((item: any) => {
+      expenses.forEach((item) => {
         if (doc.y + rowHeight > bottomLimit) {
           doc.addPage();
           this.renderPdfHeader(doc, schoolName, schoolYearLabel);
           drawHeader();
         }
 
-        const values = [
+        const category =
+          typeof item.categoryId === 'object' ? item.categoryId : null;
+        const values: Array<string | number> = [
           item.orderNumber ?? '',
-          new Date(item.expenseDate).toLocaleDateString('fr-FR'),
+          item.expenseDate
+            ? new Date(item.expenseDate).toLocaleDateString('fr-FR')
+            : '',
           item.label ?? '',
-          (Number(item.amount) ?? 0).toFixed(2),
+          Number(item.amount ?? 0).toFixed(2),
           item.beneficiary ?? '',
-          item.categoryId?.name ?? '',
+          category?.name ?? '',
         ];
 
         drawRow(values);
@@ -387,7 +415,7 @@ export class ExpensesService {
   }
 
   async getTotals(schoolYearId: string) {
-    const [result] = await this.expenseModel.aggregate([
+    const [result] = await this.expenseModel.aggregate<{ total: number }>([
       {
         $match: {
           schoolYearId: new Types.ObjectId(schoolYearId),

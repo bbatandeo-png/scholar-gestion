@@ -1,4 +1,10 @@
-import { IsBooleanString, IsEnum, IsMongoId, IsNumber, IsOptional } from 'class-validator';
+import {
+  IsBooleanString,
+  IsEnum,
+  IsMongoId,
+  IsNumber,
+  IsOptional,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { EnrollmentType } from '../../common/enums/domain.enums';
 

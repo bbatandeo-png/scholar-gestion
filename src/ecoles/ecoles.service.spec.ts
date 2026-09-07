@@ -68,8 +68,12 @@ describe('EcolesService.onboardNewEcole', () => {
     // EcoleModulesService.activate() (called from onboardNewEcole when a
     // module checkbox is ticked at creation time).
     await Promise.all([
-      moduleRef.get(getModelToken(EcoleModule.name)).createCollection(),
-      moduleRef.get(getModelToken(AuditLog.name)).createCollection(),
+      moduleRef
+        .get<Model<unknown>>(getModelToken(EcoleModule.name))
+        .createCollection(),
+      moduleRef
+        .get<Model<unknown>>(getModelToken(AuditLog.name))
+        .createCollection(),
     ]);
   });
 
@@ -129,7 +133,7 @@ describe('EcolesService.onboardNewEcole', () => {
           nom: 'Deuxieme Ecole',
           adminName: 'Admin Deux',
           adminEmail: 'deja-utilise@example.com',
-        } as any,
+        },
         actorId(),
       ),
     ).rejects.toThrow('deja utilise');
@@ -157,7 +161,7 @@ describe('EcolesService.onboardNewEcole', () => {
           adminEmail: 'avec-modules@example.com',
           activateFinance: 'true',
           activateBulletins: 'true',
-        } as any,
+        },
         actor,
       ),
     );
@@ -210,8 +214,12 @@ describe('EcolesService.resetAdminPassword', () => {
     userModel = moduleRef.get(getModelToken(User.name));
 
     await Promise.all([
-      moduleRef.get(getModelToken(EcoleModule.name)).createCollection(),
-      moduleRef.get(getModelToken(AuditLog.name)).createCollection(),
+      moduleRef
+        .get<Model<unknown>>(getModelToken(EcoleModule.name))
+        .createCollection(),
+      moduleRef
+        .get<Model<unknown>>(getModelToken(AuditLog.name))
+        .createCollection(),
     ]);
   });
 

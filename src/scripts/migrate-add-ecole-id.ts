@@ -210,7 +210,11 @@ export async function migrateAddEcoleId(
     // script is meant to run once against a single-tenant database, and a
     // partial prior run (e.g. an app boot that seeded a placeholder ecole
     // before crashing) must not result in a second, empty ecole here.
-    let ecoleId = (await db.collection('ecoles').findOne({}, { sort: { dateInscription: 1 } }))?._id;
+    let ecoleId = (
+      await db
+        .collection('ecoles')
+        .findOne({}, { sort: { dateInscription: 1 } })
+    )?._id;
     report.ecoleName = ecoleName;
 
     if (!ecoleId && apply) {

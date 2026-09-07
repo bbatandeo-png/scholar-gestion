@@ -43,7 +43,7 @@ export class SchoolYearsController {
     const schoolYears = await this.schoolYearsService.list();
     const buffer = buildExcelBuffer(
       'Annees_scolaires',
-      schoolYears.map((item: any) => ({
+      schoolYears.map((item) => ({
         libelle: item.label,
         date_debut: item.startDate,
         date_fin: item.endDate,
@@ -72,8 +72,12 @@ export class SchoolYearsController {
     try {
       await this.schoolYearsService.create(dto);
       setFlash(req, 'success', 'Annee scolaire enregistree');
-    } catch (error: any) {
-      if (error?.code === 11000) {
+    } catch (error) {
+      const isDuplicateKey =
+        typeof error === 'object' &&
+        error !== null &&
+        (error as { code?: number }).code === 11000;
+      if (isDuplicateKey) {
         setFlash(
           req,
           'error',

@@ -4,7 +4,6 @@ import {
   Controller,
   Get,
   Post,
-  Query,
   Render,
   Req,
   Res,
@@ -30,6 +29,14 @@ import { ValidatePromotionsDto } from './dto/validate-promotions.dto';
 import { PromotionsService } from './promotions.service';
 import { Student, StudentDocument } from '../students/schemas/student.schema';
 import { SessionUser } from '../common/types/session-user.type';
+import { toDisplayString } from '../common/utils/safe-string.util';
+
+// FileInterceptor's own upload typing needs @types/multer, not installed in
+// this project (see multer.util.ts) - this is the minimal shape actually
+// read from the uploaded file here.
+interface UploadedExcelFile {
+  buffer?: Buffer;
+}
 
 // Not gated here by @RequireModule('FINANCE'): the FINANCE check lives
 // inside PromotionsService.validate() itself instead (see that file), since
@@ -78,7 +85,7 @@ export class PromotionsController {
   @Render('promotions/prepare')
   async prepareImport(
     @Body() dto: PreparePromotionsDto,
-    @UploadedFile() file: any,
+    @UploadedFile() file: UploadedExcelFile,
   ) {
     if (!file?.buffer) {
       throw new BadRequestException('Fichier Excel requis');
@@ -95,14 +102,14 @@ export class PromotionsController {
     );
 
     const levelByLabel = new Map(
-      levels.map((item: any) => [String(item.label).toLowerCase(), item]),
+      levels.map((item) => [item.label.toLowerCase(), item]),
     );
     const studentByMatricule = new Map(
-      students.map((item: any) => [String(item.matricule).toLowerCase(), item]),
+      students.map((item) => [item.matricule.toLowerCase(), item]),
     );
     const candidateByStudentId = new Map(
-      candidates.map((item: any) => [
-        String(item.studentId?._id ?? item.studentId),
+      candidates.map((item) => [
+        toDisplayString(item.studentId?._id ?? item.studentId),
         item,
       ]),
     );
@@ -133,14 +140,16 @@ export class PromotionsController {
         continue;
       }
 
-      importedByEnrollmentId.set(String(candidate._id), {
+      importedByEnrollmentId.set(toDisplayString(candidate._id), {
         decision,
         targetLevelId: String(level._id),
       });
     }
 
-    const enrichedCandidates = candidates.map((candidate: any) => {
-      const imported = importedByEnrollmentId.get(String(candidate._id));
+    const enrichedCandidates = candidates.map((candidate) => {
+      const imported = importedByEnrollmentId.get(
+        toDisplayString(candidate._id),
+      );
       return {
         ...candidate,
         importedDecision: imported?.decision,

@@ -7,7 +7,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { Connection, Model } from 'mongoose';
+import { ClientSession, Connection, Model } from 'mongoose';
 import { ArrearsService } from '../arrears/arrears.service';
 import { AuditService } from '../audit/audit.service';
 import { BillingService } from '../billing/billing.service';
@@ -19,6 +19,8 @@ import {
   Role,
 } from '../common/enums/domain.enums';
 import { runWithMongoTransactionFallback } from '../common/utils/mongo-transaction.util';
+import { PopulatedEnrollmentLean } from '../common/types/populated-refs.types';
+import { toDisplayString } from '../common/utils/safe-string.util';
 import { LevelsService } from '../levels/levels.service';
 import { SchoolYearsService } from '../school-years/school-years.service';
 import { StudentsService } from '../students/students.service';
@@ -27,6 +29,10 @@ import { CreateEnrollmentDto } from './dto/create-enrollment.dto';
 import { Enrollment, EnrollmentDocument } from './schemas/enrollment.schema';
 
 function getAuditActionLabel(action: string) {
+  // action is deliberately a bare string, not AuditAction: the default
+  // branch below also has to handle audit actions outside that enum -
+  // string equality against the enum's (string) values is safe here.
+  /* eslint-disable @typescript-eslint/no-unsafe-enum-comparison */
   switch (action) {
     case AuditAction.DISCOUNT_APPLIED:
       return 'Remise appliquée';
@@ -37,6 +43,19 @@ function getAuditActionLabel(action: string) {
     default:
       return action.replace(/_/g, ' ');
   }
+  /* eslint-enable @typescript-eslint/no-unsafe-enum-comparison */
+}
+
+// Audit details are stored as an untyped bag (Record<string, unknown>), so a
+// bare String(x) can't be proven safe by the type checker and would render
+// "[object Object]" if a value ever isn't a primitive - format defensively
+// instead of asserting a shape we don't actually control here.
+function formatAuditValue(value: unknown): string {
+  return typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+    ? String(value)
+    : JSON.stringify(value);
 }
 
 function buildAuditDetailsSummary(details?: Record<string, unknown>) {
@@ -51,7 +70,7 @@ function buildAuditDetailsSummary(details?: Record<string, unknown>) {
   }
 
   if (details.reason) {
-    items.push(`Motif : ${String(details.reason)}`);
+    items.push(`Motif : ${formatAuditValue(details.reason)}`);
   }
 
   if (
@@ -59,7 +78,7 @@ function buildAuditDetailsSummary(details?: Record<string, unknown>) {
     details.registrationFeeAfter !== undefined
   ) {
     items.push(
-      `Frais d'inscription : ${String(details.registrationFeeBefore)} → ${String(details.registrationFeeAfter)}`,
+      `Frais d'inscription : ${formatAuditValue(details.registrationFeeBefore)} → ${formatAuditValue(details.registrationFeeAfter)}`,
     );
   }
 
@@ -68,7 +87,7 @@ function buildAuditDetailsSummary(details?: Record<string, unknown>) {
     details.discountAmountAfter !== undefined
   ) {
     items.push(
-      `Remise : ${String(details.discountAmountBefore)} → ${String(details.discountAmountAfter)}`,
+      `Remise : ${formatAuditValue(details.discountAmountBefore)} → ${formatAuditValue(details.discountAmountAfter)}`,
     );
   }
 
@@ -77,12 +96,12 @@ function buildAuditDetailsSummary(details?: Record<string, unknown>) {
     details.paidAmountAfter !== undefined
   ) {
     items.push(
-      `Montant payé : ${String(details.paidAmountBefore)} → ${String(details.paidAmountAfter)}`,
+      `Montant payé : ${formatAuditValue(details.paidAmountBefore)} → ${formatAuditValue(details.paidAmountAfter)}`,
     );
   }
 
   if (details.arrearsAmount !== undefined) {
-    items.push(`Impayés reportés : ${String(details.arrearsAmount)}`);
+    items.push(`Impayés reportés : ${formatAuditValue(details.arrearsAmount)}`);
   }
 
   return items;
@@ -104,7 +123,15 @@ export class EnrollmentsService {
     private readonly usersService: UsersService,
   ) {}
 
-  async list(schoolYearId: string) {
+  async list(schoolYearId: string): Promise<
+    Array<
+      PopulatedEnrollmentLean & {
+        type?: EnrollmentType;
+        status?: EnrollmentStatus;
+        finalDecision?: FinalDecision;
+      }
+    >
+  > {
     return this.enrollmentModel
       .find({ schoolYearId })
       .populate({ path: 'studentId', select: 'matricule lastname firstname' })
@@ -112,7 +139,15 @@ export class EnrollmentsService {
       .populate({ path: 'levelId', select: 'label' })
       .sort({ createdAt: -1 })
       .lean()
-      .exec();
+      .exec() as unknown as Promise<
+      Array<
+        PopulatedEnrollmentLean & {
+          type?: EnrollmentType;
+          status?: EnrollmentStatus;
+          finalDecision?: FinalDecision;
+        }
+      >
+    >;
   }
 
   async listPaginated(schoolYearId: string, page: number, pageSize: number) {
@@ -140,16 +175,20 @@ export class EnrollmentsService {
     };
   }
 
-  async findById(
-    id: string,
-  ): Promise<{ enrollment: any; invoice: any; auditLogs: any[] }> {
-    const enrollment = await this.enrollmentModel
+  async findById(id: string): Promise<{
+    enrollment: PopulatedEnrollmentLean;
+    invoice: Awaited<ReturnType<BillingService['findInvoiceByEnrollment']>>;
+    auditLogs: Awaited<
+      ReturnType<EnrollmentsService['getAuditHistoryForEnrollment']>
+    >;
+  }> {
+    const enrollment = (await this.enrollmentModel
       .findById(id)
       .populate('studentId')
       .populate('schoolYearId')
       .populate('levelId')
       .lean()
-      .exec();
+      .exec()) as PopulatedEnrollmentLean | null;
     if (!enrollment) {
       throw new NotFoundException('Inscription introuvable');
     }
@@ -191,14 +230,17 @@ export class EnrollmentsService {
     }));
   }
 
-  async findStudentHistory(studentId: string, schoolYearId?: string) {
+  async findStudentHistory(
+    studentId: string,
+    schoolYearId?: string,
+  ): Promise<PopulatedEnrollmentLean[]> {
     return this.enrollmentModel
       .find({ studentId, ...(schoolYearId ? { schoolYearId } : {}) })
       .populate('schoolYearId')
       .populate('levelId')
       .sort({ createdAt: -1 })
       .lean()
-      .exec();
+      .exec() as unknown as Promise<PopulatedEnrollmentLean[]>;
   }
 
   async previewOpenArrears(studentId: string) {
@@ -207,7 +249,7 @@ export class EnrollmentsService {
 
   private async materializeOutstandingArrearsForStudent(
     studentId: string,
-    session?: any,
+    session?: ClientSession,
   ) {
     const enrollments = await this.enrollmentModel
       .find({ studentId })
@@ -225,7 +267,7 @@ export class EnrollmentsService {
         session,
       );
       const carriedRemaining = carriedArrears.reduce(
-        (sum: number, arrear: any) => sum + Number(arrear.amountRemaining ?? 0),
+        (sum: number, arrear) => sum + Number(arrear.amountRemaining ?? 0),
         0,
       );
       const currentFeesOutstanding = invoice
@@ -373,7 +415,7 @@ export class EnrollmentsService {
 
     const history = await this.findStudentHistory(studentId);
     const previousEnrollmentId = history[0]?._id
-      ? String(history[0]._id)
+      ? toDisplayString(history[0]._id)
       : undefined;
 
     return this.createEnrollment(
@@ -564,7 +606,7 @@ export class EnrollmentsService {
   async closeEnrollmentWithDecision(
     enrollmentId: string,
     finalDecision: FinalDecision,
-    session?: any,
+    session?: ClientSession,
   ) {
     return this.enrollmentModel.findByIdAndUpdate(
       enrollmentId,

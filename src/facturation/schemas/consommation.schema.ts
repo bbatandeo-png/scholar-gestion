@@ -19,13 +19,28 @@ export class Consommation {
   @Prop({ required: true, enum: Object.values(TypeEvenementConsommation) })
   typeEvenement: TypeEvenementConsommation;
 
-  @Prop({ type: SchemaTypes.ObjectId, ref: 'Student', required: true, index: true })
+  @Prop({
+    type: SchemaTypes.ObjectId,
+    ref: 'Student',
+    required: true,
+    index: true,
+  })
   eleveId: string;
 
-  @Prop({ type: SchemaTypes.ObjectId, ref: 'SchoolYear', required: true, index: true })
+  @Prop({
+    type: SchemaTypes.ObjectId,
+    ref: 'SchoolYear',
+    required: true,
+    index: true,
+  })
   anneeScolaireId: string;
 
-  @Prop({ type: SchemaTypes.ObjectId, ref: 'Facture', default: null, index: true })
+  @Prop({
+    type: SchemaTypes.ObjectId,
+    ref: 'Facture',
+    default: null,
+    index: true,
+  })
   factureId: string | null;
 }
 
@@ -37,7 +52,9 @@ ConsommationSchema.index(
   { ecoleId: 1, eleveId: 1, periode: 1 },
   {
     unique: true,
-    partialFilterExpression: { typeEvenement: TypeEvenementConsommation.BULLETIN },
+    partialFilterExpression: {
+      typeEvenement: TypeEvenementConsommation.BULLETIN,
+    },
   },
 );
 // One billable row per eleve per school year, regardless of how many
@@ -46,6 +63,8 @@ ConsommationSchema.index(
   { ecoleId: 1, eleveId: 1, anneeScolaireId: 1 },
   {
     unique: true,
-    partialFilterExpression: { typeEvenement: TypeEvenementConsommation.USAGE_ELEVE },
+    partialFilterExpression: {
+      typeEvenement: TypeEvenementConsommation.USAGE_ELEVE,
+    },
   },
 );

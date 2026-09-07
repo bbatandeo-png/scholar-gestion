@@ -5,13 +5,11 @@ describe('EnrollmentsService', () => {
   it('requiert un motif pour une modification financiere sensible', async () => {
     const service: any = {
       enrollmentModel: {
-        findById: jest
-          .fn()
-          .mockReturnValue({
-            exec: jest
-              .fn()
-              .mockResolvedValue({ _id: 'enr-1', schoolYearId: 'year-1' }),
-          }),
+        findById: jest.fn().mockReturnValue({
+          exec: jest
+            .fn()
+            .mockResolvedValue({ _id: 'enr-1', schoolYearId: 'year-1' }),
+        }),
       },
       schoolYearsService: {
         assertWritable: jest.fn().mockResolvedValue({ _id: 'year-1' }),
@@ -47,7 +45,12 @@ describe('EnrollmentsService', () => {
     const createEnrollment = jest
       .fn()
       .mockResolvedValue({ enrollmentId: 'enr-1' });
-    const service: any = {
+    const service: {
+      studentsService: { findById: jest.Mock };
+      findStudentHistory: jest.Mock;
+      createEnrollment: jest.Mock;
+      reenrollStudent: EnrollmentsService['reenrollStudent'];
+    } = {
       studentsService: {
         findById: jest.fn().mockResolvedValue({ _id: 'student-1' }),
       },
@@ -55,6 +58,9 @@ describe('EnrollmentsService', () => {
         .fn()
         .mockResolvedValue([{ _id: 'prev-enrollment' }]),
       createEnrollment,
+      // Always invoked below as service.reenrollStudent(...), so `this` is
+      // bound normally at call time - never detached from `service`.
+      // eslint-disable-next-line @typescript-eslint/unbound-method
       reenrollStudent: EnrollmentsService.prototype.reenrollStudent,
     };
 

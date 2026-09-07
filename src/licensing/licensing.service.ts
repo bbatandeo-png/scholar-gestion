@@ -45,7 +45,8 @@ export class LicensingService {
   private readRatchetFile(): Date | null {
     try {
       const raw = fs.readFileSync(this.ratchetFilePath(), 'utf8');
-      const date = new Date(JSON.parse(raw)?.maxSeenIso);
+      const parsed = JSON.parse(raw) as { maxSeenIso?: string };
+      const date = new Date(parsed?.maxSeenIso ?? NaN);
       return Number.isNaN(date.getTime()) ? null : date;
     } catch {
       return null;

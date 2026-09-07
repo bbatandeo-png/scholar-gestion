@@ -79,7 +79,7 @@ export class ArrearsController {
     const arrears = await this.arrearsService.list(String(year._id));
     const buffer = buildExcelBuffer(
       'Impayes',
-      arrears.map((item: any) => ({
+      arrears.map((item) => ({
         eleve:
           `${item.studentId?.lastname ?? ''} ${item.studentId?.firstname ?? ''}`.trim(),
         matricule: item.studentId?.matricule ?? '',

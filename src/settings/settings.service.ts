@@ -51,7 +51,9 @@ export class SettingsService {
     }
   }
 
-  async getPaymentAllocationRule(schoolYearId?: string) {
+  async getPaymentAllocationRule(
+    schoolYearId?: string,
+  ): Promise<PaymentAllocationRule> {
     const setting = await this.settingModel
       .findOne({
         key: SettingKey.PAYMENT_ALLOCATION_RULE,
@@ -132,7 +134,7 @@ export class SettingsService {
     );
   }
 
-  async getReceiptMode(schoolYearId?: string) {
+  async getReceiptMode(schoolYearId?: string): Promise<ReceiptMode> {
     const setting = await this.settingModel
       .findOne({
         key: SettingKey.RECEIPT_MODE,

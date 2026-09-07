@@ -6,6 +6,6 @@ export function setFlash(
   message: string,
 ) {
   if (req.session) {
-    (req.session as any).flash = { type, message };
+    req.session.flash = { type, message };
   }
 }

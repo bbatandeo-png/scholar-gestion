@@ -14,9 +14,7 @@ function sign(payloadB64: string): string {
 }
 
 export function createLicenseToken(payload: LicensePayload): string {
-  const payloadB64 = Buffer.from(JSON.stringify(payload)).toString(
-    'base64url',
-  );
+  const payloadB64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
   return `${payloadB64}.${sign(payloadB64)}`;
 }
 
@@ -32,26 +30,24 @@ export function verifyLicenseToken(rawToken: string): LicensePayload | null {
 
   const expected = Buffer.from(sign(payloadB64));
   const actual = Buffer.from(signature);
-  if (
-    expected.length !== actual.length ||
-    !timingSafeEqual(expected, actual)
-  ) {
+  if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
     return null;
   }
 
   try {
-    const parsed = JSON.parse(
+    const parsed: unknown = JSON.parse(
       Buffer.from(payloadB64, 'base64url').toString('utf8'),
     );
+    const candidate = parsed as Partial<LicensePayload> | null;
     if (
-      typeof parsed?.ecoleId !== 'string' ||
-      typeof parsed?.issuedAt !== 'string' ||
-      typeof parsed?.expiresAt !== 'string' ||
-      Number.isNaN(new Date(parsed.expiresAt).getTime())
+      typeof candidate?.ecoleId !== 'string' ||
+      typeof candidate?.issuedAt !== 'string' ||
+      typeof candidate?.expiresAt !== 'string' ||
+      Number.isNaN(new Date(candidate.expiresAt).getTime())
     ) {
       return null;
     }
-    return parsed as LicensePayload;
+    return candidate as LicensePayload;
   } catch {
     return null;
   }

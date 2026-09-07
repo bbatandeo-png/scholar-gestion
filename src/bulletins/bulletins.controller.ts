@@ -33,6 +33,14 @@ import { ResolveRowDto } from './dto/resolve-row.dto';
 import { SaveDisciplineDto } from './dto/save-discipline.dto';
 import { SessionUser } from '../common/types/session-user.type';
 
+// FileInterceptor's own upload typing needs @types/multer, not installed in
+// this project (see multer.util.ts) - this is the minimal shape actually
+// read from the uploaded file here.
+interface UploadedExcelFile {
+  buffer?: Buffer;
+  originalname?: string;
+}
+
 @Controller('/bulletins')
 @UseGuards(AuthenticatedGuard, RolesGuard, ModuleGuard)
 @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT, Role.AUDITEUR)
@@ -107,7 +115,7 @@ export class BulletinsController {
   async importFile(
     @Param('id') id: string,
     @Body() dto: ImportSessionDto,
-    @UploadedFile() file: any,
+    @UploadedFile() file: UploadedExcelFile,
     @Req() req: Request,
     @Res() res: Response,
   ) {

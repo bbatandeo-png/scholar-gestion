@@ -5,6 +5,7 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { Request } from 'express';
 import { EcoleModulesService } from '../../ecole-modules/ecole-modules.service';
 import { REQUIRE_MODULE_KEY } from '../decorators/require-module.decorator';
 
@@ -25,7 +26,7 @@ export class ModuleGuard implements CanActivate {
       return true;
     }
 
-    const req = context.switchToHttp().getRequest();
+    const req = context.switchToHttp().getRequest<Request>();
 
     // Read-only after deactivation: a deactivated module freezes further
     // writes but never hides/destroys already-entered data, so GET/HEAD
@@ -34,7 +35,7 @@ export class ModuleGuard implements CanActivate {
       return true;
     }
 
-    const ecoleId = req.session?.user?.ecoleId as string | null | undefined;
+    const ecoleId = req.session?.user?.ecoleId;
     if (!ecoleId) {
       // PLATFORM_ADMIN (or any session with no ecole) is not subject to
       // per-ecole module gating - not applicable, not a bypass to abuse.

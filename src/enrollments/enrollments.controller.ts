@@ -25,6 +25,7 @@ import { ModuleGuard } from '../common/guards/module.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { setFlash } from '../common/utils/flash.util';
 import { buildExcelBuffer } from '../common/utils/excel.util';
+import { toDisplayString } from '../common/utils/safe-string.util';
 import { CreateEnrollmentDto } from './dto/create-enrollment.dto';
 import { EnrollmentsService } from './enrollments.service';
 import { SessionUser } from '../common/types/session-user.type';
@@ -103,7 +104,7 @@ export class EnrollmentsController {
     const enrollments = await this.enrollmentsService.list(String(year._id));
     const buffer = buildExcelBuffer(
       'Inscriptions',
-      enrollments.map((item: any) => ({
+      enrollments.map((item) => ({
         eleve:
           `${item.studentId?.lastname ?? ''} ${item.studentId?.firstname ?? ''}`.trim(),
         matricule: item.studentId?.matricule ?? '',
@@ -155,21 +156,13 @@ export class EnrollmentsController {
   async detail(
     @Param('id') id: string,
     @Req() req: Request,
-  ): Promise<{
-    title: string;
-    enrollment: any;
-    invoice: any;
-    auditLogs: any[];
-    students: any[];
-    schoolYears: any[];
-    levels: any[];
-  }> {
+  ): Promise<Record<string, unknown>> {
     const detail = await this.enrollmentsService.findById(id);
     const selected = await this.schoolYearsService.resolveSelected(
       req.session.selectedSchoolYearId,
     );
     if (
-      String(
+      toDisplayString(
         detail.enrollment.schoolYearId?._id ?? detail.enrollment.schoolYearId,
       ) !== String(selected._id)
     ) {

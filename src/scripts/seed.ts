@@ -7,6 +7,7 @@ import { BillingService } from '../billing/billing.service';
 import { Level } from '../levels/schemas/level.schema';
 import {
   EcoleAccountStatus,
+  PaymentAllocationRule,
   Role,
   SchoolYearStatus,
 } from '../common/enums/domain.enums';
@@ -173,13 +174,13 @@ async function seedAcademicData(deps: {
   if (openYear) {
     for (const level of storedLevels) {
       await levelsService.enableForSchoolYear(
-        String((openYear as any)._id),
-        String((level as any)._id),
+        String(openYear._id),
+        String(level._id),
       );
       if (level.sortOrder <= 5) {
         await billingService.upsertFeeSchedule({
-          schoolYearId: String((openYear as any)._id),
-          levelId: String((level as any)._id),
+          schoolYearId: String(openYear._id),
+          levelId: String(level._id),
           registrationFee: 25000 + level.sortOrder * 1000,
           tuitionFee: 75000 + level.sortOrder * 5000,
         });
@@ -187,7 +188,9 @@ async function seedAcademicData(deps: {
     }
   }
 
-  await settingsService.setPaymentAllocationRule('arrears_first' as any);
+  await settingsService.setPaymentAllocationRule(
+    PaymentAllocationRule.ARREARS_FIRST,
+  );
 }
 
 if (require.main === module) {

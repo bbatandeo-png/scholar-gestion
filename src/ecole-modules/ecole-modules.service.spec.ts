@@ -1,12 +1,16 @@
 import { Test } from '@nestjs/testing';
 import { getModelToken, MongooseModule } from '@nestjs/mongoose';
-import { Types } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { startMongoReplSet } from '../../test/mongo-replset';
 import { runAsPlatformAdmin } from '../common/tenant/tenant-context';
 import { AuditService } from '../audit/audit.service';
 import { AuditLog, AuditLogSchema } from '../audit/schemas/audit-log.schema';
 import { EcoleModulesService } from './ecole-modules.service';
-import { EcoleModule, EcoleModuleSchema } from './schemas/ecole-module.schema';
+import {
+  EcoleModule,
+  EcoleModuleDocument,
+  EcoleModuleSchema,
+} from './schemas/ecole-module.schema';
 
 describe('EcoleModulesService', () => {
   let repl: Awaited<ReturnType<typeof startMongoReplSet>>;
@@ -32,8 +36,12 @@ describe('EcoleModulesService', () => {
     // inside activate()/deactivate() (EcoleModule itself, and AuditLog via
     // AuditService.log) before any transactional test runs.
     await Promise.all([
-      moduleRef.get(getModelToken(EcoleModule.name)).createCollection(),
-      moduleRef.get(getModelToken(AuditLog.name)).createCollection(),
+      moduleRef
+        .get<Model<unknown>>(getModelToken(EcoleModule.name))
+        .createCollection(),
+      moduleRef
+        .get<Model<unknown>>(getModelToken(AuditLog.name))
+        .createCollection(),
     ]);
   });
 
@@ -153,7 +161,9 @@ describe('EcoleModulesService', () => {
   });
 
   it("l'index partiel unique empeche deux lignes ouvertes pour le meme ecole+code", async () => {
-    const ecoleModuleModel = (service as any).ecoleModuleModel;
+    const ecoleModuleModel = (
+      service as unknown as { ecoleModuleModel: Model<EcoleModuleDocument> }
+    ).ecoleModuleModel;
     const ecole = ecoleId();
     const actor = actorId();
 

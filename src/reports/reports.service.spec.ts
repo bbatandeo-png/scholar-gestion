@@ -1,4 +1,42 @@
+import { Model } from 'mongoose';
 import { ReportsService } from './reports.service';
+import { Enrollment } from '../enrollments/schemas/enrollment.schema';
+import { Invoice } from '../billing/schemas/invoice.schema';
+import { Student } from '../students/schemas/student.schema';
+import { Level } from '../levels/schemas/level.schema';
+import { SchoolYear } from '../school-years/schemas/school-year.schema';
+import { Payment } from '../payments/schemas/payment.schema';
+import { EcolesService } from '../ecoles/ecoles.service';
+import { SettingsService } from '../settings/settings.service';
+
+// Every test below only exercises one or two of ReportsService's 8
+// constructor dependencies - this builds a fully-stubbed instance and lets
+// each test override just the mocks it actually cares about, instead of
+// repeating 8 "{} as any" placeholders (and the associated lint noise) at
+// every call site.
+function createService(
+  overrides: {
+    enrollmentModel?: unknown;
+    invoiceModel?: unknown;
+    studentModel?: unknown;
+    levelModel?: unknown;
+    schoolYearModel?: unknown;
+    paymentModel?: unknown;
+    ecolesService?: unknown;
+    settingsService?: unknown;
+  } = {},
+): ReportsService {
+  return new ReportsService(
+    (overrides.enrollmentModel ?? {}) as unknown as Model<Enrollment>,
+    (overrides.invoiceModel ?? {}) as unknown as Model<Invoice>,
+    (overrides.studentModel ?? {}) as unknown as Model<Student>,
+    (overrides.levelModel ?? {}) as unknown as Model<Level>,
+    (overrides.schoolYearModel ?? {}) as unknown as Model<SchoolYear>,
+    (overrides.paymentModel ?? {}) as unknown as Model<Payment>,
+    (overrides.ecolesService ?? {}) as unknown as EcolesService,
+    (overrides.settingsService ?? {}) as unknown as SettingsService,
+  );
+}
 
 describe('ReportsService', () => {
   it('filters registration-paid invoices by level and school year', async () => {
@@ -39,16 +77,7 @@ describe('ReportsService', () => {
       }),
     };
 
-    const service = new ReportsService(
-      {} as any,
-      invoiceModel as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-    );
+    const service = createService({ invoiceModel });
 
     const result = await service.registrationPaidStudents(
       'registration',
@@ -57,7 +86,7 @@ describe('ReportsService', () => {
     );
 
     expect(result).toHaveLength(1);
-    expect(result[0].enrollmentId.studentId.lastname).toBe('A');
+    expect(result[0].enrollmentId?.studentId?.lastname).toBe('A');
     expect(result[0]).toMatchObject({
       amountDue: 1000,
       amountPaid: 1000,
@@ -88,16 +117,7 @@ describe('ReportsService', () => {
         }),
       }),
     };
-    const service = new ReportsService(
-      {} as any,
-      invoiceModel as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-    );
+    const service = createService({ invoiceModel });
 
     const registration = await service.registrationPaidStudents('registration');
     const tuition = await service.registrationPaidStudents('tuition');
@@ -138,16 +158,7 @@ describe('ReportsService', () => {
         }),
       }),
     };
-    const service = new ReportsService(
-      {} as any,
-      invoiceModel as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-    );
+    const service = createService({ invoiceModel });
 
     const partial = await service.registrationPaidStudents('partial');
     const none = await service.registrationPaidStudents('none');
@@ -167,20 +178,13 @@ describe('ReportsService', () => {
   });
 
   it('renders the payment situation PDF in A4 landscape', async () => {
-    const service = new ReportsService(
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {
+    const service = createService({
+      ecolesService: {
         getCurrentSchoolName: jest
           .fn()
           .mockResolvedValue('Complexe scolaire Dunya'),
-      } as any,
-      {} as any,
-    );
+      },
+    });
 
     const pdf = await service.renderRegistrationPaidPdf(
       [],
@@ -251,16 +255,12 @@ describe('ReportsService', () => {
         .fn()
         .mockResolvedValue('Complexe scolaire Dunya'),
     };
-    const service = new ReportsService(
-      enrollmentModel as any,
-      {} as any,
-      {} as any,
-      levelModel as any,
-      schoolYearModel as any,
-      {} as any,
-      ecolesService as any,
-      {} as any,
-    );
+    const service = createService({
+      enrollmentModel,
+      levelModel,
+      schoolYearModel,
+      ecolesService,
+    });
 
     const result = await service.getNominalRoll('level-1');
 
@@ -283,16 +283,7 @@ describe('ReportsService', () => {
   });
 
   it('paginates a long nominal roll PDF without losing the A4 table', async () => {
-    const service = new ReportsService(
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-    );
+    const service = createService();
     const pdf = await service.renderStudentListPdf({
       schoolName: 'Complexe scolaire Dunya',
       schoolYearLabel: '2026 – 2027',
