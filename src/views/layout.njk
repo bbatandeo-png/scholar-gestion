@@ -38,6 +38,13 @@
             </a>
           </div>
 
+          <div class="nav-group">
+            <a href="/vitrine" target="_blank" rel="noopener" class="nav-link">
+              <span class="nav-icon">↗</span>
+              <span>Site web</span>
+            </a>
+          </div>
+
           {% if licenseEnforcementEnabled and (role == 'super_admin' or role == 'direction' or role == 'secretariat') %}
             <div class="nav-group">
               <a href="/licence" class="nav-link {% if currentPath == '/licence' %}is-active{% endif %}">

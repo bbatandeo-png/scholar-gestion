@@ -66,6 +66,15 @@ async function bootstrap() {
     path.join(process.cwd(), 'dist', 'public'),
     path.join(process.cwd(), 'public'),
   ]);
+  // The public marketing site (separate static HTML/CSS/JS, not part of the
+  // backoffice's own views) - served here so the backoffice can link to it
+  // without needing separate hosting.
+  const siteVitrineDir = resolveExistingPath([
+    path.join(runtimeRoot, 'site-vitrine'),
+    path.join(__dirname, 'site-vitrine'),
+    path.join(process.cwd(), 'dist', 'site-vitrine'),
+    path.join(process.cwd(), 'site-vitrine'),
+  ]);
   // Always a real, writable directory (never part of pkg's read-only
   // snapshot) - holds files created at runtime, e.g. uploaded ecole logos.
   const uploadsDir = getUploadsRoot();
@@ -75,6 +84,7 @@ async function bootstrap() {
   app.setViewEngine('njk');
   app.useStaticAssets(publicDir);
   app.useStaticAssets(uploadsDir, { prefix: '/uploads' });
+  app.useStaticAssets(siteVitrineDir, { prefix: '/vitrine' });
   const nunjucksEnv = nunjucks.configure(viewsDir, {
     autoescape: true,
     express: app.getHttpAdapter().getInstance(),
