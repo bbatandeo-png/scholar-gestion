@@ -15,14 +15,14 @@
             <label>Annee
               <select name="schoolYearId" {% if editFee %}disabled{% endif %}>
                 {% for year in schoolYears %}
-                  <option value="{{ year._id }}" {% if editFee and editFee.schoolYearId._id == year._id %}selected{% endif %}>{{ year.label }}</option>
+                  <option value="{{ year._id }}" {% if editFee and editFee.schoolYearId._id.toString() == year._id.toString() %}selected{% endif %}>{{ year.label }}</option>
                 {% endfor %}
               </select>
             </label>
             <label>Niveau
               <select name="levelId" {% if editFee %}disabled{% endif %}>
                 {% for level in levels %}
-                  <option value="{{ level._id }}" {% if editFee and editFee.levelId._id == level._id %}selected{% endif %}>{{ level.label }}</option>
+                  <option value="{{ level._id }}" {% if editFee and editFee.levelId._id.toString() == level._id.toString() %}selected{% endif %}>{{ level.label }}</option>
                 {% endfor %}
               </select>
             </label>

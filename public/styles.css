@@ -959,6 +959,13 @@ th.sortable.sort-desc::after {
   display: grid;
   gap: 2px;
 }
+/* Same specificity as the browser's built-in [hidden] { display: none },
+   so without this the class rule above (defined later) wins the cascade
+   and the dropdown stays visually open - overlapping the fields below it -
+   even after the JS sets the hidden attribute on selection. */
+.autocomplete-results[hidden] {
+  display: none;
+}
 .autocomplete-option {
   display: block;
   width: 100%;

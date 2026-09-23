@@ -8,11 +8,8 @@ import {
   Render,
   Req,
   Res,
-  UploadedFile,
   UseGuards,
-  UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import { Request, Response } from 'express';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -21,6 +18,7 @@ import { Role, SubjectCategory } from '../common/enums/domain.enums';
 import { AuthenticatedGuard } from '../common/guards/authenticated.guard';
 import { ModuleGuard } from '../common/guards/module.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { pickUploadedFile } from '../common/utils/multer.util';
 import { setFlash } from '../common/utils/flash.util';
 import { LevelsService } from '../levels/levels.service';
 import { SchoolYearsService } from '../school-years/school-years.service';
@@ -32,14 +30,6 @@ import { ImportSessionDto } from './dto/import-session.dto';
 import { ResolveRowDto } from './dto/resolve-row.dto';
 import { SaveDisciplineDto } from './dto/save-discipline.dto';
 import { SessionUser } from '../common/types/session-user.type';
-
-// FileInterceptor's own upload typing needs @types/multer, not installed in
-// this project (see multer.util.ts) - this is the minimal shape actually
-// read from the uploaded file here.
-interface UploadedExcelFile {
-  buffer?: Buffer;
-  originalname?: string;
-}
 
 @Controller('/bulletins')
 @UseGuards(AuthenticatedGuard, RolesGuard, ModuleGuard)
@@ -111,14 +101,13 @@ export class BulletinsController {
 
   @Post('/:id/import')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT)
-  @UseInterceptors(FileInterceptor('file'))
   async importFile(
     @Param('id') id: string,
     @Body() dto: ImportSessionDto,
-    @UploadedFile() file: UploadedExcelFile,
     @Req() req: Request,
     @Res() res: Response,
   ) {
+    const file = pickUploadedFile(req, 'file');
     if (!file?.buffer) {
       throw new BadRequestException('Fichier Excel requis');
     }

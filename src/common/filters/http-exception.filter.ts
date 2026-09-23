@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { setFlash } from '../utils/flash.util';
 
 // Global catch-all filter: handles every exception that isn't already
 // handled by a more specific filter. FeeScheduleNotFoundFilter only
@@ -46,6 +47,29 @@ export class HttpExceptionFilter implements ExceptionFilter {
     }
 
     if (accept.includes('text/html')) {
+      // A 4xx HttpException is an expected business-rule refusal (wrong
+      // role, no open school year, a duplicate email, a bad id...), not a
+      // crash. Surface the real message as a flash on the page the user
+      // came from, exactly like every controller's own try/catch+setFlash
+      // does, rather than replacing the page with a dead-end "something
+      // went wrong" screen that hides what actually needs fixing.
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison
+      if (isHttpException && status < HttpStatus.INTERNAL_SERVER_ERROR) {
+        const responseBody = exception.getResponse();
+        const message =
+          typeof responseBody === 'string'
+            ? responseBody
+            : ((responseBody as { message?: string | string[] })?.message ??
+              exception.message);
+        setFlash(
+          req,
+          'error',
+          Array.isArray(message) ? message.join(' ') : message,
+        );
+        res.redirect(req.get('referer') || '/dashboard');
+        return;
+      }
+
       res.status(status).render('error/generic', {
         title: 'Erreur',
         statusCode: status,

@@ -158,6 +158,12 @@ async function bootstrap() {
   app.use('/platform/ecoles', multipartUpload.any());
   // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
   app.use('/students', multipartUpload.any());
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+  app.use('/bulletins', multipartUpload.any());
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+  app.use('/promotions', multipartUpload.any());
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+  app.use('/settings/fees', multipartUpload.any());
 
   if (!isTest) {
     app.use(csurf());

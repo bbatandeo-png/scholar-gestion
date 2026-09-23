@@ -1,9 +1,12 @@
-import { INestApplication } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import * as path from 'path';
+import * as nunjucks from 'nunjucks';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
+import { ENUM_META } from '../src/common/view-helpers/enum-meta';
 import { BillingService } from '../src/billing/billing.service';
 import {
   EnrollmentType,
@@ -11,6 +14,7 @@ import {
   SchoolYearStatus,
 } from '../src/common/enums/domain.enums';
 import { EnrollmentsService } from '../src/enrollments/enrollments.service';
+import { LevelsService } from '../src/levels/levels.service';
 import { Level } from '../src/levels/schemas/level.schema';
 import { Payment } from '../src/payments/schemas/payment.schema';
 import { SchoolYear } from '../src/school-years/schemas/school-year.schema';
@@ -30,7 +34,7 @@ import { EcoleModule as EcoleModuleModel } from '../src/ecole-modules/schemas/ec
 
 describe('Scolar Gestion workflows (e2e)', () => {
   let repl: Awaited<ReturnType<typeof startMongoReplSet>>;
-  let app: INestApplication;
+  let app: NestExpressApplication;
   let billingService: BillingService;
   let enrollmentsService: EnrollmentsService;
   let studentModel: Model<Student>;
@@ -40,6 +44,7 @@ describe('Scolar Gestion workflows (e2e)', () => {
   let enrollmentModel: Model<Enrollment>;
   let promotionsService: PromotionsService;
   let schoolYearsService: SchoolYearsService;
+  let levelsService: LevelsService;
 
   beforeAll(async () => {
     repl = await startMongoReplSet();
@@ -50,8 +55,50 @@ describe('Scolar Gestion workflows (e2e)', () => {
       imports: [AppModule],
     }).compile();
 
-    app = moduleFixture.createNestApplication();
+    app = moduleFixture.createNestApplication<NestExpressApplication>();
     applyTenantMiddleware(app);
+
+    // Unlike main.ts's real bootstrap, Test.createTestingModule() never
+    // configures the nunjucks view engine - every @Render(...) route used
+    // to be untestable for its actual HTML output here (see the long-
+    // standing comment further down this file). Wiring it up the same way
+    // main.ts does unlocks asserting on real rendered markup, which is the
+    // only way to catch a template-only bug (e.g. a Nunjucks `==` comparing
+    // two populated ObjectId instances by reference, always false) that no
+    // amount of service-level unit testing can see.
+    const viewsDir = path.join(__dirname, '..', 'src', 'views');
+    app.setBaseViewsDir(viewsDir);
+    app.setViewEngine('njk');
+    const nunjucksEnv = nunjucks.configure(viewsDir, {
+      autoescape: true,
+      express: app.getHttpAdapter().getInstance(),
+      noCache: true,
+    });
+    nunjucksEnv.addFilter('formatDate', (value: unknown) => {
+      if (!value) {
+        return '';
+      }
+      const date =
+        value instanceof Date ? value : new Date(value as string | number);
+      return Number.isNaN(date.getTime())
+        ? ''
+        : date.toLocaleString('fr-FR', {
+            dateStyle: 'long',
+            timeStyle: 'short',
+          });
+    });
+    nunjucksEnv.addFilter('inputDate', (value: unknown) => {
+      if (!value) {
+        return '';
+      }
+      const date =
+        value instanceof Date ? value : new Date(value as string | number);
+      return Number.isNaN(date.getTime())
+        ? ''
+        : date.toISOString().slice(0, 10);
+    });
+    nunjucksEnv.addGlobal('ENUM_META', ENUM_META);
+
     await app.init();
 
     billingService = app.get(BillingService);
@@ -63,6 +110,7 @@ describe('Scolar Gestion workflows (e2e)', () => {
     enrollmentModel = app.get(getModelToken(Enrollment.name));
     promotionsService = app.get(PromotionsService);
     schoolYearsService = app.get(SchoolYearsService);
+    levelsService = app.get(LevelsService);
     await Promise.all([
       studentModel.init(),
       schoolYearModel.init(),
@@ -196,6 +244,163 @@ describe('Scolar Gestion workflows (e2e)', () => {
         });
 
       expect(response.status).toBe(409);
+    }));
+
+  it("GET /enrollments/:id preselectionne le bon eleve, la bonne annee et le bon niveau dans le formulaire d'edition", () =>
+    runWithTenant({ ecoleId: TEST_DEFAULT_ECOLE_ID }, async () => {
+      // A second student is essential here: with only one in the list,
+      // "the first option happens to be selected" and "the right option is
+      // selected" render identically, hiding the bug this test exists to
+      // catch (see enrollments/detail.njk - a Nunjucks `==` between two
+      // populated ObjectId instances is always false, so the intended
+      // option was never actually marked selected; the browser then
+      // defaulted to whichever option a same-collection Mongo query
+      // happened to list first).
+      const otherStudent = await studentModel.create({
+        matricule: 'MAT-900',
+        lastname: 'Autre',
+        firstname: 'Eleve',
+        gender: 'M',
+        status: 'active',
+      });
+      const student = await studentModel.create({
+        matricule: 'MAT-901',
+        lastname: 'Zoutome',
+        firstname: 'Bakoe',
+        gender: 'F',
+        status: 'active',
+      });
+      void otherStudent;
+      const year = await schoolYearModel.create({
+        label: '2090-2091',
+        startDate: new Date('2090-09-01'),
+        endDate: new Date('2091-06-30'),
+        status: SchoolYearStatus.OPEN,
+      });
+      const level = await levelModel.create({
+        code: 'CP1-DETAIL',
+        label: 'CP1',
+        sortOrder: 190,
+      });
+      // The level dropdown on the detail page is populated from
+      // listForSchoolYear(), which only lists levels explicitly enabled for
+      // that school year (SchoolYearLevel.isEnabled) - not just any Level
+      // document that exists. Without this the option this test looks for
+      // isn't rendered at all.
+      await levelsService.enableForSchoolYear(
+        String(year._id),
+        String(level._id),
+      );
+      await billingService.upsertFeeSchedule({
+        schoolYearId: String(year._id),
+        levelId: String(level._id),
+        registrationFee: 10000,
+        tuitionFee: 40000,
+      });
+      const { enrollmentId } = await enrollmentsService.createEnrollment({
+        studentId: String(student._id),
+        schoolYearId: String(year._id),
+        levelId: String(level._id),
+        type: EnrollmentType.INITIAL,
+        applyOpenArrears: 'false',
+      });
+
+      const response = await request(app.getHttpServer())
+        .get(`/enrollments/${enrollmentId}`)
+        .set('x-test-role', 'secretariat');
+
+      expect(response.status).toBe(200);
+      expect(response.text).toContain(
+        `value="${String(student._id)}" selected`,
+      );
+      expect(response.text).not.toContain(
+        `value="${String(otherStudent._id)}" selected`,
+      );
+      expect(response.text).toContain(`value="${String(year._id)}" selected`);
+      expect(response.text).toContain(`value="${String(level._id)}" selected`);
+    }));
+
+  it('PUT /enrollments/:id change uniquement le niveau sans provoquer une double inscription', () =>
+    runWithTenant({ ecoleId: TEST_DEFAULT_ECOLE_ID }, async () => {
+      const student = await studentModel.create({
+        matricule: 'MAT-902',
+        lastname: 'Niveau',
+        firstname: 'Test',
+        gender: 'M',
+        status: 'active',
+      });
+      const year = await schoolYearModel.create({
+        label: '2091-2092',
+        startDate: new Date('2091-09-01'),
+        endDate: new Date('2092-06-30'),
+        status: SchoolYearStatus.OPEN,
+      });
+      const oldLevel = await levelModel.create({
+        code: 'CP1-OLD',
+        label: 'CP1',
+        sortOrder: 191,
+      });
+      const newLevel = await levelModel.create({
+        code: '3E-NEW',
+        label: '3e',
+        sortOrder: 192,
+      });
+      await billingService.upsertFeeSchedule({
+        schoolYearId: String(year._id),
+        levelId: String(oldLevel._id),
+        registrationFee: 10000,
+        tuitionFee: 40000,
+      });
+      const { enrollmentId } = await enrollmentsService.createEnrollment({
+        studentId: String(student._id),
+        schoolYearId: String(year._id),
+        levelId: String(oldLevel._id),
+        type: EnrollmentType.INITIAL,
+        applyOpenArrears: 'false',
+      });
+
+      // Body mirrors exactly what the real edit form submits: every field,
+      // including the unchanged studentId - not just the one the user
+      // actually touched. The real browser form POSTs with ?_method=PUT
+      // (method-override, only wired up in main.ts's real bootstrap, not
+      // this test harness) - a direct PUT reaches the exact same
+      // EnrollmentsController route without needing that middleware here.
+      const response = await request(app.getHttpServer())
+        .put(`/enrollments/${enrollmentId}`)
+        .set('x-test-role', 'secretariat')
+        .send({
+          studentId: String(student._id),
+          schoolYearId: String(year._id),
+          levelId: String(newLevel._id),
+          type: 'initial',
+        });
+
+      expect(response.status).not.toBe(409);
+      expect(response.status).toBe(302);
+      const updated = await enrollmentModel.findById(enrollmentId).lean();
+      expect(String(updated?.levelId)).toBe(String(newLevel._id));
+    }));
+
+  it('POST /students cree un dossier eleve sans date de naissance, lieu de naissance ni quartier', () =>
+    runWithTenant({ ecoleId: TEST_DEFAULT_ECOLE_ID }, async () => {
+      const response = await request(app.getHttpServer())
+        .post('/students')
+        .set('x-test-role', 'secretariat')
+        .send({
+          matricule: 'MAT-903',
+          lastname: 'Minimal',
+          firstname: 'Dossier',
+          gender: 'M',
+        });
+
+      expect(response.status).toBe(302);
+      const created = await studentModel
+        .findOne({ matricule: 'MAT-903' })
+        .lean();
+      expect(created).toBeTruthy();
+      expect(created?.birthDate).toBeUndefined();
+      expect(created?.birthPlace).toBeUndefined();
+      expect(created?.district).toBeUndefined();
     }));
 
   it('POST /students/:id/reenroll ajoute les impayes passes a la nouvelle facture', () =>

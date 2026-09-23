@@ -350,6 +350,14 @@ export class EcolesService {
     const { sessionSecret, licenseSecret } =
       await this.ensureProvisioningSecrets(id);
     const adminPassword = generateTempPassword();
+    // The exe runs against its own local database, which knows nothing about
+    // the modules activated here on the platform - ship them in the .env so
+    // the install's first boot (see scripts/seed.ts) activates the same ones.
+    const activeModuleCodes = (
+      await runScopedAsEcole(id, () =>
+        this.ecoleModulesService.listForEcole(id),
+      )
+    ).map((m) => m.code);
 
     await this.ecoleModel
       .updateOne(
@@ -368,6 +376,7 @@ export class EcolesService {
       `ADMIN_NAME=${primaryAdmin?.name ?? 'Super Admin'}`,
       `ADMIN_EMAIL=${primaryAdmin?.email ?? 'admin@scolar-gestion.local'}`,
       `ADMIN_PASSWORD=${adminPassword}`,
+      `ACTIVE_MODULES=${activeModuleCodes.join(',')}`,
       '# Off par defaut - activer une fois la licence generee (voir /platform/ecoles)',
       '# LICENSE_ENFORCEMENT=on',
       `LICENSE_SECRET=${licenseSecret}`,

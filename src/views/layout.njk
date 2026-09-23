@@ -230,7 +230,12 @@
 
         {% if licenseStatus and licenseStatus.state == 'blocked' %}
           <div class="notice notice-danger">
-            Licence expiree depuis le <strong>{{ licenseStatus.expiresAt | formatDate }}</strong> — l'application est en lecture seule. <a href="/licence">Renouveler la licence</a>.
+            {% if licenseStatus.expiresAt %}
+              Licence expiree depuis le <strong>{{ licenseStatus.expiresAt | formatDate }}</strong> — l'application est en lecture seule.
+            {% else %}
+              Aucune licence enregistree sur cette installation — l'application est en lecture seule.
+            {% endif %}
+            <a href="/licence">{% if licenseStatus.expiresAt %}Renouveler la licence{% else %}Activer la licence{% endif %}</a>.
           </div>
         {% elif licenseStatus and licenseStatus.state == 'grace' %}
           <div class="notice notice-danger">

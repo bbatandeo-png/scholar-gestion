@@ -44,7 +44,7 @@
           <label>Bénéficiaire<input type="text" name="beneficiary" value="{{ editExpense.beneficiary }}" required /></label>
           <label>Catégorie<select name="categoryId" required>
             {% for category in categories %}
-              <option value="{{ category._id }}" {% if editExpense.categoryId and editExpense.categoryId._id == category._id %}selected{% endif %}>{{ category.name }}</option>
+              <option value="{{ category._id }}" {% if editExpense.categoryId and editExpense.categoryId._id.toString() == category._id.toString() %}selected{% endif %}>{{ category.name }}</option>
             {% endfor %}
           </select></label>
         </div>

@@ -16,7 +16,11 @@ import { SchoolYear } from '../school-years/schemas/school-year.schema';
 import { SettingsService } from '../settings/settings.service';
 import { UsersService } from '../users/users.service';
 import { LevelsService } from '../levels/levels.service';
-import { runWithTenant } from '../common/tenant/tenant-context';
+import {
+  runAsPlatformAdmin,
+  runWithTenant,
+} from '../common/tenant/tenant-context';
+import { EcoleModulesService } from '../ecole-modules/ecole-modules.service';
 
 export function shouldRunSeed(env: NodeJS.ProcessEnv = process.env) {
   if (env.NODE_ENV === 'test') {
@@ -33,6 +37,7 @@ export async function runSeed() {
     const billingService = app.get(BillingService);
     const settingsService = app.get(SettingsService);
     const levelsService = app.get(LevelsService);
+    const ecoleModulesService = app.get(EcoleModulesService);
     const schoolYearModel = app.get<Model<SchoolYear>>(
       getModelToken(SchoolYear.name),
     );
@@ -63,13 +68,28 @@ export async function runSeed() {
 
     const adminPassword = process.env.ADMIN_PASSWORD ?? 'Admin123!';
     const passwordHash = await bcrypt.hash(adminPassword, 10);
-    await usersService.ensureAdmin({
+    const admin = await usersService.ensureAdmin({
       name: process.env.ADMIN_NAME ?? 'Super Admin',
       email: process.env.ADMIN_EMAIL ?? 'admin@scolar-gestion.local',
       passwordHash,
       role: Role.SUPER_ADMIN,
       ecoleId,
     });
+
+    // Modules bought for this ecole on the platform (ACTIVE_MODULES, written
+    // into the install package's .env by EcolesService.streamInstallationPackage).
+    // Without this the local database has no module rows at all, so every
+    // write on a module-gated screen (e.g. registration payments under
+    // FINANCE) is refused. activate() is idempotent - safe on every boot.
+    const moduleCodes = (process.env.ACTIVE_MODULES ?? '')
+      .split(',')
+      .map((code) => code.trim().toUpperCase())
+      .filter((code) => code.length > 0);
+    for (const code of moduleCodes) {
+      await runAsPlatformAdmin(() =>
+        ecoleModulesService.activate(ecoleId, code, String(admin._id)),
+      );
+    }
 
     // Only on the very first boot of a brand new ecole - the hardcoded
     // school years/status below are meant to bootstrap an empty database,

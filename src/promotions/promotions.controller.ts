@@ -7,12 +7,9 @@ import {
   Render,
   Req,
   Res,
-  UploadedFile,
   UseGuards,
-  UseInterceptors,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
-import { FileInterceptor } from '@nestjs/platform-express';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { LevelsService } from '../levels/levels.service';
@@ -23,6 +20,7 @@ import { Role } from '../common/enums/domain.enums';
 import { AuthenticatedGuard } from '../common/guards/authenticated.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { pickRowValue, readExcelRows } from '../common/utils/excel.util';
+import { pickUploadedFile } from '../common/utils/multer.util';
 import { setFlash } from '../common/utils/flash.util';
 import { PreparePromotionsDto } from './dto/prepare-promotions.dto';
 import { ValidatePromotionsDto } from './dto/validate-promotions.dto';
@@ -30,13 +28,6 @@ import { PromotionsService } from './promotions.service';
 import { Student, StudentDocument } from '../students/schemas/student.schema';
 import { SessionUser } from '../common/types/session-user.type';
 import { toDisplayString } from '../common/utils/safe-string.util';
-
-// FileInterceptor's own upload typing needs @types/multer, not installed in
-// this project (see multer.util.ts) - this is the minimal shape actually
-// read from the uploaded file here.
-interface UploadedExcelFile {
-  buffer?: Buffer;
-}
 
 // Not gated here by @RequireModule('FINANCE'): the FINANCE check lives
 // inside PromotionsService.validate() itself instead (see that file), since
@@ -81,12 +72,9 @@ export class PromotionsController {
 
   @Post('/prepare-import')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION)
-  @UseInterceptors(FileInterceptor('file'))
   @Render('promotions/prepare')
-  async prepareImport(
-    @Body() dto: PreparePromotionsDto,
-    @UploadedFile() file: UploadedExcelFile,
-  ) {
+  async prepareImport(@Body() dto: PreparePromotionsDto, @Req() req: Request) {
+    const file = pickUploadedFile(req, 'file');
     if (!file?.buffer) {
       throw new BadRequestException('Fichier Excel requis');
     }

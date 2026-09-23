@@ -350,6 +350,8 @@ export class ExpensesService {
           doc.fillColor('#000').text(header, x + 4, y + 5, {
             width: columnWidths[index] - 8,
             align: index >= 3 ? 'right' : 'left',
+            ellipsis: true,
+            lineBreak: false,
           });
           x += columnWidths[index];
         });
@@ -368,6 +370,7 @@ export class ExpensesService {
             width: columnWidths[index] - 8,
             align: index >= 3 ? 'right' : 'left',
             ellipsis: true,
+            lineBreak: false,
           });
           x += columnWidths[index];
         });

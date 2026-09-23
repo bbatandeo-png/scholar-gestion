@@ -21,21 +21,21 @@
           <label>Eleve
             <select name="studentId">
               {% for student in students %}
-                <option value="{{ student._id }}" {% if enrollment.studentId and enrollment.studentId._id and student._id and enrollment.studentId._id == student._id %}selected{% endif %}>{{ student.matricule }} - {{ student.lastname }} {{ student.firstname }}</option>
+                <option value="{{ student._id }}" {% if enrollment.studentId and enrollment.studentId._id and student._id and enrollment.studentId._id.toString() == student._id.toString() %}selected{% endif %}>{{ student.matricule }} - {{ student.lastname }} {{ student.firstname }}</option>
               {% endfor %}
             </select>
           </label>
           <label>Annee
             <select name="schoolYearId">
               {% for year in schoolYears %}
-                <option value="{{ year._id }}" {% if enrollment.schoolYearId and enrollment.schoolYearId._id and year._id and enrollment.schoolYearId._id == year._id %}selected{% endif %}>{{ year.label }}</option>
+                <option value="{{ year._id }}" {% if enrollment.schoolYearId and enrollment.schoolYearId._id and year._id and enrollment.schoolYearId._id.toString() == year._id.toString() %}selected{% endif %}>{{ year.label }}</option>
               {% endfor %}
             </select>
           </label>
           <label>Niveau
             <select name="levelId">
               {% for level in levels %}
-                <option value="{{ level._id }}" {% if enrollment.levelId and enrollment.levelId._id and level._id and enrollment.levelId._id == level._id %}selected{% endif %}>{{ level.label }}</option>
+                <option value="{{ level._id }}" {% if enrollment.levelId and enrollment.levelId._id and level._id and enrollment.levelId._id.toString() == level._id.toString() %}selected{% endif %}>{{ level.label }}</option>
               {% endfor %}
             </select>
           </label>

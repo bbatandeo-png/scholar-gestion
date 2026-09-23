@@ -9,7 +9,7 @@
     "build": "nest build",
     "build:assets": "node scripts/copy-assets.cjs",
     "build:bundle": "npm run build && npm run build:assets",
-    "build:exe:native": "npm run build:bundle && pkg dist/main.js --targets node18-win-x64 --output release/Scolar-Gestion.exe && node scripts/copy-release-assets.cjs",
+    "build:exe:native": "npm run build:bundle && pkg dist/main.js --config package.json --targets node18-win-x64 --output release/Scolar-Gestion.exe && node scripts/copy-release-assets.cjs",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "restart": "powershell -Command \"Get-NetTCPConnection -State Listen -LocalPort 3000 -EA SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force -EA SilentlyContinue }; npm run start\"",
@@ -87,7 +87,8 @@
   "pkg": {
     "assets": [
       "dist/views/**/*",
-      "dist/public/**/*"
+      "dist/public/**/*",
+      "node_modules/pdfkit/js/data/**/*"
     ]
   },
   "jest": {

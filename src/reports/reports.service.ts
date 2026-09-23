@@ -703,7 +703,7 @@ export class ReportsService {
         'Payé',
         'Reste',
       ];
-      const columnWidths = [140, 60, 50, 80, 65, 65, 65];
+      const columnWidths = [160, 70, 70, 90, 70, 70, 70];
       const rowHeight = 18;
       const startX = doc.page.margins.left;
       const bottomLimit = doc.page.height - doc.page.margins.bottom;
@@ -720,6 +720,8 @@ export class ReportsService {
           doc.fillColor('#000000').text(text, x + 4, y + 4, {
             width: columnWidths[index] - 8,
             align: index >= 4 ? 'right' : 'left',
+            ellipsis: true,
+            lineBreak: false,
           });
           x += columnWidths[index];
         });
@@ -739,6 +741,7 @@ export class ReportsService {
             width: columnWidths[index] - 8,
             align: index >= 4 ? 'right' : 'left',
             ellipsis: true,
+            lineBreak: false,
           });
           x += columnWidths[index];
         });
@@ -832,6 +835,8 @@ export class ReportsService {
           doc.fillColor('#000000').text(text, x + 4, y + 4, {
             width: columnWidths[index] - 8,
             align: index >= 3 ? 'right' : 'left',
+            ellipsis: true,
+            lineBreak: false,
           });
           x += columnWidths[index];
         });
@@ -849,6 +854,7 @@ export class ReportsService {
             width: columnWidths[index] - 8,
             align: index >= 3 ? 'right' : 'left',
             ellipsis: true,
+            lineBreak: false,
           });
           x += columnWidths[index];
         });
@@ -955,6 +961,8 @@ export class ReportsService {
           doc.fillColor('#000000').text(text, x + 4, y + 6, {
             width: columnWidths[index] - 8,
             align: 'center',
+            ellipsis: true,
+            lineBreak: false,
           });
           x += columnWidths[index];
         });
@@ -973,6 +981,7 @@ export class ReportsService {
             width: columnWidths[index] - 8,
             align: index === 0 || index === 3 ? 'center' : 'left',
             ellipsis: true,
+            lineBreak: false,
           });
           x += columnWidths[index];
         });

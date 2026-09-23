@@ -8,7 +8,14 @@
 // deliberately never provisions this) - see LicensingService, which treats
 // that as "generation unavailable here" rather than falling back to a
 // shared default.
-export const LICENSE_HMAC_SECRET = process.env.LICENSE_SECRET ?? '';
+//
+// A function, not a top-level constant: this module is imported before
+// ConfigModule.forRoot() has loaded the .env file into process.env, so a
+// value captured at import time is always '' and every token then fails
+// verification. Reading it at call time sees the real value.
+export function getLicenseHmacSecret(): string {
+  return process.env.LICENSE_SECRET ?? '';
+}
 
 // After expiresAt, the app keeps working normally for this many days (with an
 // increasingly insistent banner) before switching to read-only - see

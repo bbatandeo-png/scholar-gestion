@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from 'crypto';
-import { LICENSE_HMAC_SECRET } from './licensing.constants';
+import { getLicenseHmacSecret } from './licensing.constants';
 
 export interface LicensePayload {
   ecoleId: string;
@@ -8,7 +8,7 @@ export interface LicensePayload {
 }
 
 function sign(payloadB64: string): string {
-  return createHmac('sha256', LICENSE_HMAC_SECRET)
+  return createHmac('sha256', getLicenseHmacSecret())
     .update(payloadB64)
     .digest('base64url');
 }

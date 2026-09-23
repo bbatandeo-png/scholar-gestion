@@ -87,3 +87,89 @@ describe('EnrollmentsService', () => {
     expect(result).toEqual({ enrollmentId: 'enr-1' });
   });
 });
+
+describe('EnrollmentsService.updateEnrollment', () => {
+  // Regression coverage for the "changer uniquement le niveau declenche
+  // Double inscription active" report: the real bug lived in the Nunjucks
+  // template silently submitting the wrong studentId (see
+  // enrollments/detail.njk), but this locks in the service-level contract
+  // that made the symptom possible to diagnose in the first place - a
+  // levelId-only change must never re-run the active-enrollment conflict
+  // check, since studentId hasn't actually changed.
+  function buildFakeThis(overrides: {
+    enrollment: Record<string, unknown>;
+    conflicting?: Record<string, unknown> | null;
+  }) {
+    const findOneExec = jest
+      .fn()
+      .mockResolvedValue(overrides.conflicting ?? null);
+    const findByIdAndUpdateExec = jest
+      .fn()
+      .mockResolvedValue({ _id: overrides.enrollment._id });
+    return {
+      enrollmentModel: {
+        findById: jest.fn().mockReturnValue({
+          exec: jest.fn().mockResolvedValue(overrides.enrollment),
+        }),
+        findOne: jest.fn().mockReturnValue({ exec: findOneExec }),
+        findByIdAndUpdate: jest
+          .fn()
+          .mockReturnValue({ exec: findByIdAndUpdateExec }),
+      },
+      schoolYearsService: {
+        assertWritable: jest.fn().mockResolvedValue(undefined),
+      },
+      levelsService: {
+        findById: jest
+          .fn()
+          .mockResolvedValue({ code: 'L2', label: '3e', sortOrder: 9 }),
+      },
+      studentsService: { findById: jest.fn() },
+      auditService: { log: jest.fn().mockResolvedValue(undefined) },
+    };
+  }
+
+  it("change le niveau sans revalider l'absence de double inscription quand l'eleve ne change pas", async () => {
+    const enrollment = {
+      _id: 'enr-1',
+      studentId: 'student-1',
+      schoolYearId: 'year-1',
+      levelId: 'level-old',
+      type: 'initial',
+    };
+    const fakeThis = buildFakeThis({ enrollment });
+
+    await EnrollmentsService.prototype.updateEnrollment.call(
+      fakeThis as any,
+      'enr-1',
+      { studentId: 'student-1', levelId: 'level-new' },
+      'actor-1',
+    );
+
+    expect(fakeThis.enrollmentModel.findOne).not.toHaveBeenCalled();
+    expect(fakeThis.studentsService.findById).not.toHaveBeenCalled();
+    expect(fakeThis.levelsService.findById).toHaveBeenCalledWith('level-new');
+  });
+
+  it("refuse de reassigner l'inscription a un eleve ayant deja une inscription active cette annee", async () => {
+    const enrollment = {
+      _id: 'enr-1',
+      studentId: 'student-1',
+      schoolYearId: 'year-1',
+      levelId: 'level-1',
+    };
+    const fakeThis = buildFakeThis({
+      enrollment,
+      conflicting: { _id: 'enr-other' },
+    });
+
+    await expect(
+      EnrollmentsService.prototype.updateEnrollment.call(
+        fakeThis as any,
+        'enr-1',
+        { studentId: 'student-2' },
+        'actor-1',
+      ),
+    ).rejects.toThrow('Double inscription active interdite pour cette annee');
+  });
+});

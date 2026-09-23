@@ -413,11 +413,18 @@ export class StudentsService {
     const duplicate = await this.studentModel.findOne({
       $or: [
         { matricule },
-        {
-          lastname: dto.lastname,
-          firstname: dto.firstname,
-          birthDate: new Date(dto.birthDate),
-        },
+        // Only a meaningful duplicate signal when birthDate is actually
+        // given - without it, this would match on name alone and could
+        // flag unrelated same-named students as duplicates.
+        ...(dto.birthDate
+          ? [
+              {
+                lastname: dto.lastname,
+                firstname: dto.firstname,
+                birthDate: new Date(dto.birthDate),
+              },
+            ]
+          : []),
       ],
     });
 
@@ -433,7 +440,7 @@ export class StudentsService {
             ...dto,
             gender: normalizedGender,
             matricule,
-            birthDate: new Date(dto.birthDate),
+            ...(dto.birthDate ? { birthDate: new Date(dto.birthDate) } : {}),
             status: StudentStatus.ACTIVE,
           },
         ],

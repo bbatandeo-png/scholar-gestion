@@ -8,7 +8,7 @@ import { AuditAction } from '../common/enums/domain.enums';
 import { getRuntimeRoot } from '../common/utils/runtime-paths.util';
 import {
   LICENSE_GRACE_PERIOD_DAYS,
-  LICENSE_HMAC_SECRET,
+  getLicenseHmacSecret,
   LICENSE_WARNING_THRESHOLDS_DAYS,
 } from './licensing.constants';
 import { createLicenseToken, verifyLicenseToken } from './license-token.util';
@@ -203,7 +203,7 @@ export class LicensingService {
   // generation there stays unavailable without needing a separate flag (see
   // licensing.constants.ts).
   isGenerationAvailable(): boolean {
-    return LICENSE_HMAC_SECRET.length > 0;
+    return getLicenseHmacSecret().length > 0;
   }
 
   // Platform-admin-only, local generation (EcolesController): signs a token

@@ -9,12 +9,9 @@ import {
   Render,
   Req,
   Res,
-  UploadedFile,
   UseGuards,
-  UseInterceptors,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
-import { FileInterceptor } from '@nestjs/platform-express';
 import { SchoolYearsService } from '../school-years/school-years.service';
 import { LevelsService } from '../levels/levels.service';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -24,17 +21,11 @@ import { AuthenticatedGuard } from '../common/guards/authenticated.guard';
 import { ModuleGuard } from '../common/guards/module.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { pickRowValue, readExcelRows } from '../common/utils/excel.util';
+import { pickUploadedFile } from '../common/utils/multer.util';
 import { setFlash } from '../common/utils/flash.util';
 import { buildExcelBuffer } from '../common/utils/excel.util';
 import { UpsertFeeScheduleDto } from './dto/upsert-fee-schedule.dto';
 import { BillingService } from './billing.service';
-
-// FileInterceptor's own upload typing needs @types/multer, not installed in
-// this project (see multer.util.ts) - this is the minimal shape actually
-// read from the uploaded file here.
-interface UploadedExcelFile {
-  buffer?: Buffer;
-}
 import { SettingsService } from '../settings/settings.service';
 import { ExpensesService } from '../expenses/expenses.service';
 import { EcolesService } from '../ecoles/ecoles.service';
@@ -168,12 +159,8 @@ export class BillingController {
 
   @Post('/import')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION)
-  @UseInterceptors(FileInterceptor('file'))
-  async importFees(
-    @UploadedFile() file: UploadedExcelFile,
-    @Req() req: Request,
-    @Res() res: Response,
-  ) {
+  async importFees(@Req() req: Request, @Res() res: Response) {
+    const file = pickUploadedFile(req, 'file');
     if (!file?.buffer) {
       throw new BadRequestException('Fichier Excel requis');
     }
