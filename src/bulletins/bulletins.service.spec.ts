@@ -763,6 +763,14 @@ describe('BulletinsService', () => {
       '..',
       'BASE DE DONNEES NOTES ELEVES 5EME.xlsx',
     );
+    // Real client data file, deliberately not committed to the repo (PII).
+    // Skip gracefully when it isn't present locally instead of failing CI.
+    if (!fs.existsSync(realFilePath)) {
+      console.warn(
+        `Test ignore : fichier reel absent (${realFilePath})`,
+      );
+      return;
+    }
     const buffer = fs.readFileSync(realFilePath);
     const parsed = parseBulletinWorkbook(buffer);
     expect(parsed.rows.length).toBeGreaterThan(0);
@@ -1713,6 +1721,14 @@ describe('BulletinsService', () => {
       '..',
       'BASE DE DONNEES NOTES ELEVES 5EME.xlsx',
     );
+    // Real client data file, deliberately not committed to the repo (PII).
+    // Skip gracefully when it isn't present locally instead of failing CI.
+    if (!fs.existsSync(realFilePath)) {
+      console.warn(
+        `Test ignore : fichier reel absent (${realFilePath})`,
+      );
+      return;
+    }
     const buffer = fs.readFileSync(realFilePath);
     const parsed = parseBulletinWorkbook(buffer);
     expect(parsed.rows.length).toBeGreaterThan(0);
