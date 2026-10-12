@@ -16,7 +16,11 @@ export async function createPlatformAdmin(
   try {
     const usersService = app.get(UsersService);
     const passwordHash = await bcrypt.hash(password, 10);
-    return usersService.ensureAdmin({
+    // Awaited (not just returned) so the write is confirmed committed
+    // before `finally` closes the Mongo connection pool below - otherwise
+    // the pool can close while this is still in flight, failing the write
+    // with a PoolClosedError instead of ever completing it.
+    return await usersService.ensureAdmin({
       name,
       email,
       passwordHash,
