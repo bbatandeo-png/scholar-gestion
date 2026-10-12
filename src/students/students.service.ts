@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Connection, Model } from 'mongoose';
+import { DisciplineRecord } from '../discipline/schemas/discipline-record.schema';
 import { GuardiansService } from '../guardians/guardians.service';
 import { Guardian } from '../guardians/schemas/guardian.schema';
 import { GuardianType, StudentStatus } from '../common/enums/domain.enums';
@@ -17,12 +18,14 @@ import {
 import { SettingsService } from '../settings/settings.service';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
+import { toDisplayString } from '../common/utils/safe-string.util';
 import { Student, StudentDocument } from './schemas/student.schema';
 import {
   Enrollment,
   EnrollmentDocument,
 } from '../enrollments/schemas/enrollment.schema';
 import { Level, LevelDocument } from '../levels/schemas/level.schema';
+import { Invoice, InvoiceDocument } from '../billing/schemas/invoice.schema';
 import {
   PopulatedEnrollmentLean,
   PopulatedStudentLean,
@@ -54,6 +57,10 @@ export class StudentsService {
     private readonly enrollmentModel: Model<EnrollmentDocument>,
     @InjectModel(Level.name)
     private readonly levelModel: Model<LevelDocument>,
+    @InjectModel(DisciplineRecord.name)
+    private readonly disciplineRecordModel: Model<DisciplineRecord>,
+    @InjectModel(Invoice.name)
+    private readonly invoiceModel: Model<InvoiceDocument>,
     private readonly guardiansService: GuardiansService,
     private readonly settingsService: SettingsService,
     @InjectConnection() private readonly connection: Connection,
@@ -182,6 +189,38 @@ export class StudentsService {
       .exec();
   }
 
+  // Ids of the students whose matricule, lastname or firstname contains the
+  // text (accents and case ignored), optionally only among those enrolled in
+  // the given school year. Used to search lists that show a student.
+  async findIdsMatching(term: string, schoolYearId?: string) {
+    const trimmed = term.trim();
+    if (!trimmed) {
+      return [];
+    }
+    const pattern = new RegExp(
+      this.buildAccentInsensitivePattern(trimmed),
+      'i',
+    );
+    const enrolledIds = schoolYearId
+      ? await this.enrollmentModel
+          .distinct('studentId', { schoolYearId })
+          .exec()
+      : undefined;
+    const students = await this.studentModel
+      .find({
+        ...(enrolledIds ? { _id: { $in: enrolledIds } } : {}),
+        $or: [
+          { matricule: pattern },
+          { lastname: pattern },
+          { firstname: pattern },
+        ],
+      })
+      .select('_id')
+      .lean()
+      .exec();
+    return students.map((student) => String(student._id));
+  }
+
   async autocomplete(query: string, limit = 25) {
     const normalizedQuery = query.trim().replace(/\s+/g, ' ');
     if (normalizedQuery.length < 3) {
@@ -249,16 +288,164 @@ export class StudentsService {
       .exec();
   }
 
-  async search(query?: string, schoolYearId?: string) {
-    const studentIds = schoolYearId
+  // Backs the "Creer un eleve" form's confirmation popup (see
+  // StudentsController.checkDuplicateName) - exact, case/accent-insensitive
+  // name match, never blocking on its own (two real students can share a
+  // name, e.g. twins) - just lets the form ask "are you sure?" before
+  // creating a second record with the exact same identity.
+  async checkDuplicateName(lastname: string, firstname: string) {
+    const lastnamePattern = new RegExp(
+      `^${this.buildAccentInsensitivePattern(lastname.trim())}$`,
+      'i',
+    );
+    const firstnamePattern = new RegExp(
+      `^${this.buildAccentInsensitivePattern(firstname.trim())}$`,
+      'i',
+    );
+    return this.studentModel
+      .find({ lastname: lastnamePattern, firstname: firstnamePattern })
+      .select('matricule lastname firstname status')
+      .lean()
+      .exec();
+  }
+
+  // Tous les groupes d'eleves partageant le meme nom+prenoms (sans egard a
+  // la casse/accents) avec au moins 2 occurrences - pour la page de revue
+  // /students/duplicates. Un nom partage n'est pas forcement une erreur
+  // (homonymes reels), mais merite d'etre visible pour verification.
+  async findDuplicateGroups() {
+    return this.studentModel
+      .aggregate<{
+        _id: { lastname: string; firstname: string };
+        count: number;
+        students: Array<{
+          _id: unknown;
+          matricule: string;
+          lastname: string;
+          firstname: string;
+          status: string;
+          createdAt: Date;
+        }>;
+      }>([
+        {
+          $addFields: {
+            lastnameNormalized: { $toLower: '$lastname' },
+            firstnameNormalized: { $toLower: '$firstname' },
+          },
+        },
+        {
+          $group: {
+            _id: {
+              lastname: '$lastnameNormalized',
+              firstname: '$firstnameNormalized',
+            },
+            count: { $sum: 1 },
+            students: {
+              $push: {
+                _id: '$_id',
+                matricule: '$matricule',
+                lastname: '$lastname',
+                firstname: '$firstname',
+                status: '$status',
+                createdAt: '$createdAt',
+              },
+            },
+          },
+        },
+        { $match: { count: { $gt: 1 } } },
+        { $sort: { '_id.lastname': 1, '_id.firstname': 1 } },
+      ])
+      .exec();
+  }
+
+  // Lifetime (toutes annees confondues) total paye / solde du par eleve,
+  // pour aider a decider lequel des dossiers en double garder actif avant
+  // d'archiver l'autre (voir /students/duplicates). Batch (2 requetes, pas
+  // N+1) via le meme pattern $in que EnrollmentsService - jamais un
+  // findInvoiceByEnrollment() par eleve.
+  async getFinancialSummaries(
+    studentIds: string[],
+  ): Promise<Map<string, { totalPaid: number; balanceDue: number }>> {
+    const summaries = new Map<
+      string,
+      { totalPaid: number; balanceDue: number }
+    >();
+    if (studentIds.length === 0) {
+      return summaries;
+    }
+
+    const enrollments = await this.enrollmentModel
+      .find({ studentId: { $in: studentIds } })
+      .select('_id studentId')
+      .lean()
+      .exec();
+    if (enrollments.length === 0) {
+      return summaries;
+    }
+
+    const enrollmentIdToStudentId = new Map<string, string>();
+    for (const enrollment of enrollments) {
+      enrollmentIdToStudentId.set(
+        String(enrollment._id),
+        String(enrollment.studentId),
+      );
+    }
+
+    const invoices = await this.invoiceModel
+      .find({ enrollmentId: { $in: [...enrollmentIdToStudentId.keys()] } })
+      .select('enrollmentId paidAmount balanceDue')
+      .lean()
+      .exec();
+
+    for (const invoice of invoices) {
+      const studentId = enrollmentIdToStudentId.get(
+        String(invoice.enrollmentId),
+      );
+      if (!studentId) continue;
+      const entry = summaries.get(studentId) ?? {
+        totalPaid: 0,
+        balanceDue: 0,
+      };
+      entry.totalPaid += invoice.paidAmount ?? 0;
+      entry.balanceDue += invoice.balanceDue ?? 0;
+      summaries.set(studentId, entry);
+    }
+
+    return summaries;
+  }
+
+  async search(
+    query?: string,
+    schoolYearId?: string,
+    filters: { levelId?: string; status?: string; matricule?: string } = {},
+  ) {
+    const enrollmentCriteria: Record<string, unknown> = {};
+    if (schoolYearId) {
+      enrollmentCriteria.schoolYearId = schoolYearId;
+    }
+    if (filters.levelId) {
+      enrollmentCriteria.levelId = filters.levelId;
+    }
+    const studentIds = Object.keys(enrollmentCriteria).length
       ? await this.enrollmentModel
-          .distinct('studentId', { schoolYearId })
+          .distinct('studentId', enrollmentCriteria)
           .exec()
       : undefined;
-    const yearCriteria = studentIds ? { _id: { $in: studentIds } } : {};
+    const extraCriteria = {
+      ...(studentIds ? { _id: { $in: studentIds } } : {}),
+      ...(filters.status ? { status: filters.status } : {}),
+      ...(filters.matricule
+        ? {
+            matricule: new RegExp(
+              `^${this.escapeRegExp(filters.matricule.trim())}$`,
+              'i',
+            ),
+          }
+        : {}),
+    };
     if (!query) {
       const students = (await this.studentModel
-        .find(yearCriteria)
+        .find(extraCriteria)
         .select(
           'matricule lastname firstname gender birthDate birthPlace district status',
         )
@@ -268,10 +455,10 @@ export class StudentsService {
       return this.applyYearSnapshots(students, schoolYearId);
     }
 
-    const regex = new RegExp(query.trim(), 'i');
+    const regex = new RegExp(this.escapeRegExp(query.trim()), 'i');
     const students = (await this.studentModel
       .find({
-        ...yearCriteria,
+        ...extraCriteria,
         $or: [
           { matricule: regex },
           { lastname: regex },
@@ -320,25 +507,79 @@ export class StudentsService {
     page: number,
     pageSize: number,
     schoolYearId?: string,
+    filters: {
+      levelId?: string;
+      status?: string;
+      matricule?: string;
+    } = {},
   ) {
-    const studentIds = schoolYearId
+    // A level filter only makes sense scoped to a school year (the same
+    // student can be in a different class each year), so it forces the
+    // enrollment lookup below even when the page itself has no year filter.
+    //
+    // Skipped entirely when an exact matricule is given, or when a status
+    // is given WITHOUT a level: both are precise identifiers read directly
+    // off the Student record, not the enrollment - a student can end up
+    // with no Enrollment at all for the selected year through no fault of
+    // their own (e.g. the fee schedule for their class wasn't configured
+    // yet when they were created - see StudentsController.create()'s own
+    // "l'inscription n'a pas ete effectuee" flash), and an ARCHIVED student
+    // in particular almost never has one for the currently OPEN year by
+    // definition (they left before/without re-enrolling) - restricting a
+    // plain status search by enrollment made "/students?status=archived"
+    // (see /students/duplicates' "Voir les eleves archives" link) silently
+    // return nothing even when archived students exist.
+    //
+    // When a level IS also given alongside status, the enrollment lookup
+    // stays - a level filter is inherently about "was this student placed
+    // in this class", which only the Enrollment records answer; status is
+    // then applied as an independent extra constraint on top (unchanged).
+    const skipEnrollmentScoping = Boolean(
+      filters.matricule || (filters.status && !filters.levelId),
+    );
+    const enrollmentCriteria: Record<string, unknown> = {};
+    if (!skipEnrollmentScoping) {
+      if (schoolYearId) {
+        enrollmentCriteria.schoolYearId = schoolYearId;
+      }
+      if (filters.levelId) {
+        enrollmentCriteria.levelId = filters.levelId;
+      }
+    }
+    const studentIds = Object.keys(enrollmentCriteria).length
       ? await this.enrollmentModel
-          .distinct('studentId', { schoolYearId })
+          .distinct('studentId', enrollmentCriteria)
           .exec()
       : undefined;
     const searchCriteria = query
       ? {
           $or: [
-            { matricule: new RegExp(query.trim(), 'i') },
-            { lastname: new RegExp(query.trim(), 'i') },
-            { firstname: new RegExp(query.trim(), 'i') },
-            { district: new RegExp(query.trim(), 'i') },
+            { matricule: new RegExp(this.escapeRegExp(query.trim()), 'i') },
+            { lastname: new RegExp(this.escapeRegExp(query.trim()), 'i') },
+            { firstname: new RegExp(this.escapeRegExp(query.trim()), 'i') },
+            { district: new RegExp(this.escapeRegExp(query.trim()), 'i') },
           ],
         }
       : {};
     const criteria = {
       ...searchCriteria,
       ...(studentIds ? { _id: { $in: studentIds } } : {}),
+      ...(filters.status ? { status: filters.status } : {}),
+      // levelId applies directly against the Student record (its declared
+      // class) whenever enrollment-scoping was skipped above - this only
+      // happens for an exact matricule search combined with a class filter
+      // (status+levelId keeps the enrollment-based lookup above instead).
+      ...(skipEnrollmentScoping && filters.levelId
+        ? { levelId: filters.levelId }
+        : {}),
+      ...(filters.matricule
+        ? {
+            matricule: new RegExp(
+              `^${this.escapeRegExp(filters.matricule.trim())}$`,
+              'i',
+            ),
+          }
+        : {}),
     };
 
     const skip = (page - 1) * pageSize;
@@ -347,13 +588,15 @@ export class StudentsService {
       this.studentModel
         .find(criteria)
         .select(
-          'matricule lastname firstname gender birthDate birthPlace district status createdAt',
+          'matricule lastname firstname gender birthDate birthPlace district status createdAt levelId',
         )
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(pageSize)
         .lean()
-        .exec() as Promise<Array<StudentSearchRow & { createdAt?: Date }>>,
+        .exec() as Promise<
+        Array<StudentSearchRow & { createdAt?: Date; levelId?: string }>
+      >,
       this.studentModel.countDocuments(criteria),
     ]);
 
@@ -369,6 +612,19 @@ export class StudentsService {
           .lean()
           .exec()) as PopulatedEnrollmentLean | null;
 
+        // No Enrollment this year (e.g. creation-time enrollment failed -
+        // see this method's matricule comment above) - fall back to the
+        // class declared directly on the Student record rather than
+        // showing a bare "-" for a student who very much has one.
+        const declaredLevel =
+          !enrollment && student.levelId
+            ? await this.levelModel
+                .findById(student.levelId)
+                .select('label')
+                .lean()
+                .exec()
+            : null;
+
         return {
           ...student,
           ...(schoolYearId && enrollment?.studentSnapshot
@@ -377,6 +633,7 @@ export class StudentsService {
           currentLevel:
             (enrollment?.levelSnapshot?.label as string | undefined) ||
             enrollment?.levelId?.label ||
+            declaredLevel?.label ||
             '-',
         };
       }),
@@ -400,6 +657,58 @@ export class StudentsService {
     }
 
     return student;
+  }
+
+  // What is known about the student's class, to show it next to the student
+  // when enrolling: the class noted on the file when it was created (if any)
+  // and the class of the most recent enrollment (if any). Display only.
+  async getClassInfo(studentId: string): Promise<{
+    declared: string | null;
+    declaredId: string | null;
+    last: { label: string; schoolYear: string; levelId: string } | null;
+  }> {
+    const student = await this.studentModel
+      .findById(studentId)
+      .select('levelId')
+      .lean()
+      .exec();
+    const declaredLevel = student?.levelId
+      ? await this.levelModel
+          .findById(student.levelId)
+          .select('label')
+          .lean()
+          .exec()
+      : null;
+
+    const lastEnrollment = (await this.enrollmentModel
+      .findOne({ studentId })
+      .sort({ createdAt: -1 })
+      .populate('levelId', 'label')
+      .populate('schoolYearId', 'label')
+      .lean()
+      .exec()) as PopulatedEnrollmentLean | null;
+    const lastLabel =
+      (lastEnrollment?.levelSnapshot?.label as string | undefined) ||
+      lastEnrollment?.levelId?.label;
+
+    // levelSnapshot never carries an _id (see enrollment.schema.ts) - only
+    // the live levelId reference does, and only while that Level still
+    // exists (populate() nulls the field out otherwise).
+    const lastLevelId = lastEnrollment?.levelId?._id
+      ? toDisplayString(lastEnrollment.levelId._id)
+      : undefined;
+
+    return {
+      declared: declaredLevel?.label ?? null,
+      declaredId: student?.levelId ? String(student.levelId) : null,
+      last: lastLabel
+        ? {
+            label: lastLabel,
+            schoolYear: lastEnrollment?.schoolYearId?.label ?? '',
+            levelId: lastLevelId ?? '',
+          }
+        : null,
+    };
   }
 
   async create(
@@ -433,11 +742,14 @@ export class StudentsService {
     }
 
     const normalizedGender = dto.gender?.trim().toUpperCase();
+    // A blank "Classe" select means none - never write '' into an ObjectId.
+    const { levelId, ...studentFields } = dto;
     return runWithMongoTransactionFallback(this.connection, async (session) => {
       const student = await this.studentModel.create(
         [
           {
-            ...dto,
+            ...studentFields,
+            ...(levelId ? { levelId } : {}),
             gender: normalizedGender,
             matricule,
             ...(dto.birthDate ? { birthDate: new Date(dto.birthDate) } : {}),
@@ -462,8 +774,10 @@ export class StudentsService {
 
   async update(id: string, dto: UpdateStudentDto) {
     return runWithMongoTransactionFallback(this.connection, async (session) => {
+      const { levelId, ...dtoFields } = dto;
       const updatePayload = {
-        ...dto,
+        ...dtoFields,
+        ...(levelId ? { levelId } : {}),
         ...(dto.gender ? { gender: dto.gender.trim().toUpperCase() } : {}),
         ...(dto.birthDate ? { birthDate: new Date(dto.birthDate) } : {}),
       };
@@ -473,6 +787,27 @@ export class StudentsService {
       if (!student) {
         throw new NotFoundException('Eleve introuvable');
       }
+
+      // Enrollments keep a denormalized copy of the student's identity (the
+      // enrollments list reads it) - refresh it, otherwise the list keeps
+      // showing the old name/matricule after this edit.
+      await this.enrollmentModel
+        .updateMany(
+          { studentId: id },
+          {
+            studentSnapshot: {
+              matricule: student.matricule,
+              lastname: student.lastname,
+              firstname: student.firstname,
+              gender: student.gender,
+              birthDate: student.birthDate,
+              birthPlace: student.birthPlace,
+              district: student.district,
+            },
+          },
+          { session },
+        )
+        .exec();
 
       if (dto.guardians) {
         const normalizedGuardians = this.normalizeGuardians(dto.guardians);
@@ -507,14 +842,29 @@ export class StudentsService {
   async detail(id: string): Promise<{
     student: Student & { _id: unknown };
     guardians: Array<Guardian & { _id: unknown }>;
+    disciplineRecords: unknown[];
   }> {
-    const [student, guardians] = await Promise.all([
+    const [student, guardians, disciplineRecords] = await Promise.all([
       this.findById(id),
       this.guardiansService.findByStudentId(id) as Promise<
         Array<Guardian & { _id: unknown }>
       >,
+      this.getRecentDisciplineRecords(id),
     ]);
 
-    return { student, guardians };
+    return { student, guardians, disciplineRecords };
+  }
+
+  // Last few entries of the student's transversal discipline journal (see
+  // DisciplineModule), shown on their own fiche - the full cross-year
+  // history lives at /discipline?studentId=... (DisciplineController.index).
+  async getRecentDisciplineRecords(studentId: string, limit = 5) {
+    return this.disciplineRecordModel
+      .find({ studentId })
+      .populate('schoolYearId')
+      .sort({ date: -1 })
+      .limit(limit)
+      .lean()
+      .exec();
   }
 }

@@ -1,0 +1,42 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <div class="panel">
+    <h2>Nouvel enseignant</h2>
+    <form method="post" action="/teachers" enctype="multipart/form-data" class="stack">
+      <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+      <div class="form-grid">
+        <label>Nom<input name="lastname" required /></label>
+        <label>Prenoms<input name="firstname" required /></label>
+        <label>Sexe
+          <select name="gender">
+            <option value="">Sélectionner</option>
+            <option value="M">M</option>
+            <option value="F">F</option>
+          </select>
+        </label>
+        <label>Date de naissance<input type="date" name="birthDate" /></label>
+        <label>Lieu de naissance<input name="birthPlace" /></label>
+        <label>Telephone<input name="phone" /></label>
+        <label>Email<input type="email" name="email" /></label>
+        <label>Adresse<input name="address" /></label>
+        <label>Diplome<input name="diploma" /></label>
+        <label>Specialite<input name="specialty" /></label>
+        <label>Date d'embauche<input type="date" name="hireDate" /></label>
+        <label>Statut
+          <select name="status">
+            {% for key, meta in ENUM_META.teacherStatus %}
+              <option value="{{ key }}">{{ meta.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Photo
+          <input type="file" name="photo" accept="image/png,image/jpeg,image/webp,image/gif" />
+        </label>
+      </div>
+      <label>Notes <span class="muted">(facultatif)</span>
+        <textarea name="notes" rows="2"></textarea>
+      </label>
+      <button type="submit" class="btn-lg btn-icon icon-save">Creer le dossier</button>
+    </form>
+  </div>
+{% endblock %}

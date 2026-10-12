@@ -18,6 +18,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { runSeed, shouldRunSeed } from './scripts/seed';
 import { SchoolYearsService } from './school-years/school-years.service';
 import { applyTenantMiddleware } from './common/tenant/apply-tenant-middleware';
+import { noStore } from './common/middleware/no-store';
 import { csrfErrorHandler } from './common/middleware/csrf-error-handler';
 import { EcoleModulesService } from './ecole-modules/ecole-modules.service';
 import { LicensingService } from './licensing/licensing.service';
@@ -85,6 +86,8 @@ async function bootstrap() {
   app.useStaticAssets(publicDir);
   app.useStaticAssets(uploadsDir, { prefix: '/uploads' });
   app.useStaticAssets(siteVitrineDir, { prefix: '/vitrine' });
+  // After the static mounts on purpose: assets keep caching, pages do not.
+  app.use(noStore);
   const nunjucksEnv = nunjucks.configure(viewsDir, {
     autoescape: true,
     express: app.getHttpAdapter().getInstance(),
@@ -164,6 +167,8 @@ async function bootstrap() {
   app.use('/promotions', multipartUpload.any());
   // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
   app.use('/settings/fees', multipartUpload.any());
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+  app.use('/teachers', multipartUpload.any());
 
   if (!isTest) {
     app.use(csurf());
@@ -233,9 +238,18 @@ async function bootstrap() {
           res.locals.activeModules = {
             finance: openCodes.has('FINANCE'),
             bulletins: openCodes.has('BULLETINS'),
+            discipline: openCodes.has('DISCIPLINE'),
+            stock: openCodes.has('STOCK'),
+            enseignants: openCodes.has('ENSEIGNANTS'),
           };
         } catch {
-          res.locals.activeModules = { finance: false, bulletins: false };
+          res.locals.activeModules = {
+            finance: false,
+            bulletins: false,
+            discipline: false,
+            stock: false,
+            enseignants: false,
+          };
         }
 
         // Off by default: LICENSE_ENFORCEMENT must be explicitly set to 'on'

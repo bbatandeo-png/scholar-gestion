@@ -10,12 +10,14 @@ import { BillingController } from './billing.controller';
 import { BillingService } from './billing.service';
 import { FeeSchedule, FeeScheduleSchema } from './schemas/fee-schedule.schema';
 import { Invoice, InvoiceSchema } from './schemas/invoice.schema';
+import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: FeeSchedule.name, schema: FeeScheduleSchema },
       { name: Invoice.name, schema: InvoiceSchema },
+      { name: Payment.name, schema: PaymentSchema },
     ]),
     SchoolYearsModule,
     LevelsModule,

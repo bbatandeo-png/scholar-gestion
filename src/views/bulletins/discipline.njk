@@ -13,6 +13,7 @@
     <table class="table-report">
       <thead>
         <tr>
+          <th>N°</th>
           <th>Eleve</th>
           <th>Retards (fois)</th>
           <th>Absences (heures)</th>
@@ -25,6 +26,7 @@
         {% for row in rows %}
           {% set formId = 'discipline-' + row._id %}
           <tr>
+            <td>{{ loop.index }}</td>
             <td>{{ row.studentId.lastname }} {{ row.studentId.firstname }}</td>
             <td><input type="number" name="retards" min="0" value="{{ row.retards }}" form="{{ formId }}" /></td>
             <td><input type="number" name="absences" min="0" value="{{ row.absences }}" form="{{ formId }}" /></td>
@@ -33,7 +35,7 @@
             <td><button type="submit" class="btn-sm" form="{{ formId }}">Enregistrer</button></td>
           </tr>
         {% else %}
-          <tr><td colspan="6">Aucun eleve rapproche pour l'instant.</td></tr>
+          <tr><td colspan="7">Aucun eleve rapproche pour l'instant.</td></tr>
         {% endfor %}
       </tbody>
     </table>

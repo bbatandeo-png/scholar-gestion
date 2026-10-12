@@ -1,0 +1,113 @@
+{% extends "layout.njk" %}
+{% import "partials/legend.njk" as legend %}
+{% block content %}
+  <div class="panel">
+    <div class="panel-heading">
+      <div>
+        <h2>{{ item.name }}</h2>
+        <p class="muted">
+          Quantite actuelle : <strong>{{ item.quantity }} {{ item.unit }}</strong>
+          {% if item.alertThreshold != null and item.alertThreshold != undefined %}
+            (seuil d'alerte : {{ item.alertThreshold }})
+          {% endif %}
+          {% if item.isLow %}<span class="badge badge-danger">Seuil bas</span>{% endif %}
+        </p>
+      </div>
+      <a class="button secondary btn-sm" href="/stock">Retour au stock</a>
+    </div>
+  </div>
+
+  <section class="grid cols-2 top-gap">
+    <div class="panel">
+      <h2>Modifier l'article</h2>
+      <form method="post" action="/stock/{{ item._id }}" class="stack">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+        <div class="form-grid">
+          <label>Nom
+            <input name="name" value="{{ item.name }}" required />
+          </label>
+          <label>Categorie
+            <select name="category" required>
+              {% for key, meta in ENUM_META.stockCategory %}
+                <option value="{{ key }}" {% if item.category == key %}selected{% endif %}>{{ meta.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Unite
+            <input name="unit" value="{{ item.unit }}" required />
+          </label>
+          <label>Seuil d'alerte <span class="muted">(facultatif)</span>
+            <input type="number" name="alertThreshold" min="0" value="{{ item.alertThreshold }}" />
+          </label>
+          <label>Emplacement <span class="muted">(facultatif)</span>
+            <input name="location" value="{{ item.location }}" />
+          </label>
+        </div>
+        <label>Notes <span class="muted">(facultatif)</span>
+          <textarea name="notes" rows="2">{{ item.notes }}</textarea>
+        </label>
+        <button type="submit">Mettre à jour</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>Enregistrer un mouvement</h2>
+      <p class="muted">Une entree ajoute au stock (achat, don), une sortie en retire (distribution, perte, casse).</p>
+      <form method="post" action="/stock/{{ item._id }}/movements" class="stack">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+        <div class="form-grid">
+          <label>Type
+            <select name="type" required>
+              {% for key, meta in ENUM_META.stockMovementType %}
+                <option value="{{ key }}">{{ meta.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Quantite
+            <input type="number" name="quantity" min="1" required />
+          </label>
+          <label>Date
+            <input type="date" name="date" value="{{ today }}" required />
+          </label>
+        </div>
+        <label>Motif
+          <input name="reason" required placeholder="Achat, distribution a la classe de..., perte, casse..." />
+        </label>
+        <button type="submit">Enregistrer</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="panel top-gap">
+    <h2>Historique des mouvements</h2>
+    <div class="table-shell">
+      <table class="table-report">
+        <thead>
+          <tr>
+            <th>N°</th>
+            <th>Date</th>
+            <th>Type</th>
+            <th>Quantite</th>
+            <th>Motif</th>
+            <th>Enregistre par</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for movement in movements %}
+            <tr>
+              <td>{{ loop.index }}</td>
+              <td>{{ movement.date | formatDate }}</td>
+              <td>{% set value = movement.type %}{% set group = 'stockMovementType' %}{% include "partials/status-badge.njk" %}</td>
+              <td>{{ movement.quantity }} {{ item.unit }}</td>
+              <td>{{ movement.reason }}</td>
+              <td>{{ movement.recordedBy.name if movement.recordedBy else '—' }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="6">Aucun mouvement enregistre pour cet article.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {{ legend.render(['stockMovementType']) }}
+  </section>
+{% endblock %}

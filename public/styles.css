@@ -301,6 +301,9 @@ input[type='button'] {
 .icon-save::before {
   content: 'OK';
 }
+.icon-pay::before {
+  content: 'F';
+}
 .icon-next::before {
   content: '>';
 }
@@ -338,6 +341,24 @@ button.secondary:hover,
 input[type='submit'].secondary:hover,
 input[type='button'].secondary:hover {
   background: #c25f34;
+  filter: none;
+}
+
+.button.danger,
+button.danger,
+input[type='submit'].danger,
+input[type='button'].danger {
+  background: var(--danger);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: var(--shadow-sm);
+}
+
+.button.danger:hover,
+button.danger:hover,
+input[type='submit'].danger:hover,
+input[type='button'].danger:hover {
+  background: #96302f;
   filter: none;
 }
 
@@ -544,6 +565,48 @@ td button,
   -webkit-overflow-scrolling: touch;
 }
 
+/* Search box above a list: the server-side one on paginated lists (a GET
+   form) and the one public/table-filter.js adds to every other list. */
+.student-class-info {
+  margin: 4px 0 0;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: #e7f3ef;
+  color: var(--ink);
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+.student-class-info[hidden] {
+  display: none;
+}
+[hidden] {
+  display: none !important;
+}
+tr[hidden] {
+  display: none;
+}
+.table-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+.table-filter input[type='search'] {
+  flex: 1 1 260px;
+  min-width: 0;
+  max-width: 420px;
+}
+.table-filter .table-filter-count {
+  font-size: 0.875rem;
+  color: var(--muted, #667085);
+}
+@media print {
+  .table-filter {
+    display: none;
+  }
+}
+
 input,
 select,
 textarea,
@@ -557,13 +620,14 @@ label {
   font-weight: 600;
 }
 
+/* Required fields: the asterisk sits inline right before the label text
+   ("* Niveau") with the control on its own line underneath. Block flow, not
+   a grid, so controls nested in a wrapper (e.g. the student autocomplete's
+   div) stack under the label exactly like a direct input/select. */
 label:has(input[required]),
 label:has(select[required]),
 label:has(textarea[required]) {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 8px 12px;
+  display: block;
 }
 
 label:has(input[required])::before,
@@ -572,7 +636,14 @@ label:has(textarea[required])::before {
   content: '*';
   color: var(--danger);
   font-weight: 700;
-  line-height: 1;
+  margin-right: 5px;
+}
+
+label:has(input[required]) > :is(input, select, textarea, div, p),
+label:has(select[required]) > :is(input, select, textarea, div, p),
+label:has(textarea[required]) > :is(input, select, textarea, div, p) {
+  display: block;
+  margin-top: 6px;
 }
 
 label > input,
@@ -580,6 +651,13 @@ label > select,
 label > textarea {
   grid-column: 1 / -1;
   width: 100%;
+}
+
+/* Stops a shorter field from stretching to the height of the tallest label
+   in its form-grid row (e.g. a disabled "Annee" input next to a two-line
+   label). */
+.form-grid > label {
+  align-content: start;
 }
 
 .form-grid {
@@ -828,19 +906,23 @@ th.sortable.sort-desc::after {
 }
 .badge.paid,
 .badge.active,
-.badge.settled {
+.badge.settled,
+.badge.entree {
   background: rgba(31, 122, 66, 0.14);
   color: var(--success);
 }
 .badge.partial,
-.badge.pending {
+.badge.pending,
+.badge.convocation,
+.badge.sortie {
   background: rgba(219, 108, 63, 0.16);
   color: var(--accent-2);
 }
 .badge.unpaid,
 .badge.overdue,
 .badge.cancelled,
-.badge.inactive {
+.badge.inactive,
+.badge.sanction {
   background: rgba(180, 63, 63, 0.14);
   color: var(--danger);
 }
@@ -1557,4 +1639,86 @@ th.sortable.sort-desc::after {
   .table-shell table {
     min-width: 0;
   }
+}
+
+/* Confirmation dialog before a sensitive one-click action (e.g. registering
+   a payment) - a native <dialog>, styled to match the app's panels. */
+.confirm-dialog {
+  border: none;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 24px;
+  max-width: 420px;
+  width: calc(100% - 32px);
+  background: var(--panel);
+  color: var(--ink);
+}
+.confirm-dialog::backdrop {
+  background: rgba(19, 34, 56, 0.45);
+}
+.confirm-dialog h3 {
+  margin: 0 0 10px;
+}
+.confirm-dialog p {
+  margin: 0 0 10px;
+}
+
+/* Dashboard charts (see public/charts.js) */
+.chart-card h3 {
+  margin: 0 0 4px;
+}
+.chart-card .muted {
+  margin: 0 0 14px;
+}
+.chart-empty {
+  margin: 24px 0;
+  text-align: center;
+}
+.donut-chart-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.donut-chart-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: var(--ink);
+}
+.donut-chart-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+.chart-card-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 4px;
+}
+.chart-card-heading h3 {
+  margin: 0 0 4px;
+}
+.grouped-bar-chart-wrapper {
+  width: 100%;
+}
+.grouped-bar-chart-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 18px;
+  font-size: 0.9rem;
+  color: var(--ink);
 }

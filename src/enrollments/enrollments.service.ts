@@ -36,6 +36,8 @@ function getAuditActionLabel(action: string) {
   switch (action) {
     case AuditAction.DISCOUNT_APPLIED:
       return 'Remise appliquée';
+    case AuditAction.PAYMENT_CORRECTED:
+      return 'Correction du registre des paiements';
     case AuditAction.ENROLLMENT_CREATED:
       return 'Création d’inscription';
     case AuditAction.REENROLLMENT_CREATED:
@@ -150,11 +152,56 @@ export class EnrollmentsService {
     >;
   }
 
-  async listPaginated(schoolYearId: string, page: number, pageSize: number) {
+  // Every word typed must match either the student (matricule / lastname /
+  // firstname) or the level (label / code) - so "kouassi cp1" narrows to that
+  // student in that class, and a single word works on either.
+  private async buildSearchCriteria(schoolYearId: string, query?: string) {
+    const tokens = (query ?? '')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 6);
+    if (!tokens.length) {
+      return { schoolYearId };
+    }
+
+    const normalize = (value: string) =>
+      value.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    const levels = await this.levelsService.listForSchoolYear(schoolYearId);
+    const conditions = await Promise.all(
+      tokens.map(async (token) => {
+        const studentIds = await this.studentsService.findIdsMatching(
+          token,
+          schoolYearId,
+        );
+        const needle = normalize(token);
+        const levelIds = levels
+          .filter((level) =>
+            normalize(`${level.label} ${level.code}`).includes(needle),
+          )
+          .map((level) => toDisplayString(level._id));
+        return {
+          $or: [
+            { studentId: { $in: studentIds } },
+            { levelId: { $in: levelIds } },
+          ],
+        };
+      }),
+    );
+    return { schoolYearId, $and: conditions };
+  }
+
+  async listPaginated(
+    schoolYearId: string,
+    page: number,
+    pageSize: number,
+    query?: string,
+  ) {
     const skip = (page - 1) * pageSize;
+    const criteria = await this.buildSearchCriteria(schoolYearId, query);
     const [items, total] = await Promise.all([
       this.enrollmentModel
-        .find({ schoolYearId })
+        .find(criteria)
         .populate({ path: 'studentId', select: 'matricule lastname firstname' })
         .populate({ path: 'schoolYearId', select: 'label' })
         .populate({ path: 'levelId', select: 'label' })
@@ -163,7 +210,7 @@ export class EnrollmentsService {
         .limit(pageSize)
         .lean()
         .exec(),
-      this.enrollmentModel.countDocuments({ schoolYearId }),
+      this.enrollmentModel.countDocuments(criteria),
     ]);
 
     return {
@@ -285,6 +332,21 @@ export class EnrollmentsService {
         );
       }
     }
+  }
+
+  // Used by EnrollmentsController.create() to tell "genuinely enrolling a
+  // new student" apart from "this student is already enrolled this year,
+  // and the desk actually wants to record another payment against their
+  // existing invoice" before ever reaching the duplicate-enrollment guard
+  // below.
+  async findActiveEnrollment(studentId: string, schoolYearId: string) {
+    return this.enrollmentModel
+      .findOne({
+        studentId,
+        schoolYearId,
+        status: EnrollmentStatus.ACTIVE,
+      })
+      .exec();
   }
 
   async createEnrollment(dto: CreateEnrollmentDto, actorId?: string) {
@@ -433,9 +495,14 @@ export class EnrollmentsService {
 
   async updateEnrollment(
     id: string,
-    dto: Partial<CreateEnrollmentDto>,
+    rawDto: Partial<CreateEnrollmentDto>,
     actorId?: string,
   ) {
+    // A blank field (e.g. the untouched "Choisir un niveau" placeholder)
+    // means "leave unchanged", never a value to write.
+    const dto = Object.fromEntries(
+      Object.entries(rawDto).filter(([, value]) => value !== ''),
+    ) as Partial<CreateEnrollmentDto>;
     const enrollment = await this.enrollmentModel.findById(id).exec();
     if (!enrollment) {
       throw new NotFoundException('Inscription introuvable');
@@ -561,9 +628,19 @@ export class EnrollmentsService {
       );
     }
 
+    if (
+      payload.paidAmount !== undefined &&
+      (!Number.isFinite(payload.paidAmount) || payload.paidAmount < 0)
+    ) {
+      throw new BadRequestException(
+        'Le montant paye doit etre un nombre positif ou nul',
+      );
+    }
+
     const hasFinancialChange =
       payload.registrationFee !== undefined ||
-      payload.discountAmount !== undefined;
+      payload.discountAmount !== undefined ||
+      payload.paidAmount !== undefined;
     if (hasFinancialChange && !payload.reason?.trim()) {
       throw new BadRequestException(
         'Un motif est obligatoire pour toute modification des montants financiers',
@@ -585,10 +662,35 @@ export class EnrollmentsService {
       paidAmount: payload.paidAmount ?? invoice.paidAmount,
     });
 
+    // Correcting the paid amount by hand (e.g. to cancel a payment entered by
+    // mistake) must also correct the payment ledger: the dashboard and the
+    // revenue report add up Payment documents, not invoice.paidAmount, so
+    // without a matching entry they would keep counting the cancelled money.
+    const previousPaid = Number(invoice.paidAmount ?? 0);
+    const paidDelta =
+      payload.paidAmount !== undefined ? payload.paidAmount - previousPaid : 0;
+    if (Math.abs(paidDelta) >= 0.01) {
+      await this.billingService.recordPaymentCorrection({
+        invoiceId: String(invoice._id),
+        schoolYearId: String(enrollment.schoolYearId),
+        delta: paidDelta,
+        reason: `Correction du montant paye : ${payload.reason?.trim() ?? ''}`,
+        actorId,
+      });
+    }
+
+    // The paid amount is the one figure with its own global history page
+    // (see getPaymentModificationsHistory()) and dashboard indicator, so it
+    // needs its own action distinct from a plain discount/fee edit - a form
+    // submit always resends the current paidAmount, so this checks the
+    // actual delta rather than whether the field was merely present.
     await this.auditService.log({
       schoolYearId: String(enrollment.schoolYearId),
       actorId,
-      action: AuditAction.DISCOUNT_APPLIED,
+      action:
+        Math.abs(paidDelta) >= 0.01
+          ? AuditAction.PAYMENT_CORRECTED
+          : AuditAction.DISCOUNT_APPLIED,
       entityType: 'EnrollmentInvoice',
       entityId: id,
       details: {
@@ -596,11 +698,105 @@ export class EnrollmentsService {
         registrationFeeAfter: updatedInvoice?.registrationFee,
         discountAmountBefore: invoice.discountAmount,
         discountAmountAfter: updatedInvoice?.discountAmount,
+        paidAmountBefore: invoice.paidAmount,
+        paidAmountAfter: updatedInvoice?.paidAmount,
         reason: payload.reason?.trim(),
       },
     });
 
     return updatedInvoice;
+  }
+
+  // Global "historique des modifications de paiement": every PAYMENT_CORRECTED
+  // audit entry for the school year, whatever triggered it (a manual
+  // financial-details edit above, or an automatic ledger-reconciliation
+  // correction in PaymentsService.applyLedgerCorrections) - deliberately
+  // excludes every other audit action (enrollment creation, a fresh payment,
+  // a plain discount edit with no paid-amount change, ...).
+  async getPaymentModificationsHistory(
+    schoolYearId: string,
+    page = 1,
+    pageSize = 20,
+  ) {
+    const { logs, total } = await this.auditService.listByAction(
+      [AuditAction.PAYMENT_CORRECTED],
+      { schoolYearId },
+      { page, pageSize },
+    );
+
+    const actorIds = Array.from(
+      new Set(
+        logs
+          .map((log) => log.actorId)
+          .filter((actorId): actorId is string => Boolean(actorId)),
+      ),
+    );
+    const users = actorIds.length
+      ? await this.usersService.findByIds(actorIds)
+      : [];
+    const userById = new Map(users.map((user) => [String(user._id), user]));
+
+    const entityIds = Array.from(new Set(logs.map((log) => log.entityId)));
+    const enrollments = (entityIds.length
+      ? await this.enrollmentModel
+          .find({ _id: { $in: entityIds } })
+          .populate({
+            path: 'studentId',
+            select: 'matricule lastname firstname',
+          })
+          .populate({ path: 'levelId', select: 'label' })
+          .lean()
+          .exec()
+      : []) as unknown as PopulatedEnrollmentLean[];
+    const enrollmentById = new Map(
+      enrollments.map((enrollment) => [String(enrollment._id), enrollment]),
+    );
+
+    type NamedStudent = {
+      matricule?: string;
+      lastname?: string;
+      firstname?: string;
+    };
+    const rows = logs.map((log) => {
+      const enrollment = enrollmentById.get(String(log.entityId));
+      const student = (enrollment?.studentSnapshot ?? enrollment?.studentId) as
+        | NamedStudent
+        | undefined;
+      const level = enrollment?.levelSnapshot ?? enrollment?.levelId;
+      const details = (log.details ?? {}) as Record<string, unknown>;
+      const paidBefore = Number(details.paidAmountBefore ?? 0);
+      const paidAfter = Number(details.paidAmountAfter ?? paidBefore);
+      // AuditLog's TS class doesn't declare createdAt (it's added purely by
+      // the schema's `timestamps: { createdAt: true }` option) - same reason
+      // getAuditHistoryForEnrollment() above only ever spreads a log rather
+      // than naming this field.
+      const createdAt = (log as unknown as { createdAt?: Date }).createdAt;
+
+      return {
+        date: createdAt,
+        enrollmentId: log.entityId,
+        studentName:
+          `${student?.lastname ?? ''} ${student?.firstname ?? ''}`.trim() ||
+          'Eleve inconnu',
+        matricule: student?.matricule ?? '',
+        levelLabel: level?.label ?? '',
+        actorName: log.actorId
+          ? (userById.get(String(log.actorId))?.name ?? 'Utilisateur inconnu')
+          : 'Système',
+        paidBefore,
+        paidAfter,
+        delta: paidAfter - paidBefore,
+        reason: formatAuditValue(details.reason ?? ''),
+      };
+    });
+
+    return {
+      rows,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    };
   }
 
   async closeEnrollmentWithDecision(

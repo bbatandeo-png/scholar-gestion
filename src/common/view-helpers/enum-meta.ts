@@ -3,6 +3,7 @@ import {
   BulletinImportMode,
   BulletinSessionStatus,
   BulletinStudentMatchingMode,
+  DisciplineRecordType,
   EcoleAccountStatus,
   EnrollmentStatus,
   EnrollmentType,
@@ -12,8 +13,14 @@ import {
   PaymentMethod,
   Role,
   SchoolYearStatus,
+  StockCategory,
+  StockMovementType,
   StudentStatus,
   SubjectCategory,
+  TeacherContractStatus,
+  TeacherContractType,
+  TeacherStatus,
+  TeacherTrackingType,
   UserStatus,
 } from '../enums/domain.enums';
 
@@ -248,6 +255,85 @@ export const ENUM_META: Record<string, EnumMetaGroup> = {
     [SubjectCategory.LITTERAIRE]: { label: 'Litteraire', description: '' },
     [SubjectCategory.SCIENTIFIQUE]: { label: 'Scientifique', description: '' },
     [SubjectCategory.AUTRE]: { label: 'Autre', description: '' },
+  },
+  disciplineRecordType: {
+    [DisciplineRecordType.AVERTISSEMENT]: {
+      label: 'Avertissement',
+      description: 'Rappel a l ordre consigne au dossier, sans sanction.',
+    },
+    [DisciplineRecordType.SANCTION]: {
+      label: 'Sanction',
+      description: 'Mesure disciplinaire effective (retenue, exclusion, etc.).',
+    },
+    [DisciplineRecordType.CONVOCATION]: {
+      label: 'Convocation',
+      description: 'Convocation de l eleve et/ou de ses responsables.',
+    },
+  },
+  stockCategory: {
+    [StockCategory.PEDAGOGIQUE]: {
+      label: 'Pédagogique',
+      description: 'Materiel utilise en classe (fournitures, manuels, etc.).',
+    },
+    [StockCategory.ADMINISTRATIF]: {
+      label: 'Administratif',
+      description:
+        'Materiel de bureau et de fonctionnement de l etablissement.',
+    },
+    [StockCategory.AUTRE]: { label: 'Autre', description: '' },
+  },
+  stockMovementType: {
+    [StockMovementType.ENTREE]: {
+      label: 'Entrée',
+      description: 'Ajout au stock (achat, don, inventaire initial).',
+    },
+    [StockMovementType.SORTIE]: {
+      label: 'Sortie',
+      description: 'Retrait du stock (distribution, perte, casse).',
+    },
+  },
+  teacherStatus: {
+    [TeacherStatus.ACTIF]: {
+      label: 'Actif',
+      description:
+        "L'enseignant est actuellement en poste dans l'etablissement.",
+    },
+    [TeacherStatus.INACTIF]: {
+      label: 'Inactif',
+      description: 'Dossier conserve mais sans poste actif actuellement.',
+    },
+    [TeacherStatus.DEPART]: {
+      label: 'Depart',
+      description: "L'enseignant a quitte l'etablissement.",
+    },
+  },
+  teacherContractType: {
+    [TeacherContractType.CDI]: { label: 'CDI', description: '' },
+    [TeacherContractType.CDD]: { label: 'CDD', description: '' },
+    [TeacherContractType.VACATAIRE]: { label: 'Vacataire', description: '' },
+    [TeacherContractType.STAGE]: { label: 'Stage', description: '' },
+  },
+  teacherContractStatus: {
+    [TeacherContractStatus.ACTIF]: {
+      label: 'Actif',
+      description: 'Contrat en cours.',
+    },
+    [TeacherContractStatus.EXPIRE]: {
+      label: 'Expire',
+      description: 'La date de fin du contrat est depassee.',
+    },
+    [TeacherContractStatus.RESILIE]: {
+      label: 'Resilie',
+      description: 'Contrat interrompu avant son terme prevu.',
+    },
+  },
+  teacherTrackingType: {
+    [TeacherTrackingType.ABSENCE]: { label: 'Absence', description: '' },
+    [TeacherTrackingType.OBSERVATION]: {
+      label: 'Observation',
+      description: '',
+    },
+    [TeacherTrackingType.EVALUATION]: { label: 'Evaluation', description: '' },
   },
   role: {
     [Role.PLATFORM_ADMIN]: {

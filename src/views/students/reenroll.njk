@@ -38,16 +38,17 @@
       <h2>Impayes ouverts reportables</h2>
       <div class="table-shell">
         <table class="table-report">
-          <thead><tr><th>Montant initial</th><th>Reste</th><th>Statut</th></tr></thead>
+          <thead><tr><th>N°</th><th>Montant initial</th><th>Reste</th><th>Statut</th></tr></thead>
           <tbody>
             {% for item in openArrears %}
               <tr>
+                <td>{{ loop.index }}</td>
                 <td>{{ item.amountInitial }}</td>
                 <td>{{ item.amountRemaining }}</td>
                 <td>{% set value = item.status %}{% set group = 'arrearStatus' %}{% include "partials/status-badge.njk" %}</td>
               </tr>
             {% else %}
-              <tr><td colspan="3">Aucun impaye ouvert.</td></tr>
+              <tr><td colspan="4">Aucun impaye ouvert.</td></tr>
             {% endfor %}
           </tbody>
         </table>

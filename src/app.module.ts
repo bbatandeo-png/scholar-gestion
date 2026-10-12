@@ -18,6 +18,9 @@ import { ExpensesModule } from './expenses/expenses.module';
 import { PromotionsModule } from './promotions/promotions.module';
 import { ReportsModule } from './reports/reports.module';
 import { BulletinsModule } from './bulletins/bulletins.module';
+import { DisciplineModule } from './discipline/discipline.module';
+import { StockModule } from './stock/stock.module';
+import { TeachersModule } from './teachers/teachers.module';
 import { EcolesModule } from './ecoles/ecoles.module';
 import { EcoleModulesModule } from './ecole-modules/ecole-modules.module';
 import { FacturationModule } from './facturation/facturation.module';
@@ -63,6 +66,9 @@ import { RootController } from './root.controller';
     DashboardModule,
     ReportsModule,
     BulletinsModule,
+    DisciplineModule,
+    StockModule,
+    TeachersModule,
     AuditModule,
     SettingsModule,
     FacturationModule,

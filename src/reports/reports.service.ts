@@ -6,6 +6,21 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import PDFDocument from 'pdfkit';
+import {
+  AlignmentType,
+  Document,
+  Footer,
+  Packer,
+  PageNumber,
+  Paragraph,
+  ShadingType,
+  Table,
+  TableCell,
+  TableRow,
+  TextRun,
+  VerticalAlign,
+  WidthType,
+} from 'docx';
 import { Enrollment } from '../enrollments/schemas/enrollment.schema';
 import { Invoice } from '../billing/schemas/invoice.schema';
 import { Level } from '../levels/schemas/level.schema';
@@ -19,6 +34,7 @@ import { resolveUploadedImagePath } from '../common/utils/uploaded-image.util';
 import { resolveStaticAssetPath } from '../common/utils/runtime-paths.util';
 import { getReadableTextColor } from '../common/utils/color.util';
 import { toDisplayString } from '../common/utils/safe-string.util';
+import ExcelJS from 'exceljs';
 import {
   PopulatedEnrollmentLean,
   PopulatedInvoiceLean,
@@ -80,6 +96,27 @@ export type NominalRoll = {
   boys: number;
   girls: number;
   total: number;
+};
+
+// How many "Note" and "Devoir" columns the blank grade sheet (PDF/Word/
+// Excel, see renderGradeSheet*() below) should have - configurable per
+// school/subject instead of the fixed 2 Notes + 1 Devoir it shipped with,
+// since different subjects/levels grade differently (some track 3 written
+// notes and no devoir, others 1 note and 4 devoirs, etc).
+export type GradeSheetOptions = {
+  noteCount?: number;
+  devoirCount?: number;
+  interroCount?: number;
+};
+
+type GradeSheetColumnPlan = {
+  soloHeaders: string[];
+  groupSubHeaders: string[];
+  // Widths in "pt", the PDF renderer's own unit - the Word and Excel
+  // renderers scale these to DXA / character-width themselves so all three
+  // formats stay visually consistent as the counts change.
+  soloWidthsPt: number[];
+  groupSubWidthsPt: number[];
 };
 
 @Injectable()
@@ -1008,6 +1045,620 @@ export class ReportsService {
       });
       doc.end();
     });
+  }
+
+  // Shared by all three renderGradeSheet*() methods below: works out the
+  // column headers and their widths for a given note/devoir count. Kept in
+  // "pt" - the PDF's own unit, comfortably inside A4's ~523pt usable width
+  // at 36pt margins - since that's the tightest of the three formats; Word
+  // and Excel scale these same widths to their own units so a given
+  // note/devoir count lays out the same way (proportionally) everywhere.
+  private buildGradeSheetColumns(
+    noteCountInput: number,
+    devoirCountInput: number,
+    interroCountInput: number,
+  ): GradeSheetColumnPlan {
+    // Capped at 8 each: past that, the elastic columns below floor out at
+    // MIN_ELASTIC and the table simply runs wider than one printed page -
+    // still usable, just no longer a design goal.
+    const clamp = (value: number) =>
+      Math.max(0, Math.min(8, Math.round(Number.isFinite(value) ? value : 0)));
+    const noteCount = clamp(noteCountInput);
+    const devoirCount = clamp(devoirCountInput);
+    const interroCount = clamp(interroCountInput);
+
+    // A single interro/devoir stays the bare "Interro"/"Devoir" the
+    // reference model uses - only numbered once there's more than one.
+    const numberedOrBare = (label: string, count: number) =>
+      count === 1
+        ? [label]
+        : Array.from({ length: count }, (_, i) => `${label} ${i + 1}`);
+
+    const soloHeaders = [
+      'N°',
+      'Nom et prénoms',
+      'Matricule',
+      'Sexe',
+      ...Array.from({ length: noteCount }, (_, i) => `Note ${i + 1}`),
+    ];
+    const groupSubHeaders = [
+      ...numberedOrBare('Interro', interroCount),
+      ...numberedOrBare('Devoir', devoirCount),
+      'Compo',
+    ];
+
+    const TABLE_WIDTH_PT = 515;
+    const FIXED_NO = 25;
+    const FIXED_MATRICULE = 80;
+    const FIXED_SEXE = 28;
+    const MIN_NOM = 90;
+    const MIN_ELASTIC = 24;
+    const MAX_ELASTIC = 44;
+
+    const elasticCount = noteCount + groupSubHeaders.length;
+    const availableForNomAndElastic =
+      TABLE_WIDTH_PT - FIXED_NO - FIXED_MATRICULE - FIXED_SEXE;
+    const elasticWidth =
+      elasticCount === 0
+        ? MAX_ELASTIC
+        : Math.min(
+            MAX_ELASTIC,
+            Math.max(
+              MIN_ELASTIC,
+              (availableForNomAndElastic - MIN_NOM) / elasticCount,
+            ),
+          );
+    const nomWidth = Math.max(
+      MIN_NOM,
+      availableForNomAndElastic - elasticCount * elasticWidth,
+    );
+
+    return {
+      soloHeaders,
+      groupSubHeaders,
+      soloWidthsPt: [
+        FIXED_NO,
+        nomWidth,
+        FIXED_MATRICULE,
+        FIXED_SEXE,
+        ...Array<number>(noteCount).fill(elasticWidth),
+      ],
+      groupSubWidthsPt: Array<number>(groupSubHeaders.length).fill(
+        elasticWidth,
+      ),
+    };
+  }
+
+  // A blank, printable per-class mark sheet: the roster (name/matricule/sexe)
+  // is real data, everything else - trimestre/semestre, matiere, coefficient,
+  // teacher, and every note column - is left blank for a teacher to fill in
+  // by hand, one photocopy per subject. Not tied to the digital Bulletins
+  // feature at all: this is the paper step schools already run before (or
+  // instead of) entering marks into the system.
+  async renderGradeSheetPdf(
+    roll: NominalRoll,
+    options: GradeSheetOptions = {},
+  ) {
+    const chunks: Buffer[] = [];
+    const doc = new PDFDocument({ margin: 36, size: 'A4', bufferPages: true });
+    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+
+    return await new Promise<Buffer>((resolve) => {
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+
+      const drawDocumentHeading = (continued = false) => {
+        doc
+          .font('Helvetica-Bold')
+          .fontSize(15)
+          .text(roll.schoolName.toUpperCase(), { align: 'center' });
+        doc.moveDown(0.5);
+        doc
+          .font('Helvetica-Bold')
+          .fontSize(13)
+          .text(
+            `Fiche de notes du ______ Trimestre/Semestre de la classe de ${roll.levelName}${continued ? ' (suite)' : ''}`,
+            { align: 'center' },
+          );
+        doc.moveDown(0.4);
+        doc
+          .font('Helvetica')
+          .fontSize(10)
+          .text(`Année scolaire : ${roll.schoolYearLabel}`, {
+            align: 'center',
+          });
+        doc.moveDown(1.1);
+
+        if (!continued) {
+          doc
+            .font('Helvetica')
+            .fontSize(10)
+            .text(
+              'Matière : _____________________        Coef : ______        Chargé de la matière : _____________________',
+              { align: 'left' },
+            );
+          doc.moveDown(1);
+
+          const statsY = doc.y;
+          const statsWidth =
+            (doc.page.width - doc.page.margins.left - doc.page.margins.right) /
+            3;
+          const stats = [
+            `Garçons : ${String(roll.boys).padStart(2, '0')}`,
+            `Filles : ${String(roll.girls).padStart(2, '0')}`,
+            `Total : ${String(roll.total).padStart(2, '0')}`,
+          ];
+          stats.forEach((value, index) => {
+            doc
+              .font('Helvetica-Bold')
+              .fontSize(10)
+              .text(value, doc.page.margins.left + index * statsWidth, statsY, {
+                width: statsWidth,
+                align: index === 0 ? 'left' : index === 2 ? 'right' : 'center',
+              });
+          });
+          doc.y = statsY + 30;
+        }
+      };
+
+      // N° / Nom et prenoms / Matricule / Sexe / Note 1..N / Interro 1 /
+      // Interro 2 / Devoir 1..M / Compo - elastic per buildGradeSheetColumns()
+      // above, narrow enough on A4 portrait to fit inside its ~523pt usable
+      // width at 36pt margins for a reasonable note/devoir count.
+      const plan = this.buildGradeSheetColumns(
+        options.noteCount ?? 2,
+        options.devoirCount ?? 1,
+        options.interroCount ?? 2,
+      );
+      const columnWidths = [...plan.soloWidthsPt, ...plan.groupSubWidthsPt];
+      const soloCount = plan.soloHeaders.length;
+      const headerRowHeight = 18;
+      const rowHeight = 20;
+      const startX = doc.page.margins.left;
+      const bottomLimit = doc.page.height - doc.page.margins.bottom;
+
+      const drawHeader = () => {
+        const y = doc.y;
+        const groupTop = y;
+        let x = startX;
+        doc.font('Helvetica-Bold').fontSize(8).fillColor('#000000');
+        plan.soloHeaders.forEach((text, index) => {
+          // Spans both header rows: a lone header has no sub-header below it.
+          doc
+            .rect(x, groupTop, columnWidths[index], headerRowHeight * 2)
+            .fillAndStroke('#E8E8E8', '#222222');
+          doc
+            .fillColor('#000000')
+            .text(text, x + 2, groupTop + headerRowHeight / 2, {
+              width: columnWidths[index] - 4,
+              align: 'center',
+              ellipsis: true,
+              lineBreak: false,
+            });
+          x += columnWidths[index];
+        });
+
+        const groupWidth = columnWidths
+          .slice(soloCount)
+          .reduce((a, b) => a + b, 0);
+        doc
+          .rect(x, groupTop, groupWidth, headerRowHeight)
+          .fillAndStroke('#E8E8E8', '#222222');
+        doc.fillColor('#000000').text('Notes à saisir', x, groupTop + 5, {
+          width: groupWidth,
+          align: 'center',
+        });
+
+        let subX = x;
+        const subY = groupTop + headerRowHeight;
+        plan.groupSubHeaders.forEach((text, index) => {
+          const width = columnWidths[soloCount + index];
+          doc
+            .rect(subX, subY, width, headerRowHeight)
+            .fillAndStroke('#E8E8E8', '#222222');
+          doc.fillColor('#000000').text(text, subX + 1, subY + 5, {
+            width: width - 2,
+            align: 'center',
+            ellipsis: true,
+            lineBreak: false,
+          });
+          subX += width;
+        });
+
+        doc.y = groupTop + headerRowHeight * 2;
+        doc.x = startX;
+      };
+
+      const drawRow = (
+        student: NominalRoll['students'][number],
+        rowNumber: number,
+      ) => {
+        const y = doc.y;
+        let x = startX;
+        const values = [
+          String(rowNumber),
+          `${student.lastname} ${student.firstname}`.trim(),
+          student.matricule,
+          student.gender,
+          ...Array<string>(columnWidths.length - 4).fill(''),
+        ];
+        doc.font('Helvetica').fontSize(9).fillColor('#000000');
+        values.forEach((value, index) => {
+          doc.rect(x, y, columnWidths[index], rowHeight).stroke('#000000');
+          if (value) {
+            doc.fillColor('#000000').text(value, x + 3, y + 6, {
+              width: columnWidths[index] - 6,
+              // A height bound is what actually makes pdfkit's ellipsis
+              // truncate a too-long single "word" (e.g. a long matricule
+              // with no spaces) onto one line - without it, lineBreak:false
+              // alone still let text like "MAT-ASSOGBA" wrap and overflow
+              // down into the row below.
+              height: rowHeight - 10,
+              align: index === 0 || index === 3 ? 'center' : 'left',
+              ellipsis: true,
+              lineBreak: false,
+            });
+          }
+          x += columnWidths[index];
+        });
+        doc.y = y + rowHeight;
+        doc.x = startX;
+      };
+
+      drawDocumentHeading();
+      drawHeader();
+      roll.students.forEach((student, index) => {
+        if (doc.y + rowHeight > bottomLimit) {
+          doc.addPage();
+          drawDocumentHeading(true);
+          drawHeader();
+        }
+        drawRow(student, index + 1);
+      });
+
+      // A long roster spills onto several pages (see the addPage() above) -
+      // number every one of them once the true page count is known, rather
+      // than while it's still being drawn. Requires bufferPages: true,
+      // already set above.
+      const pageRange = doc.bufferedPageRange();
+      for (
+        let i = pageRange.start;
+        i < pageRange.start + pageRange.count;
+        i += 1
+      ) {
+        doc.switchToPage(i);
+        // Writing inside the bottom margin is exactly what pdfkit's own
+        // auto-pagination watches for - left as-is, this footer text
+        // silently appends a blank extra page per call instead of landing
+        // on the page it's meant to number. Zeroing the tracked margin for
+        // the duration of the write is the standard pdfkit footer pattern.
+        const bottomMargin = doc.page.margins.bottom;
+        doc.page.margins.bottom = 0;
+        doc
+          .font('Helvetica')
+          .fontSize(8)
+          .fillColor('#000000')
+          .text(
+            `Page ${i + 1} / ${pageRange.count}`,
+            doc.page.margins.left,
+            doc.page.height - bottomMargin + 12,
+            {
+              width:
+                doc.page.width - doc.page.margins.left - doc.page.margins.right,
+              align: 'center',
+              lineBreak: false,
+            },
+          );
+        doc.page.margins.bottom = bottomMargin;
+      }
+
+      doc.end();
+    });
+  }
+
+  // Same blank grade sheet as renderGradeSheetPdf(), as an .xlsx. Uses
+  // exceljs (not the xlsx/buildExcelBuffer* helpers used by every other
+  // export in this file) purely for its cell borders: the community
+  // edition of the xlsx package writes merges fine but can't write cell
+  // border styles at all, and this particular document's whole point is a
+  // fillable, printable grid of boxes.
+  async renderGradeSheetExcel(
+    roll: NominalRoll,
+    options: GradeSheetOptions = {},
+  ): Promise<Buffer> {
+    const plan = this.buildGradeSheetColumns(
+      options.noteCount ?? 2,
+      options.devoirCount ?? 1,
+      options.interroCount ?? 2,
+    );
+    const soloCount = plan.soloHeaders.length;
+    const COLS = soloCount + plan.groupSubHeaders.length;
+    // pt -> Excel "character width" - roughly the same ~4.5pt/char ratio the
+    // original fixed widths (25→5, 80→16, 28→6, ...) were tuned to.
+    const toCharWidth = (pt: number) => Math.max(4, Math.round(pt / 4.5));
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Fiche de notes', {
+      pageSetup: {
+        orientation: 'landscape',
+        fitToPage: true,
+        // A long roster prints across several pages - repeat the header
+        // rows (rows 8-9: the school/title/year/matiere/stats lines above
+        // them are always exactly 7 rows) on every one, and number the
+        // pages themselves via the footer below.
+        printTitlesRow: '8:9',
+      },
+      headerFooter: { oddFooter: '&CPage &P sur &N' },
+    });
+
+    const thinBorder: Partial<ExcelJS.Borders> = {
+      top: { style: 'thin' },
+      bottom: { style: 'thin' },
+      left: { style: 'thin' },
+      right: { style: 'thin' },
+    };
+    const centered: Partial<ExcelJS.Alignment> = {
+      vertical: 'middle',
+      horizontal: 'center',
+      wrapText: true,
+    };
+
+    sheet.columns = [...plan.soloWidthsPt, ...plan.groupSubWidthsPt].map(
+      (pt) => ({ width: toCharWidth(pt) }),
+    );
+
+    const addTitleRow = (text: string, bold: boolean, size: number) => {
+      const row = sheet.addRow([text]);
+      sheet.mergeCells(row.number, 1, row.number, COLS);
+      const cell = row.getCell(1);
+      cell.font = { bold, size };
+      cell.alignment = {
+        horizontal: text.startsWith('Matière') ? 'left' : 'center',
+      };
+    };
+
+    addTitleRow(roll.schoolName.toUpperCase(), true, 14);
+    addTitleRow(
+      `Fiche de notes du ______ Trimestre/Semestre de la classe de ${roll.levelName}`,
+      true,
+      12,
+    );
+    addTitleRow(`Année scolaire : ${roll.schoolYearLabel}`, false, 10);
+    sheet.addRow([]);
+    addTitleRow(
+      'Matière : _____________________        Coef : ______        Chargé de la matière : _____________________',
+      false,
+      10,
+    );
+    addTitleRow(
+      `Garçons : ${roll.boys}        Filles : ${roll.girls}        Total : ${roll.total}`,
+      true,
+      10,
+    );
+    sheet.addRow([]);
+
+    const headerRow1 = sheet.addRow([...plan.soloHeaders, 'Notes à saisir']);
+    const headerRow2 = sheet.addRow([
+      ...Array<string>(soloCount).fill(''),
+      ...plan.groupSubHeaders,
+    ]);
+    for (let col = 1; col <= soloCount; col += 1) {
+      sheet.mergeCells(headerRow1.number, col, headerRow2.number, col);
+    }
+    sheet.mergeCells(headerRow1.number, soloCount + 1, headerRow1.number, COLS);
+    for (const row of [headerRow1, headerRow2]) {
+      for (let col = 1; col <= COLS; col += 1) {
+        const cell = row.getCell(col);
+        cell.font = { bold: true, size: 9 };
+        cell.alignment = centered;
+        cell.border = thinBorder;
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE8E8E8' },
+        };
+      }
+    }
+
+    roll.students.forEach((student, index) => {
+      // Only the 4 real values are given - the remaining note columns stay
+      // genuinely empty (not ''), while still getting a bordered box below
+      // via row.getCell(), which creates the cell on access either way.
+      const row = sheet.addRow([
+        index + 1,
+        `${student.lastname} ${student.firstname}`.trim(),
+        student.matricule,
+        student.gender,
+      ]);
+      for (let col = 1; col <= COLS; col += 1) {
+        const cell = row.getCell(col);
+        cell.border = thinBorder;
+        if (col === 1 || col === 4) cell.alignment = { horizontal: 'center' };
+      }
+    });
+
+    return Buffer.from(await workbook.xlsx.writeBuffer());
+  }
+
+  // Same blank grade sheet again, as a .docx - a real Word file (not a PDF
+  // renamed) so the school can still edit it (e.g. widen a column, add a
+  // logo) before printing.
+  async renderGradeSheetDocx(
+    roll: NominalRoll,
+    options: GradeSheetOptions = {},
+  ): Promise<Buffer> {
+    const plan = this.buildGradeSheetColumns(
+      options.noteCount ?? 2,
+      options.devoirCount ?? 1,
+      options.interroCount ?? 2,
+    );
+    const soloCount = plan.soloHeaders.length;
+    const TABLE_WIDTH = 10000;
+    // pt -> DXA at the same ~19.417 ratio the original fixed widths (515pt
+    // -> 10 000 DXA) were scaled at - see renderGradeSheetExcel() above for
+    // the same columns in the .xlsx version.
+    const toDxa = (pt: number) => Math.round((pt * TABLE_WIDTH) / 515);
+    const columnWidths = [...plan.soloWidthsPt, ...plan.groupSubWidthsPt].map(
+      toDxa,
+    );
+
+    const headerCell = (
+      text: string,
+      opts: { columnSpan?: number; rowSpan?: number; width?: number } = {},
+    ) =>
+      new TableCell({
+        columnSpan: opts.columnSpan,
+        rowSpan: opts.rowSpan,
+        width: { size: opts.width ?? 0, type: WidthType.DXA },
+        verticalAlign: VerticalAlign.CENTER,
+        shading: { type: ShadingType.CLEAR, fill: 'E8E8E8' },
+        children: [
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: [new TextRun({ text, bold: true, size: 16 })],
+          }),
+        ],
+      });
+
+    const dataCell = (text: string, width: number, center = false) =>
+      new TableCell({
+        width: { size: width, type: WidthType.DXA },
+        verticalAlign: VerticalAlign.CENTER,
+        children: [
+          new Paragraph({
+            alignment: center ? AlignmentType.CENTER : AlignmentType.LEFT,
+            children: [new TextRun({ text, size: 18 })],
+          }),
+        ],
+      });
+
+    const headerRow1 = new TableRow({
+      children: [
+        ...plan.soloHeaders.map((label, i) =>
+          headerCell(label, { rowSpan: 2, width: columnWidths[i] }),
+        ),
+        headerCell('Notes à saisir', {
+          columnSpan: plan.groupSubHeaders.length,
+          width: columnWidths.slice(soloCount).reduce((a, b) => a + b, 0),
+        }),
+      ],
+    });
+    const headerRow2 = new TableRow({
+      children: plan.groupSubHeaders.map((label, i) =>
+        headerCell(label, { width: columnWidths[soloCount + i] }),
+      ),
+    });
+
+    const dataRows = roll.students.map(
+      (student, index) =>
+        new TableRow({
+          children: [
+            dataCell(String(index + 1), columnWidths[0], true),
+            dataCell(
+              `${student.lastname} ${student.firstname}`.trim(),
+              columnWidths[1],
+            ),
+            dataCell(student.matricule, columnWidths[2]),
+            dataCell(student.gender, columnWidths[3], true),
+            ...Array.from({ length: columnWidths.length - 4 }, (_, i) =>
+              dataCell('', columnWidths[4 + i]),
+            ),
+          ],
+        }),
+    );
+
+    const doc = new Document({
+      sections: [
+        {
+          properties: {
+            page: {
+              size: { width: 11906, height: 16838 }, // A4
+              margin: { top: 900, bottom: 900, left: 900, right: 900 },
+            },
+          },
+          // A long roster spans several pages once printed - number them
+          // (Word computes CURRENT/TOTAL_PAGES itself, so this stays correct
+          // whatever the school's own printer/margins do to the page count).
+          footers: {
+            default: new Footer({
+              children: [
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  children: [
+                    new TextRun({ text: 'Page ', size: 16 }),
+                    new TextRun({ children: [PageNumber.CURRENT], size: 16 }),
+                    new TextRun({ text: ' / ', size: 16 }),
+                    new TextRun({
+                      children: [PageNumber.TOTAL_PAGES],
+                      size: 16,
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          },
+          children: [
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 120 },
+              children: [
+                new TextRun({
+                  text: roll.schoolName.toUpperCase(),
+                  bold: true,
+                  size: 28,
+                }),
+              ],
+            }),
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 100 },
+              children: [
+                new TextRun({
+                  text: `Fiche de notes du ______ Trimestre/Semestre de la classe de ${roll.levelName}`,
+                  bold: true,
+                  size: 24,
+                }),
+              ],
+            }),
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 280 },
+              children: [
+                new TextRun({
+                  text: `Année scolaire : ${roll.schoolYearLabel}`,
+                  size: 20,
+                }),
+              ],
+            }),
+            new Paragraph({
+              spacing: { after: 240 },
+              children: [
+                new TextRun({
+                  text: 'Matière : _____________________        Coef : ______        Chargé de la matière : _____________________',
+                  size: 20,
+                }),
+              ],
+            }),
+            new Paragraph({
+              spacing: { after: 280 },
+              children: [
+                new TextRun({
+                  text: `Garçons : ${roll.boys}        Filles : ${roll.girls}        Total : ${roll.total}`,
+                  bold: true,
+                  size: 20,
+                }),
+              ],
+            }),
+            new Table({
+              width: { size: TABLE_WIDTH, type: WidthType.DXA },
+              columnWidths,
+              rows: [headerRow1, headerRow2, ...dataRows],
+            }),
+          ],
+        },
+      ],
+    });
+
+    return Packer.toBuffer(doc);
   }
 
   // Draws one 8.5cm x 5.5cm (standard CR80 landscape) student ID card with

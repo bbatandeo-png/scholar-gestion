@@ -1,0 +1,194 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <div class="panel">
+    <div class="panel-heading">
+      <div>
+        <h2>Nouvelle entree au journal de discipline</h2>
+        <p class="muted">Avertissement, sanction ou convocation - consignee definitivement au dossier de l'eleve.</p>
+      </div>
+      <a class="button secondary btn-sm" href="/discipline{{ '?studentId=' + student._id if student }}">Annuler</a>
+    </div>
+
+    <form method="post" action="/discipline" class="stack">
+      <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+
+      <label>Eleve
+        {% if student %}
+          <input value="{{ student.matricule }} - {{ student.lastname }} {{ student.firstname }}" disabled />
+          <input type="hidden" name="studentId" value="{{ student._id }}" />
+        {% else %}
+          <div class="autocomplete-wrap">
+            <input
+              type="text"
+              id="studentSearchInput"
+              autocomplete="off"
+              required
+              placeholder="Rechercher un eleve (nom, prenom, matricule)..."
+              role="combobox"
+              aria-expanded="false"
+              aria-autocomplete="list"
+              aria-controls="studentSearchResults"
+            />
+            <div id="studentSearchResults" class="autocomplete-results" role="listbox" hidden></div>
+          </div>
+          <p id="studentSearchStatus" class="search-status muted"></p>
+          <input type="hidden" name="studentId" id="studentIdSelect" required />
+        {% endif %}
+      </label>
+
+      <div class="form-grid">
+        <label>Annee scolaire
+          <input value="{{ activeYear.label }}" disabled />
+        </label>
+        <label>Type
+          <select name="type" required>
+            {% for key, meta in ENUM_META.disciplineRecordType %}
+              <option value="{{ key }}">{{ meta.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Date
+          <input type="date" name="date" value="{{ today }}" required />
+        </label>
+      </div>
+
+      <label>Motif
+        <textarea name="motif" rows="3" required placeholder="Ce qui s'est passe..."></textarea>
+      </label>
+      <label>Mesure <span class="muted">(facultatif)</span>
+        <textarea name="mesure" rows="2" placeholder="Decision prise : exclusion, convocation des parents, etc."></textarea>
+      </label>
+
+      <button type="submit" class="button" id="disciplineRecordSubmit">Enregistrer</button>
+    </form>
+  </div>
+
+  {% if not student %}
+    <script>
+      (() => {
+        const select = document.getElementById('studentIdSelect');
+        const searchInput = document.getElementById('studentSearchInput');
+        const searchResults = document.getElementById('studentSearchResults');
+        const searchStatus = document.getElementById('studentSearchStatus');
+        if (!select || !searchInput || !searchResults || !searchStatus) return;
+
+        let debounceTimer;
+        let requestController;
+        let activeIndex = -1;
+        let currentItems = [];
+
+        const closeResults = () => {
+          searchResults.hidden = true;
+          searchInput.setAttribute('aria-expanded', 'false');
+          searchInput.removeAttribute('aria-activedescendant');
+          activeIndex = -1;
+        };
+
+        const setActiveResult = (index) => {
+          const options = Array.from(searchResults.querySelectorAll('[role="option"]'));
+          options.forEach((option) => option.classList.remove('is-active'));
+          if (!options.length) return;
+          activeIndex = Math.max(0, Math.min(index, options.length - 1));
+          const activeOption = options[activeIndex];
+          activeOption.classList.add('is-active');
+          activeOption.scrollIntoView({ block: 'nearest' });
+          searchInput.setAttribute('aria-activedescendant', activeOption.id);
+        };
+
+        const chooseStudent = (student) => {
+          select.value = student.id;
+          searchInput.value = student.label;
+          searchInput.setCustomValidity('');
+          searchStatus.textContent = '';
+          closeResults();
+        };
+
+        const renderResults = (items) => {
+          searchStatus.classList.remove('is-loading');
+          currentItems = items;
+          searchResults.replaceChildren();
+          activeIndex = -1;
+
+          if (!items.length) {
+            searchStatus.textContent = 'Aucun eleve trouve.';
+            closeResults();
+            return;
+          }
+
+          items.forEach((student, index) => {
+            const option = document.createElement('button');
+            option.type = 'button';
+            option.id = `student-option-${index}`;
+            option.className = 'autocomplete-option';
+            option.setAttribute('role', 'option');
+            option.textContent = student.label;
+            option.addEventListener('mousedown', (event) => event.preventDefault());
+            option.addEventListener('click', () => chooseStudent(student));
+            searchResults.appendChild(option);
+          });
+
+          searchStatus.textContent = `${items.length} resultat${items.length > 1 ? 's' : ''}.`;
+          searchResults.hidden = false;
+          searchInput.setAttribute('aria-expanded', 'true');
+        };
+
+        const searchStudents = async () => {
+          const query = searchInput.value.trim();
+          if (query.length < 3) {
+            requestController?.abort();
+            searchStatus.classList.remove('is-loading');
+            searchStatus.textContent = query.length ? 'Saisissez au moins 3 caracteres.' : '';
+            closeResults();
+            return;
+          }
+
+          requestController?.abort();
+          requestController = new AbortController();
+          searchStatus.textContent = 'Recherche en cours...';
+          searchStatus.classList.add('is-loading');
+          closeResults();
+
+          try {
+            const response = await fetch(
+              `/students/autocomplete?q=${encodeURIComponent(query)}&limit=25`,
+              { headers: { Accept: 'application/json' }, signal: requestController.signal },
+            );
+            if (!response.ok) throw new Error('Recherche indisponible');
+            const payload = await response.json();
+            renderResults(Array.isArray(payload.items) ? payload.items : []);
+          } catch (error) {
+            if (error.name !== 'AbortError') {
+              searchStatus.classList.remove('is-loading');
+              searchStatus.textContent = 'Impossible de rechercher les eleves.';
+              closeResults();
+            }
+          }
+        };
+
+        searchInput.addEventListener('input', () => {
+          select.value = '';
+          searchInput.setCustomValidity('');
+          clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(searchStudents, 400);
+        });
+
+        searchInput.addEventListener('keydown', (event) => {
+          if (event.key === 'ArrowDown' && !searchResults.hidden) {
+            event.preventDefault();
+            setActiveResult(activeIndex + 1);
+          } else if (event.key === 'ArrowUp' && !searchResults.hidden) {
+            event.preventDefault();
+            setActiveResult(activeIndex <= 0 ? currentItems.length - 1 : activeIndex - 1);
+          } else if (event.key === 'Enter' && activeIndex >= 0 && currentItems[activeIndex]) {
+            event.preventDefault();
+            chooseStudent(currentItems[activeIndex]);
+          } else if (event.key === 'Escape') {
+            closeResults();
+          }
+        });
+
+        searchInput.addEventListener('blur', () => setTimeout(closeResults, 150));
+      })();
+    </script>
+  {% endif %}
+{% endblock %}

@@ -1,0 +1,102 @@
+{% extends "layout.njk" %}
+{% import "partials/legend.njk" as legend %}
+{% block content %}
+  <section class="grid cols-2">
+    <div class="panel">
+      <h2>Nouvel article</h2>
+      <form method="post" action="/stock" class="stack">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+        <div class="form-grid">
+          <label>Nom
+            <input name="name" required />
+          </label>
+          <label>Categorie
+            <select name="category" required>
+              {% for key, meta in ENUM_META.stockCategory %}
+                <option value="{{ key }}">{{ meta.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Unite
+            <input name="unit" value="unité" required />
+          </label>
+          <label>Seuil d'alerte <span class="muted">(facultatif)</span>
+            <input type="number" name="alertThreshold" min="0" />
+          </label>
+          <label>Emplacement <span class="muted">(facultatif)</span>
+            <input name="location" />
+          </label>
+        </div>
+        <label>Notes <span class="muted">(facultatif)</span>
+          <textarea name="notes" rows="2"></textarea>
+        </label>
+        <button type="submit">Enregistrer</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Articles en stock</h2>
+          <p class="muted">Materiel pedagogique et administratif de l'etablissement.</p>
+        </div>
+        <a class="button secondary" href="/stock/export">Exporter Excel</a>
+      </div>
+
+      <form method="get" action="/stock" class="toolbar compact-actions">
+        <label class="field-inline">
+          Recherche
+          <input type="text" name="q" value="{{ filters.q }}" placeholder="Nom de l'article..." />
+        </label>
+        <label class="field-inline">
+          Categorie
+          <select name="category">
+            <option value="">Toutes les categories</option>
+            {% for key, meta in ENUM_META.stockCategory %}
+              <option value="{{ key }}" {% if filters.category == key %}selected{% endif %}>{{ meta.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <button type="submit" class="button">Filtrer</button>
+        {% if filters.q or filters.category %}
+          <a href="/stock" class="button secondary btn-sm">Reinitialiser</a>
+        {% endif %}
+      </form>
+
+      <div class="table-shell">
+        <table class="table-report">
+          <thead>
+            <tr>
+              <th>N°</th>
+              <th>Nom</th>
+              <th>Categorie</th>
+              <th>Quantite</th>
+              <th>Unite</th>
+              <th>Emplacement</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in items %}
+              <tr>
+                <td>{{ loop.index }}</td>
+                <td>{{ item.name }}</td>
+                <td>{% set value = item.category %}{% set group = 'stockCategory' %}{% include "partials/status-badge.njk" %}</td>
+                <td>
+                  {{ item.quantity }}
+                  {% if item.isLow %}<span class="badge badge-danger">Seuil bas</span>{% endif %}
+                </td>
+                <td>{{ item.unit }}</td>
+                <td>{{ item.location or '—' }}</td>
+                <td><a class="button secondary btn-sm" href="/stock/{{ item._id }}">Voir</a></td>
+              </tr>
+            {% else %}
+              <tr><td colspan="7">Aucun article enregistre.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {{ legend.render(['stockCategory']) }}
+    </div>
+  </section>
+{% endblock %}

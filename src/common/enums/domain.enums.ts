@@ -88,6 +88,7 @@ export enum AuditAction {
   ENROLLMENT_CREATED = 'enrollment_created',
   REENROLLMENT_CREATED = 'reenrollment_created',
   PAYMENT_CREATED = 'payment_created',
+  PAYMENT_CORRECTED = 'payment_corrected',
   DISCOUNT_APPLIED = 'discount_applied',
   YEAR_CLOSED = 'year_closed',
   PROMOTION_VALIDATED = 'promotion_validated',
@@ -96,6 +97,26 @@ export enum AuditAction {
   MODULE_ACTIVATED = 'module_activated',
   MODULE_DEACTIVATED = 'module_deactivated',
   LICENSE_RENEWED = 'license_renewed',
+  DISCIPLINE_RECORD_CREATED = 'discipline_record_created',
+  TEACHER_CREATED = 'teacher_created',
+  TEACHER_UPDATED = 'teacher_updated',
+  TEACHER_CONTRACT_CREATED = 'teacher_contract_created',
+  TEACHER_CONTRACT_TERMINATED = 'teacher_contract_terminated',
+  TEACHER_CONTRACT_UPDATED = 'teacher_contract_updated',
+  TEACHER_TRACKING_RECORD_CREATED = 'teacher_tracking_record_created',
+  TEACHER_TRACKING_RECORD_UPDATED = 'teacher_tracking_record_updated',
+  TEACHER_ASSIGNMENT_UPDATED = 'teacher_assignment_updated',
+  TEACHER_DOCUMENT_UPDATED = 'teacher_document_updated',
+}
+
+// Journal de discipline transversal (suit l'eleve sur toute sa scolarite,
+// independamment des champs retards/absences/exclusion saisis par session
+// de bulletins - voir BulletinsService.saveDiscipline - qui ne couvrent
+// qu'un trimestre/semestre donne pour l'impression du bulletin).
+export enum DisciplineRecordType {
+  AVERTISSEMENT = 'avertissement',
+  SANCTION = 'sanction',
+  CONVOCATION = 'convocation',
 }
 
 export enum SettingKey {
@@ -103,6 +124,7 @@ export enum SettingKey {
   STUDENT_MATRICULE_RULE = 'student_matricule_rule',
   RECEIPT_MODE = 'receipt_mode',
   CHEF_ETABLISSEMENT_NOM = 'chef_etablissement_nom',
+  REGISTRATION_PAYMENT_REQUIRED = 'registration_payment_required',
 }
 
 export enum ReceiptMode {
@@ -188,4 +210,49 @@ export enum BulletinImportMode {
 export enum BulletinStudentMatchingMode {
   RECONCILE = 'reconcile',
   AUTO_CREATE = 'auto_create',
+}
+
+export enum StockCategory {
+  PEDAGOGIQUE = 'pedagogique',
+  ADMINISTRATIF = 'administratif',
+  AUTRE = 'autre',
+}
+
+// A movement is append-only, like DisciplineRecord and the payment ledger -
+// correcting a mistaken entry means recording the opposite movement, never
+// editing or deleting the original (see StockService.recordMovement).
+export enum StockMovementType {
+  ENTREE = 'entree',
+  SORTIE = 'sortie',
+}
+
+export enum TeacherStatus {
+  ACTIF = 'actif',
+  INACTIF = 'inactif',
+  DEPART = 'depart',
+}
+
+export enum TeacherContractType {
+  CDI = 'cdi',
+  CDD = 'cdd',
+  VACATAIRE = 'vacataire',
+  STAGE = 'stage',
+}
+
+// One row per contract period (never edited in place once a later one
+// exists) - same append-only-history precedent as EcoleModule and
+// Enrollment. ACTIF is enforced unique per teacher by a partial index (see
+// TeacherContractSchema), same mechanism as EcoleModule's "one open row".
+export enum TeacherContractStatus {
+  ACTIF = 'actif',
+  EXPIRE = 'expire',
+  RESILIE = 'resilie',
+}
+
+// Journal de suivi transversal (version simple) - un enseignant sur toute sa
+// presence dans l'ecole, independamment de l'annee scolaire en cours.
+export enum TeacherTrackingType {
+  ABSENCE = 'absence',
+  OBSERVATION = 'observation',
+  EVALUATION = 'evaluation',
 }

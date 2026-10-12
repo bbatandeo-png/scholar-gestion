@@ -163,6 +163,36 @@ export class SettingsService {
     );
   }
 
+  // Not year-scoped - a school's policy on requiring payment at
+  // registration time is an operational decision, not something tied to a
+  // given school year. Seeded once from REGISTRATION_PAYMENT_REQUIRED at
+  // this install's first boot (scripts/seed.ts) from the platform's own
+  // per-ecole toggle (see Ecole.registrationPaymentRequired) - defaults to
+  // false (optional) when never set, matching the field's historic
+  // behaviour before this setting existed.
+  async getRegistrationPaymentRequired(): Promise<boolean> {
+    const setting = await this.settingModel
+      .findOne({
+        key: SettingKey.REGISTRATION_PAYMENT_REQUIRED,
+        schoolYearId: null,
+      })
+      .lean()
+      .exec();
+    return setting?.value === 'true';
+  }
+
+  async setRegistrationPaymentRequired(value: boolean) {
+    const criteria = {
+      key: SettingKey.REGISTRATION_PAYMENT_REQUIRED,
+      schoolYearId: null,
+    };
+    return this.settingModel.findOneAndUpdate(
+      criteria,
+      { ...criteria, value: value ? 'true' : 'false' },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
+  }
+
   async copyAnnualSettings(
     sourceSchoolYearId: string,
     targetSchoolYearId: string,

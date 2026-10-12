@@ -121,11 +121,12 @@
       <div class="table-shell">
         <table class="table-report">
           <thead>
-            <tr><th>Nom</th><th>Email</th><th>Role</th><th>Statut</th><th></th></tr>
+            <tr><th>N°</th><th>Nom</th><th>Email</th><th>Role</th><th>Statut</th><th></th></tr>
           </thead>
           <tbody>
             {% for admin in ecoleAdmins %}
               <tr>
+                <td>{{ loop.index }}</td>
                 <td>{{ admin.name }}</td>
                 <td>
                   <div class="inline-form no-wrap">
@@ -143,7 +144,7 @@
                 </td>
               </tr>
             {% else %}
-              <tr><td colspan="5">Aucun compte pour cette ecole.</td></tr>
+              <tr><td colspan="6">Aucun compte pour cette ecole.</td></tr>
             {% endfor %}
           </tbody>
         </table>
@@ -186,6 +187,57 @@
             <button type="submit" class="button secondary btn-sm">{{ 'Desactiver' if moduleStatus.bulletins else 'Activer' }}</button>
           </form>
         </div>
+        <div>
+          <strong>Journal de discipline</strong>
+          <p class="muted">{{ 'Actif' if moduleStatus.discipline else 'Inactif' }}</p>
+          {% if moduleStatus.discipline %}
+            <form method="post" action="/platform/ecoles/{{ editEcole._id }}/modules/toggle" class="inline-form no-wrap" onsubmit="return confirm('Desactiver le Journal de discipline pour cette ecole ? Toute nouvelle ecriture sera refusee tant que le module ne sera pas reactive (les donnees deja saisies restent consultables).');">
+          {% else %}
+            <form method="post" action="/platform/ecoles/{{ editEcole._id }}/modules/toggle" class="inline-form no-wrap" onsubmit="return confirm('Activer le Journal de discipline pour cette ecole ?');">
+          {% endif %}
+            <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+            <input type="hidden" name="code" value="DISCIPLINE" />
+            <input type="hidden" name="active" value="{{ 'false' if moduleStatus.discipline else 'true' }}" />
+            <button type="submit" class="button secondary btn-sm">{{ 'Desactiver' if moduleStatus.discipline else 'Activer' }}</button>
+          </form>
+        </div>
+        <div>
+          <strong>Stocks &amp; fournitures</strong>
+          <p class="muted">{{ 'Actif' if moduleStatus.stock else 'Inactif' }}</p>
+          {% if moduleStatus.stock %}
+            <form method="post" action="/platform/ecoles/{{ editEcole._id }}/modules/toggle" class="inline-form no-wrap" onsubmit="return confirm('Desactiver Stocks &amp; fournitures pour cette ecole ? Toute nouvelle ecriture sera refusee tant que le module ne sera pas reactive (les donnees deja saisies restent consultables).');">
+          {% else %}
+            <form method="post" action="/platform/ecoles/{{ editEcole._id }}/modules/toggle" class="inline-form no-wrap" onsubmit="return confirm('Activer Stocks &amp; fournitures pour cette ecole ?');">
+          {% endif %}
+            <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+            <input type="hidden" name="code" value="STOCK" />
+            <input type="hidden" name="active" value="{{ 'false' if moduleStatus.stock else 'true' }}" />
+            <button type="submit" class="button secondary btn-sm">{{ 'Desactiver' if moduleStatus.stock else 'Activer' }}</button>
+          </form>
+        </div>
+        <div>
+          <strong>Personnel enseignant</strong>
+          <p class="muted">{{ 'Actif' if moduleStatus.enseignants else 'Inactif' }}</p>
+          {% if moduleStatus.enseignants %}
+            <form method="post" action="/platform/ecoles/{{ editEcole._id }}/modules/toggle" class="inline-form no-wrap" onsubmit="return confirm('Desactiver le module Personnel enseignant pour cette ecole ? Toute nouvelle ecriture sera refusee tant que le module ne sera pas reactive (les donnees deja saisies restent consultables).');">
+          {% else %}
+            <form method="post" action="/platform/ecoles/{{ editEcole._id }}/modules/toggle" class="inline-form no-wrap" onsubmit="return confirm('Activer le module Personnel enseignant pour cette ecole ?');">
+          {% endif %}
+            <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+            <input type="hidden" name="code" value="ENSEIGNANTS" />
+            <input type="hidden" name="active" value="{{ 'false' if moduleStatus.enseignants else 'true' }}" />
+            <button type="submit" class="button secondary btn-sm">{{ 'Desactiver' if moduleStatus.enseignants else 'Activer' }}</button>
+          </form>
+        </div>
+        <div>
+          <strong>Paiement a l'inscription obligatoire</strong>
+          <p class="muted">{{ 'Oui' if registrationPaymentRequired else 'Non (optionnel)' }}</p>
+          <form method="post" action="/platform/ecoles/{{ editEcole._id }}/registration-payment-required/toggle" class="inline-form no-wrap">
+            <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+            <input type="hidden" name="required" value="{{ 'false' if registrationPaymentRequired else 'true' }}" />
+            <button type="submit" class="button secondary btn-sm">{{ 'Rendre optionnel' if registrationPaymentRequired else 'Rendre obligatoire' }}</button>
+          </form>
+        </div>
       </div>
     </div>
     <div class="panel top-gap">
@@ -196,15 +248,24 @@
         </div>
       </div>
       {% if releaseAssetsConfigured %}
-        <a class="button" id="download-installation-package" href="/platform/ecoles/{{ editEcole._id }}/installation-package">Télécharger le pack d'installation (.zip)</a>
+        <form method="get" action="/platform/ecoles/{{ editEcole._id }}/installation-package" id="download-installation-package-form" class="inline-form no-wrap">
+          <label>Date d'expiration de la licence (optionnelle)
+            <input type="date" name="expiresAt" min="{{ today }}" />
+          </label>
+          <button type="submit" class="button" id="download-installation-package">Télécharger le pack d'installation (.zip)</button>
+        </form>
+        <p class="muted" style="margin:10px 0 0;">Avec une date : le pack genere est deja actif jusqu'a cette date, sans aucune action supplementaire cote ecole au premier demarrage. Sans date : le pack part sans limite de licence (comme avant), a decider plus tard.</p>
+        {% if editEcole.licenseActivatedAt %}
+          <p class="muted" style="margin:4px 0 0;">Dernier téléchargement : {{ editEcole.licenseActivatedAt | formatDate }}{% if editEcole.releaseVersion %} (version {{ editEcole.releaseVersion }}){% endif %}{% if editEcole.licenseExpiresAt %}, licence jusqu'au {{ editEcole.licenseExpiresAt | formatDate }}{% endif %}.</p>
+        {% endif %}
         <script>
           (() => {
-            const link = document.getElementById('download-installation-package');
-            // A download link never navigates the page, so "Version de la
-            // release"/"Date d'activation" (updated server-side the instant
-            // this request starts, well before the zip finishes streaming)
-            // would otherwise stay stale until a manual refresh.
-            link?.addEventListener('click', () => {
+            const form = document.getElementById('download-installation-package-form');
+            // A download never navigates the page, so "Dernier
+            // telechargement" (updated server-side the instant this request
+            // starts, well before the zip finishes streaming) would
+            // otherwise stay stale until a manual refresh.
+            form?.addEventListener('submit', () => {
               setTimeout(() => window.location.reload(), 1200);
             });
           })();
@@ -218,32 +279,22 @@
       <div class="panel-heading">
         <div>
           <h3>Licence</h3>
-          <p class="muted">Suivi manuel (version, dates, clé) — a reporter ici a la main si ce n'est pas la meme instance que celle qui a genere la cle. Ces champs ne pilotent rien : ce qui bloque reellement l'ecriture cote poste client, c'est l'etat ci-dessous.</p>
+          <p class="muted">
+            L'exécutable livré à l'école tourne sur sa propre base de données, séparée de celle-ci — rien ici ne se synchronise automatiquement avec lui. Si une date d'expiration est choisie au téléchargement ci-dessus, la licence est déjà active au premier démarrage, sans aucune action côté école ; sans date, le pack part sans limite, à decider plus tard. Pour un <strong>renouvellement</strong> plus tard : régénérez et redonnez un nouveau pack (plus simple), ou générez un code avec <code>npm run license -- generate</code> en utilisant le secret ci-dessous (voir docs/deploiement-offline.md).
+          </p>
         </div>
       </div>
-      <p>
-        Etat actuel sur <strong>cette instance</strong> :
-        {% if licenseStatus.state == 'ok' %}
-          <span class="badge active">Active</span> jusqu'au {{ licenseStatus.expiresAt | formatDate }}
-        {% elif licenseStatus.state == 'grace' %}
-          <span class="badge partial">Grace</span> — expiree le {{ licenseStatus.expiresAt | formatDate }}, lecture seule a partir du {{ licenseStatus.graceEndsAt | formatDate }}
-        {% elif licenseStatus.expiresAt %}
-          <span class="badge badge-danger">Bloquee</span> — expiree le {{ licenseStatus.expiresAt | formatDate }}
-        {% else %}
-          <span class="badge badge-neutral">Aucune licence enregistree sur cette instance</span>
-        {% endif %}
-      </p>
 
-      {% if licenseGenerationAvailable %}
-        <form method="post" action="/platform/ecoles/{{ editEcole._id }}/license/generate" class="inline-form">
-          <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
-          <label>Nouvelle date d'expiration
-            <input type="date" name="expiresAt" required />
-          </label>
-          <button type="submit" class="button btn-sm">Générer et appliquer localement</button>
-        </form>
+      {% if provisioningLicenseSecret %}
+        <label>Secret de licence de cette école
+          <div class="inline-form no-wrap">
+            <input type="text" id="provisioning-secret-field" value="{{ provisioningLicenseSecret }}" readonly />
+            <button type="button" class="button secondary btn-sm" data-copy-target="provisioning-secret-field">Copier</button>
+          </div>
+        </label>
+        <p class="muted" style="margin:6px 0 0;">À enregistrer une fois avec <code>npm run license -- set-secret "Nom de l'ecole" {{ provisioningLicenseSecret }}</code>, puis réutilisable pour chaque renouvellement — voir docs/deploiement-offline.md.</p>
       {% else %}
-        <p class="notice notice-info">Generation indisponible sur cette instance (pas de LICENSE_SECRET configure — normal pour une instance en ligne de suivi uniquement).</p>
+        <p class="notice notice-info">Aucun secret généré pour l'instant — téléchargez le pack d'installation ci-dessus une première fois pour en créer un.</p>
       {% endif %}
     </div>
   {% endif %}
@@ -331,23 +382,6 @@
           </div>
         </div>
 
-        {% if editEcole %}
-          <div class="form-section">
-            <span class="form-section-title">Suivi licence (manuel)</span>
-            <p class="form-section-desc">Purement informatif — a reporter a la main si la cle a ete generee ailleurs (autre instance, ou script). Auto-rempli quand la generation locale ci-dessus est utilisee.</p>
-            <div class="form-grid">
-              <label>Version de la release<input name="releaseVersion" value="{{ editEcole.releaseVersion }}" placeholder="ex. 1.4.2" /></label>
-              <label>Date d'activation<input type="date" name="licenseActivatedAt" value="{{ editEcole.licenseActivatedAt | inputDate }}" /></label>
-              <label>Date d'expiration<input type="date" name="licenseExpiresAt" value="{{ editEcole.licenseExpiresAt | inputDate }}" /></label>
-            </div>
-            <label>Clé d'activation
-              <div class="inline-form no-wrap">
-                <input type="text" id="license-key-field" name="licenseActivationKey" value="{{ editEcole.licenseActivationKey }}" placeholder="Coller ici si generee sur une autre instance" />
-                <button type="button" class="button secondary btn-sm" data-copy-target="license-key-field">Copier</button>
-              </div>
-            </label>
-          </div>
-        {% endif %}
 
         <div class="toolbar compact-actions">
           <button type="submit">{% if editEcole %}Mettre à jour{% else %}Enregistrer{% endif %}</button>
@@ -379,11 +413,12 @@
       <div class="table-shell">
         <table class="table-report">
           <thead>
-            <tr><th>Nom</th><th>Localite</th><th>Statut</th><th>Inscription</th><th>Actions</th></tr>
+            <tr><th>N°</th><th>Nom</th><th>Localite</th><th>Statut</th><th>Inscription</th><th>Actions</th></tr>
           </thead>
           <tbody>
             {% for item in ecoles %}
               <tr>
+                <td>{{ loop.index }}</td>
                 <td>{{ item.nom }}</td>
                 <td>{{ item.localite }}</td>
                 <td>{% set value = item.statutCompte %}{% set group = 'ecoleAccountStatus' %}{% include "partials/status-badge.njk" %}</td>
@@ -406,7 +441,7 @@
                 </td>
               </tr>
             {% else %}
-              <tr><td colspan="5">Aucune ecole.</td></tr>
+              <tr><td colspan="6">Aucune ecole.</td></tr>
             {% endfor %}
           </tbody>
         </table>

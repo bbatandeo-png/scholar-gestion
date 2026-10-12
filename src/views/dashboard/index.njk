@@ -21,6 +21,47 @@
       <p class="muted">Vue synthèse de l’année {{ selectedYear.label }} : effectifs, recettes, impayés et recouvrement.</p>
     </section>
 
+    <section class="panel">
+      <form method="get" action="/dashboard" class="toolbar compact-actions">
+        <label class="field-inline">
+          Filtrer par classe
+          <select name="levelId">
+            <option value="" {% if not filters.levelId %}selected{% endif %}>Toutes les classes</option>
+            {% for level in levels %}
+              <option value="{{ level._id }}" {% if filters.levelId == level._id.toString() %}selected{% endif %}>{{ level.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="field-inline">
+          Du
+          <input type="date" name="dateFrom" value="{{ filters.dateFrom }}" />
+        </label>
+        <label class="field-inline">
+          Au
+          <input type="date" name="dateTo" value="{{ filters.dateTo }}" />
+        </label>
+        <button type="submit" class="button">Appliquer</button>
+        {% if filters.levelId or filters.dateFrom or filters.dateTo %}
+          <a href="/dashboard" class="button secondary btn-sm">Reinitialiser</a>
+        {% endif %}
+      </form>
+      {% if filters.dateFrom or filters.dateTo %}
+        <p class="muted" style="margin:14px 0 0;">
+          Periode du {{ filters.dateFrom or 'debut de l’annee' }} au {{ filters.dateTo or 'aujourd’hui' }} :
+          les recettes, depenses et modifications de paiement ci-dessous ne portent que sur cette periode.
+          Les effectifs et les impayes restent la situation actuelle.
+        </p>
+      {% endif %}
+    </section>
+
+    {% if summary.ledgerDivergence and summary.ledgerDivergence.count and activeModules and activeModules.finance %}
+      <div class="notice notice-warning">
+        <strong>{{ summary.ledgerDivergence.count }} facture(s)</strong> ont un montant payé différent de la somme des paiements enregistrés
+        (écart total : {{ summary.ledgerDivergence.total }}). Les chiffres ci-dessous et les listes imprimées peuvent donc différer.
+        <a href="/payments/reconciliation">Voir le détail et corriger</a>
+      </div>
+    {% endif %}
+
     <section class="grid cols-3">
       <article class="card"><div class="muted">Effectif total</div><div class="metric">{{ summary.totalStudents }}</div></article>
       <article class="card"><div class="muted">Frais d'inscription encaissés</div><div class="metric">{{ summary.registrationRevenue }}</div></article>
@@ -34,6 +75,102 @@
       <article class="card"><div class="muted">Eleves archives</div><div class="metric">{{ summary.archivedStudents }}</div></article>
       <article class="card"><div class="muted">Impayes reportes</div><div class="metric">{{ summary.arrearsOpen }}</div></article>
       <article class="card"><div class="muted">Inscriptions actives</div><div class="metric">{{ summary.enrollmentsActive }}</div></article>
+      {% if activeModules and activeModules.finance %}
+        <article class="card">
+          <div class="muted">Modifications de paiement</div>
+          <div class="metric">{{ summary.paymentCorrectionsCount }}</div>
+          {% if currentUser and (currentUser.role == 'super_admin' or currentUser.role == 'direction' or currentUser.role == 'comptabilite' or currentUser.role == 'auditeur') %}
+            <a href="/payments/corrections" class="muted">Voir l'historique</a>
+          {% endif %}
+        </article>
+      {% endif %}
+      <article class="card">
+        <div class="muted">Doublons de noms</div>
+        <div class="metric">{{ summary.duplicateNameGroupsCount }}</div>
+        {% if currentUser and (currentUser.role == 'super_admin' or currentUser.role == 'direction' or currentUser.role == 'secretariat' or currentUser.role == 'auditeur') %}
+          <a href="/students/duplicates" class="muted">Voir les doublons</a>
+        {% endif %}
+      </article>
     </section>
+
+    {% if activeModules and activeModules.finance %}
+      <section class="grid cols-1 top-gap">
+        <article class="card chart-card">
+          <div class="chart-card-heading">
+            <div>
+              <h3>Encaissements</h3>
+              <p class="muted">En millions de FCFA, par mois.</p>
+            </div>
+            <a href="/reports/revenue" class="button secondary btn-sm">Voir le détail</a>
+          </div>
+          <div id="chart-encaissements"></div>
+        </article>
+      </section>
+    {% endif %}
+
+    <section class="grid cols-2 top-gap">
+      {% if activeModules and activeModules.finance %}
+        <article class="card chart-card">
+          <h3>Répartition des recettes</h3>
+          <p class="muted">Inscription, écolage et dépenses de la période affichée.</p>
+          <div id="chart-revenue"></div>
+        </article>
+        <article class="card chart-card">
+          <h3>Taux de recouvrement</h3>
+          <p class="muted">Part de l’écolage total dû déjà encaissée.</p>
+          <div id="chart-recovery"></div>
+        </article>
+      {% endif %}
+      <article class="card chart-card">
+        <h3>Effectifs par classe</h3>
+        <p class="muted">Élèves actifs de l’année {{ selectedYear.label }}, par classe.</p>
+        <div id="chart-students"></div>
+      </article>
+    </section>
+
+    <script src="/charts.js"></script>
+    <script>
+      (() => {
+        const revenueByCategory = {{ (summary.charts.revenueByCategory or []) | dump | safe }};
+        const recoveryBreakdown = {{ (summary.charts.recoveryBreakdown or []) | dump | safe }};
+        const studentsByLevel = {{ (summary.charts.studentsByLevel or []) | dump | safe }};
+        const monthlyEncaissements = {{ (encaissements.months or []) | dump | safe }};
+        const previousYearLabel = {{ (encaissements.previousYearLabel or '') | dump | safe }};
+        const currentYearLabel = {{ (encaissements.currentYearLabel or '') | dump | safe }};
+
+        const revenueEl = document.getElementById('chart-revenue');
+        if (revenueEl) {
+          renderBarChart(revenueEl, revenueByCategory, { ariaLabel: 'Repartition des recettes' });
+        }
+
+        const recoveryEl = document.getElementById('chart-recovery');
+        if (recoveryEl) {
+          renderDonutChart(recoveryEl, recoveryBreakdown, {
+            ariaLabel: 'Taux de recouvrement',
+            centerLabel: '{{ summary.recoveryRate }}%',
+          });
+        }
+
+        const studentsEl = document.getElementById('chart-students');
+        if (studentsEl) {
+          renderBarChart(
+            studentsEl,
+            studentsByLevel.map((row) => ({ label: row.label, value: row.count, color: '#0e7c66' })),
+            { ariaLabel: 'Effectifs par classe' },
+          );
+        }
+
+        const encaissementsEl = document.getElementById('chart-encaissements');
+        if (encaissementsEl) {
+          renderGroupedBarChart(encaissementsEl, monthlyEncaissements, {
+            ariaLabel: 'Encaissements mensuels',
+            series: [
+              { key: 'previousYear', label: previousYearLabel, color: '#db6c3f' },
+              { key: 'currentYear', label: currentYearLabel, color: '#0e7c66' },
+            ],
+          });
+        }
+      })();
+    </script>
   {% endif %}
 {% endblock %}

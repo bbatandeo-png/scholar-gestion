@@ -18,7 +18,7 @@ import { AuthenticatedGuard } from '../common/guards/authenticated.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { buildExcelBuffer } from '../common/utils/excel.util';
 import { toDisplayString } from '../common/utils/safe-string.util';
-import { ReportsService } from './reports.service';
+import { GradeSheetOptions, ReportsService } from './reports.service';
 import { SchoolYearsService } from '../school-years/school-years.service';
 
 // Not gated by @RequireModule('FINANCE'): every route here is read-only, and
@@ -59,6 +59,117 @@ export class ReportsController {
       `inline; filename="liste-nominative-${safeLevelName}.pdf"`,
     );
     return res.send(pdf);
+  }
+
+  // How many "Note"/"Devoir"/"Interro" columns the picker form on
+  // /bulletins asked for - shared by the three routes below. Defaults
+  // (2 notes, 1 devoir, 2 interros) match the original fixed layout;
+  // clamping itself happens in ReportsService.buildGradeSheetColumns(),
+  // this just turns the raw query strings into numbers.
+  private parseGradeSheetOptions(
+    noteCount?: string,
+    devoirCount?: string,
+    interroCount?: string,
+  ): GradeSheetOptions {
+    return {
+      noteCount: noteCount !== undefined ? Number(noteCount) : undefined,
+      devoirCount: devoirCount !== undefined ? Number(devoirCount) : undefined,
+      interroCount:
+        interroCount !== undefined ? Number(interroCount) : undefined,
+    };
+  }
+
+  // Blank per-class mark sheet (roster pre-filled, every note column left
+  // for a teacher to fill in by hand) - see ReportsService.renderGradeSheet*
+  // for why this reuses getNominalRoll() as its data source.
+  @Get('/grade-sheet/pdf')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT, Role.AUDITEUR)
+  async gradeSheetPdf(
+    @Query('levelId') levelId: string,
+    @Query('noteCount') noteCount: string | undefined,
+    @Query('devoirCount') devoirCount: string | undefined,
+    @Query('interroCount') interroCount: string | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const roll = await this.reportsService.getNominalRoll(
+      levelId,
+      await this.selectedYearId(req),
+    );
+    const pdf = await this.reportsService.renderGradeSheetPdf(
+      roll,
+      this.parseGradeSheetOptions(noteCount, devoirCount, interroCount),
+    );
+    const safeLevelName = roll.levelName.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="fiche-de-notes-${safeLevelName}.pdf"`,
+    );
+    return res.send(pdf);
+  }
+
+  @Get('/grade-sheet/excel')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT, Role.AUDITEUR)
+  async gradeSheetExcel(
+    @Query('levelId') levelId: string,
+    @Query('noteCount') noteCount: string | undefined,
+    @Query('devoirCount') devoirCount: string | undefined,
+    @Query('interroCount') interroCount: string | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const roll = await this.reportsService.getNominalRoll(
+      levelId,
+      await this.selectedYearId(req),
+    );
+    const buffer = await this.reportsService.renderGradeSheetExcel(
+      roll,
+      this.parseGradeSheetOptions(noteCount, devoirCount, interroCount),
+    );
+    const safeLevelName = roll.levelName.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="fiche-de-notes-${safeLevelName}.xlsx"`,
+    );
+    return res.send(buffer);
+  }
+
+  @Get('/grade-sheet/docx')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT, Role.AUDITEUR)
+  async gradeSheetDocx(
+    @Query('levelId') levelId: string,
+    @Query('noteCount') noteCount: string | undefined,
+    @Query('devoirCount') devoirCount: string | undefined,
+    @Query('interroCount') interroCount: string | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const roll = await this.reportsService.getNominalRoll(
+      levelId,
+      await this.selectedYearId(req),
+    );
+    const buffer = await this.reportsService.renderGradeSheetDocx(
+      roll,
+      this.parseGradeSheetOptions(noteCount, devoirCount, interroCount),
+    );
+    const safeLevelName = roll.levelName.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="fiche-de-notes-${safeLevelName}.docx"`,
+    );
+    return res.send(buffer);
   }
 
   @Get('/student-cards')
@@ -322,6 +433,57 @@ export class ReportsController {
       `attachment; filename="registration-paid-students-${normalizedFilter}.pdf"`,
     );
     return res.send(pdf);
+  }
+
+  @Get('/registration-paid/export')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.COMPTABILITE, Role.AUDITEUR)
+  async registrationPaidStudentsExport(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query('filter') filter?: string,
+    @Query('levelId') levelId?: string,
+    @Query('schoolYearId') schoolYearId?: string,
+  ) {
+    const normalizedFilter = [
+      'registration',
+      'tuition',
+      'full',
+      'partial',
+      'none',
+    ].includes(filter ?? '')
+      ? (filter as 'registration' | 'tuition' | 'full' | 'partial' | 'none')
+      : 'registration';
+    const effectiveSchoolYearId =
+      schoolYearId || (await this.selectedYearId(req));
+    const report = await this.reportsService.registrationPaidStudents(
+      normalizedFilter,
+      levelId,
+      effectiveSchoolYearId,
+    );
+    const buffer = buildExcelBuffer(
+      'Situation_paiements',
+      report.map((item, index) => ({
+        n: index + 1,
+        eleve:
+          `${item.enrollmentId?.studentId?.lastname ?? ''} ${item.enrollmentId?.studentId?.firstname ?? ''}`.trim(),
+        sexe: item.enrollmentId?.studentId?.gender ?? '',
+        matricule: item.enrollmentId?.studentId?.matricule ?? '',
+        classe: item.enrollmentId?.levelId?.label ?? '',
+        montant: item.amountDue,
+        paye: item.amountPaid,
+        reste: item.balanceDue,
+      })),
+    );
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="situation-paiements-${normalizedFilter}.xlsx"`,
+    );
+    return res.send(buffer);
   }
 
   @Get('/unpaid-students')

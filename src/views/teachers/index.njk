@@ -1,0 +1,106 @@
+{% extends "layout.njk" %}
+{% import "partials/legend.njk" as legend %}
+{% block content %}
+  <section class="grid cols-3 top-gap">
+    <div class="panel">
+      <h3>Effectifs</h3>
+      <p class="muted">
+        <strong>{{ stats.effectifs.total }}</strong> enseignant(s) —
+        {{ stats.effectifs.active }} actif(s), {{ stats.effectifs.inactive }} inactif(s), {{ stats.effectifs.departed }} parti(s)
+      </p>
+    </div>
+    <div class="panel">
+      <h3>Contrats qui expirent (30 jours)</h3>
+      {% if stats.expiringContracts.length %}
+        <ul>
+          {% for contract in stats.expiringContracts %}
+            <li>{{ contract.teacherId.firstname }} {{ contract.teacherId.lastname }} — {{ contract.endDate | formatDate }}</li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="muted">Aucun contrat n'expire dans les 30 prochains jours.</p>
+      {% endif %}
+    </div>
+    <div class="panel">
+      <h3>Charge horaire (annee en cours)</h3>
+      {% if stats.hoursByTeacher.length %}
+        <p class="muted">{{ stats.hoursByTeacher.length }} enseignant(s) avec une affectation cette annee.</p>
+      {% else %}
+        <p class="muted">Aucune affectation enregistree pour l'annee en cours.</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <div class="panel top-gap">
+    <div class="panel-heading">
+      <div>
+        <h2>Personnel enseignant</h2>
+        <p class="muted">Dossiers, affectations, contrats et suivi du personnel enseignant.</p>
+      </div>
+      <div class="toolbar compact-actions">
+        <a class="button secondary" href="/teachers/export">Exporter Excel</a>
+        <a class="button" href="/teachers/new">Nouvel enseignant</a>
+      </div>
+    </div>
+
+    <form method="get" action="/teachers" class="toolbar compact-actions">
+      <label class="field-inline">
+        Recherche
+        <input type="text" name="q" value="{{ filters.q }}" placeholder="Nom ou prenoms..." />
+      </label>
+      <label class="field-inline">
+        Statut
+        <select name="status">
+          <option value="">Tous</option>
+          {% for key, meta in ENUM_META.teacherStatus %}
+            <option value="{{ key }}" {% if filters.status == key %}selected{% endif %}>{{ meta.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button type="submit" class="button">Filtrer</button>
+      {% if filters.q or filters.status %}
+        <a href="/teachers" class="button secondary btn-sm">Reinitialiser</a>
+      {% endif %}
+    </form>
+
+    <div class="table-shell">
+      <table class="table-report js-sortable">
+        <thead>
+          <tr>
+            <th class="sortable" data-column-index="0" data-sort-type="text">Nom</th>
+            <th class="sortable" data-column-index="1" data-sort-type="text">Prenoms</th>
+            <th>Telephone</th>
+            <th>Classes (annee en cours)</th>
+            <th>Volume horaire</th>
+            <th>Statut</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for teacher in teachers %}
+            <tr>
+              <td>{{ teacher.lastname }}</td>
+              <td>{{ teacher.firstname }}</td>
+              <td>{{ teacher.phone or '—' }}</td>
+              <td>
+                {% if teacher.classes.length %}
+                  {% for classe in teacher.classes %}
+                    {{ classe.label }}{% if classe.isTitulaire %} (titulaire){% endif %}{% if not loop.last %}, {% endif %}
+                  {% endfor %}
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td>{{ teacher.totalHours if teacher.classes.length else '—' }}</td>
+              <td>{% set value = teacher.status %}{% set group = 'teacherStatus' %}{% include "partials/status-badge.njk" %}</td>
+              <td><a class="button secondary btn-sm" href="/teachers/{{ teacher._id }}">Voir le dossier</a></td>
+            </tr>
+          {% else %}
+            <tr><td colspan="7">Aucun enseignant enregistre.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {{ legend.render(['teacherStatus']) }}
+  </div>
+{% endblock %}

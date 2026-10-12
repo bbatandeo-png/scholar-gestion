@@ -1,0 +1,114 @@
+{% extends "layout.njk" %}
+{% import "partials/legend.njk" as legend %}
+{% block content %}
+  <section class="panel">
+    <div class="panel-heading">
+      <div>
+        <h2>Journal de discipline</h2>
+        <p class="muted">Avertissements, sanctions et convocations - toute la scolarite de l'eleve, toutes annees confondues.</p>
+      </div>
+      <a class="button" href="/discipline/new{{ '?studentId=' + filters.studentId if filters.studentId }}">Ajouter une entree</a>
+    </div>
+
+    {% if student %}
+      <div class="notice" style="margin-bottom:14px;">
+        Filtre sur <strong>{{ student.matricule }} - {{ student.lastname }} {{ student.firstname }}</strong>.
+        <a href="/discipline">Voir tout le journal</a>
+      </div>
+    {% endif %}
+
+    <form method="get" action="/discipline" class="toolbar compact-actions">
+      <input type="hidden" name="studentId" value="{{ filters.studentId }}" />
+      <label class="field-inline">
+        Classe
+        <select name="levelId">
+          <option value="">Toutes les classes</option>
+          {% for level in levels %}
+            <option value="{{ level._id }}" {% if filters.levelId == level._id.toString() %}selected{% endif %}>{{ level.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="field-inline">
+        Annee scolaire
+        <select name="schoolYearId">
+          <option value="">Toutes les annees</option>
+          {% for year in schoolYears %}
+            <option value="{{ year._id }}" {% if filters.schoolYearId == year._id.toString() %}selected{% endif %}>{{ year.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="field-inline">
+        Type
+        <select name="type">
+          <option value="">Tous les types</option>
+          {% for key, meta in ENUM_META.disciplineRecordType %}
+            <option value="{{ key }}" {% if filters.type == key %}selected{% endif %}>{{ meta.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button type="submit" class="button">Filtrer</button>
+      {% if filters.levelId or filters.schoolYearId or filters.type %}
+        <a href="/discipline{{ '?studentId=' + filters.studentId if filters.studentId }}" class="button secondary btn-sm">Reinitialiser</a>
+      {% endif %}
+    </form>
+
+    <div class="table-shell" style="margin-top:14px;">
+      <table class="table-report">
+        <thead>
+          <tr>
+            <th>N°</th>
+            <th>Date</th>
+            <th>Eleve</th>
+            <th>Matricule</th>
+            <th>Annee</th>
+            <th>Type</th>
+            <th>Motif</th>
+            <th>Mesure</th>
+            <th>Enregistre par</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for record in items %}
+            <tr>
+              <td>{{ (page - 1) * pageSize + loop.index }}</td>
+              <td>{{ record.date | formatDate }}</td>
+              <td><a href="/students/{{ record.studentId._id }}">{{ record.studentId.lastname }} {{ record.studentId.firstname }}</a></td>
+              <td>{{ record.studentId.matricule }}</td>
+              <td>{{ record.schoolYearId.label if record.schoolYearId }}</td>
+              <td>{% set value = record.type %}{% set group = 'disciplineRecordType' %}{% include "partials/status-badge.njk" %}</td>
+              <td>{{ record.motif }}</td>
+              <td>{{ record.mesure or '—' }}</td>
+              <td>{{ record.recordedBy.name if record.recordedBy else '—' }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="9">Aucune entree au journal de discipline.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if items.length %}
+      <div class="pagination-row">
+        <form method="get" action="/discipline" class="inline-form">
+          <input type="hidden" name="studentId" value="{{ filters.studentId }}" />
+          <input type="hidden" name="levelId" value="{{ filters.levelId }}" />
+          <input type="hidden" name="schoolYearId" value="{{ filters.schoolYearId }}" />
+          <input type="hidden" name="type" value="{{ filters.type }}" />
+          <input type="hidden" name="page" value="{{ page - 1 }}" />
+          <button type="submit" class="secondary btn-sm btn-icon icon-prev" {% if page <= 1 %}disabled{% endif %}>Precedent</button>
+        </form>
+        <span class="muted">Page {{ page }} sur {{ totalPages }} • {{ total }} entree(s)</span>
+        <form method="get" action="/discipline" class="inline-form">
+          <input type="hidden" name="studentId" value="{{ filters.studentId }}" />
+          <input type="hidden" name="levelId" value="{{ filters.levelId }}" />
+          <input type="hidden" name="schoolYearId" value="{{ filters.schoolYearId }}" />
+          <input type="hidden" name="type" value="{{ filters.type }}" />
+          <input type="hidden" name="page" value="{{ page + 1 }}" />
+          <button type="submit" class="secondary btn-sm btn-icon icon-next" {% if page >= totalPages %}disabled{% endif %}>Suivant</button>
+        </form>
+      </div>
+    {% endif %}
+
+    {{ legend.render(['disciplineRecordType']) }}
+  </section>
+{% endblock %}

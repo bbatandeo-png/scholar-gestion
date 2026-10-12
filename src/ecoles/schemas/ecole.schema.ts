@@ -91,6 +91,16 @@ export class Ecole {
 
   @Prop({ trim: true, select: false })
   provisioningLicenseSecret?: string;
+
+  // Platform-side decision, baked into the downloaded package's .env
+  // (REGISTRATION_PAYMENT_REQUIRED, see EcolesService.
+  // streamInstallationPackage) and applied once on that install's first boot
+  // (scripts/seed.ts) as its own local Settings.REGISTRATION_PAYMENT_REQUIRED
+  // row - some schools require an upfront payment to register a student,
+  // others don't. Never read directly by a client's own app (same
+  // platform/client DB split as every other field here).
+  @Prop({ default: false })
+  registrationPaymentRequired?: boolean;
 }
 
 export const EcoleSchema = SchemaFactory.createForClass(Ecole);

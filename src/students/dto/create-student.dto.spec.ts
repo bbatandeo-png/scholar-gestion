@@ -22,6 +22,7 @@ describe('CreateStudentDto', () => {
     lastname: 'Kodjo',
     firstname: 'Ama',
     gender: 'F',
+    levelId: '507f1f77bcf86cd799439011',
   };
 
   it('accepte un eleve sans date de naissance, lieu de naissance ni quartier (champs absents)', async () => {
@@ -58,11 +59,26 @@ describe('CreateStudentDto', () => {
   it('refuse toujours les champs reellement obligatoires manquants', async () => {
     const errors = await validateBody({});
     const invalidProperties = errors.map((e) => e.property).sort();
-    expect(invalidProperties).toEqual(['firstname', 'gender', 'lastname']);
+    expect(invalidProperties).toEqual([
+      'firstname',
+      'gender',
+      'lastname',
+      'levelId',
+    ]);
   });
 
   it('refuse un genre hors M/F', async () => {
     const errors = await validateBody({ ...minimalRequired, gender: 'X' });
     expect(errors.some((e) => e.property === 'gender')).toBe(true);
+  });
+
+  it('rend la classe obligatoire (absente ou vide)', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { levelId, ...withoutLevel } = minimalRequired;
+    const missing = await validateBody(withoutLevel);
+    expect(missing.some((e) => e.property === 'levelId')).toBe(true);
+
+    const blank = await validateBody({ ...minimalRequired, levelId: '' });
+    expect(blank.some((e) => e.property === 'levelId')).toBe(true);
   });
 });

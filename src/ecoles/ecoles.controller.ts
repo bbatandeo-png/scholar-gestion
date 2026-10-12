@@ -1,9 +1,11 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
   Param,
   Post,
+  Query,
   Render,
   Req,
   Res,
@@ -19,11 +21,10 @@ import { setFlash } from '../common/utils/flash.util';
 import { pickUploadedFile } from '../common/utils/multer.util';
 import { runScopedAsEcole } from '../common/tenant/tenant-context';
 import { EcoleModulesService } from '../ecole-modules/ecole-modules.service';
-import { LicensingService } from '../licensing/licensing.service';
 import { UsersService } from '../users/users.service';
 import { CreateEcoleDto } from './dto/create-ecole.dto';
-import { GenerateEcoleLicenseDto } from './dto/generate-ecole-license.dto';
 import { ToggleEcoleModuleDto } from '../ecole-modules/dto/toggle-ecole-module.dto';
+import { ToggleRegistrationPaymentRequiredDto } from './dto/toggle-registration-payment-required.dto';
 import { UpdateEcoleDto } from './dto/update-ecole.dto';
 import { UpdateEcoleStatusDto } from './dto/update-ecole-status.dto';
 import { EcolesService } from './ecoles.service';
@@ -41,7 +42,6 @@ export class EcolesController {
     private readonly ecoleModulesService: EcoleModulesService,
     private readonly dashboardService: DashboardService,
     private readonly schoolYearsService: SchoolYearsService,
-    private readonly licensingService: LicensingService,
   ) {}
 
   @Get()
@@ -95,14 +95,19 @@ export class EcolesController {
   @Get('/:id/edit')
   @Render('ecoles/index')
   async edit(@Param('id') id: string, @Req() req: Request) {
-    const [ecoles, editEcole, ecoleAdmins, activeModules, licenseStatus] =
-      await Promise.all([
-        this.ecolesService.list(),
-        this.ecolesService.findById(id),
-        this.usersService.list(id),
-        this.ecoleModulesService.listForEcole(id),
-        this.licensingService.getStatus(id),
-      ]);
+    const [
+      ecoles,
+      editEcole,
+      ecoleAdmins,
+      activeModules,
+      provisioningLicenseSecret,
+    ] = await Promise.all([
+      this.ecolesService.list(),
+      this.ecolesService.findById(id),
+      this.usersService.list(id),
+      this.ecoleModulesService.listForEcole(id),
+      this.ecolesService.getProvisioningLicenseSecret(id),
+    ]);
     const newCredentials = req.session.lastCreatedCredentials;
     delete req.session.lastCreatedCredentials;
     const activeModuleCodes = activeModules.map((m) => m.code);
@@ -115,10 +120,19 @@ export class EcolesController {
       moduleStatus: {
         finance: activeModuleCodes.includes('FINANCE'),
         bulletins: activeModuleCodes.includes('BULLETINS'),
+        discipline: activeModuleCodes.includes('DISCIPLINE'),
+        stock: activeModuleCodes.includes('STOCK'),
+        enseignants: activeModuleCodes.includes('ENSEIGNANTS'),
       },
-      licenseStatus,
-      licenseGenerationAvailable: this.licensingService.isGenerationAvailable(),
       releaseAssetsConfigured: this.ecolesService.isReleaseAssetsConfigured(),
+      provisioningLicenseSecret,
+      registrationPaymentRequired: Boolean(
+        editEcole.registrationPaymentRequired,
+      ),
+      // Min bound for the "Date d'expiration" field on the download form -
+      // picking a past date would ship an install already in its grace
+      // period (or already blocked).
+      today: new Date().toISOString().slice(0, 10),
     };
   }
 
@@ -185,6 +199,31 @@ export class EcolesController {
     return res.redirect(`/platform/ecoles/${id}/edit`);
   }
 
+  @Post('/:id/registration-payment-required/toggle')
+  async toggleRegistrationPaymentRequired(
+    @Param('id') id: string,
+    @Body() dto: ToggleRegistrationPaymentRequiredDto,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    try {
+      await this.ecolesService.setRegistrationPaymentRequired(
+        id,
+        dto.required === 'true',
+      );
+      setFlash(req, 'success', "Paiement a l'inscription mis a jour");
+    } catch (error) {
+      setFlash(
+        req,
+        'error',
+        error instanceof Error
+          ? error.message
+          : 'Echec de la mise a jour du reglage',
+      );
+    }
+    return res.redirect(`/platform/ecoles/${id}/edit`);
+  }
+
   @Post('/:id/users/:userId/reset-password')
   async resetAdminPassword(
     @Param('id') id: string,
@@ -224,56 +263,24 @@ export class EcolesController {
     return res.redirect('/platform/ecoles');
   }
 
-  @Post('/:id/license/generate')
-  async generateLicense(
-    @Param('id') id: string,
-    @Body() dto: GenerateEcoleLicenseDto,
-    @Req() req: Request,
-    @Res() res: Response,
-    @CurrentUser() user: SessionUser | undefined,
-  ) {
-    const actorId = user?.id;
-    if (!actorId) {
-      setFlash(req, 'error', 'Utilisateur non authentifie');
-      return res.redirect(`/platform/ecoles/${id}/edit`);
-    }
-    try {
-      const expiresAt = new Date(dto.expiresAt);
-      const token = await this.licensingService.generateAndApply(
-        id,
-        expiresAt,
-        actorId,
-      );
-      // Auto-fill the bookkeeping fields so they match what was just applied
-      // locally - still a manual copy/paste job to reflect this onto an
-      // online /platform/ecoles instance tracking the same client, since the
-      // two are separate databases with no live link between them.
-      await this.ecolesService.update(id, {
-        licenseActivatedAt: new Date().toISOString(),
-        licenseExpiresAt: expiresAt.toISOString(),
-        licenseActivationKey: token,
-      });
-      setFlash(
-        req,
-        'success',
-        'Licence generee et appliquee a cette installation.',
-      );
-    } catch (error) {
-      setFlash(
-        req,
-        'error',
-        error instanceof Error ? error.message : 'Echec de la generation',
-      );
-    }
-    return res.redirect(`/platform/ecoles/${id}/edit`);
-  }
-
   @Get('/:id/installation-package')
   async downloadInstallationPackage(
     @Param('id') id: string,
+    @Query('expiresAt') expiresAt: string | undefined,
     @Res() res: Response,
   ) {
-    await this.ecolesService.streamInstallationPackage(id, res);
+    let parsedExpiresAt: Date | undefined;
+    if (expiresAt) {
+      parsedExpiresAt = new Date(expiresAt);
+      if (Number.isNaN(parsedExpiresAt.getTime())) {
+        throw new BadRequestException("Date d'expiration invalide");
+      }
+    }
+    await this.ecolesService.streamInstallationPackage(
+      id,
+      parsedExpiresAt,
+      res,
+    );
   }
 
   @Post('/:id/status')

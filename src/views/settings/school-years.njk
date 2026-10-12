@@ -40,10 +40,11 @@
       </div>
       <div class="table-shell">
         <table class="table-report">
-          <thead><tr><th>Libelle</th><th>Debut</th><th>Fin</th><th>Statut</th><th>Actions</th></tr></thead>
+          <thead><tr><th>N°</th><th>Libelle</th><th>Debut</th><th>Fin</th><th>Statut</th><th>Actions</th></tr></thead>
           <tbody>
             {% for item in schoolYears %}
               <tr>
+                <td>{{ loop.index }}</td>
                 <td>{{ item.label }}</td>
                 <td>{{ item.startDate | formatDate }}</td>
                 <td>{{ item.endDate | formatDate }}</td>

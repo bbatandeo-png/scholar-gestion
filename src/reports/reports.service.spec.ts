@@ -1,4 +1,5 @@
 import { Model } from 'mongoose';
+import ExcelJS from 'exceljs';
 import { ReportsService } from './reports.service';
 import { Enrollment } from '../enrollments/schemas/enrollment.schema';
 import { Invoice } from '../billing/schemas/invoice.schema';
@@ -303,5 +304,257 @@ describe('ReportsService', () => {
       pdf.toString('latin1').match(/\/Type \/Page\b/g)?.length,
     ).toBeGreaterThan(1);
     expect(pdf.length).toBeGreaterThan(5000);
+  });
+
+  describe('fiche de notes vierge (per-level grade sheet)', () => {
+    const roll = {
+      schoolName: 'Complexe scolaire Dunya',
+      schoolYearLabel: '2026 – 2027',
+      levelName: 'CP1',
+      students: [
+        {
+          lastname: 'DIALLO',
+          firstname: 'Awa',
+          matricule: 'MAT-001',
+          gender: 'F',
+        },
+        {
+          lastname: 'TOURE',
+          firstname: 'Ali',
+          matricule: 'MAT-002',
+          gender: 'M',
+        },
+      ],
+      boys: 1,
+      girls: 1,
+      total: 2,
+    };
+
+    it('paginates a long grade sheet PDF, with every note column left blank', async () => {
+      const service = createService();
+      const longRoll = {
+        ...roll,
+        students: Array.from({ length: 60 }, (_, index) => ({
+          lastname: `NOM ${String(index + 1).padStart(2, '0')}`,
+          firstname: 'Prénom',
+          matricule: `MAT-${String(index + 1).padStart(3, '0')}`,
+          gender: index % 2 ? 'F' : 'M',
+        })),
+        boys: 30,
+        girls: 30,
+        total: 60,
+      };
+
+      const pdf = await service.renderGradeSheetPdf(longRoll);
+
+      expect(
+        pdf.toString('latin1').match(/\/Type \/Page\b/g)?.length,
+      ).toBeGreaterThan(1);
+      expect(pdf.length).toBeGreaterThan(5000);
+    });
+
+    it('numbers every page without the footer itself silently appending blank extra pages', async () => {
+      const service = createService();
+
+      // The actual regression this guards against: writing "Page 1 / 1"
+      // inside the bottom margin used to make pdfkit auto-paginate, so a
+      // roster that fits on a single page ended up as 2 real PDF pages
+      // (and a longer one gained one extra blank page per numbered page).
+      const onePagePdf = await service.renderGradeSheetPdf(roll);
+      expect(
+        onePagePdf.toString('latin1').match(/\/Type \/Page\b/g)?.length,
+      ).toBe(1);
+    });
+
+    it('le nombre de colonnes Note et Devoir est parametrable (Compo reste fixe)', async () => {
+      const service = createService();
+
+      // 0 notes, 3 devoirs (numbered, since there's more than one).
+      const noNotesBuffer = await service.renderGradeSheetExcel(roll, {
+        noteCount: 0,
+        devoirCount: 3,
+      });
+      const noNotesWorkbook = new ExcelJS.Workbook();
+      await noNotesWorkbook.xlsx.load(
+        noNotesBuffer as unknown as ExcelJS.Buffer,
+      );
+      const noNotesSheet = noNotesWorkbook.worksheets[0];
+      const noNotesHeader1 = (noNotesSheet.getRow(8).values as unknown[]).slice(
+        1,
+      );
+      const noNotesHeader2 = (noNotesSheet.getRow(9).values as unknown[]).slice(
+        1,
+      );
+      // No "Note *" column at all: straight from Sexe to the group header.
+      // (ExcelJS repeats a merged cell's value across its whole span when
+      // read back, hence only checking up to the first "Notes à saisir".)
+      expect(noNotesHeader1.slice(0, 5)).toEqual([
+        'N°',
+        'Nom et prénoms',
+        'Matricule',
+        'Sexe',
+        'Notes à saisir',
+      ]);
+      expect(noNotesHeader2.slice(4)).toEqual([
+        'Interro 1',
+        'Interro 2',
+        'Devoir 1',
+        'Devoir 2',
+        'Devoir 3',
+        'Compo',
+      ]);
+
+      // A single devoir stays the bare "Devoir" label (matches the
+      // reference model), only numbered once there's more than one - and 3
+      // notes are all present.
+      const oneDevoirBuffer = await service.renderGradeSheetExcel(roll, {
+        noteCount: 3,
+        devoirCount: 1,
+      });
+      const oneDevoirWorkbook = new ExcelJS.Workbook();
+      await oneDevoirWorkbook.xlsx.load(
+        oneDevoirBuffer as unknown as ExcelJS.Buffer,
+      );
+      const oneDevoirSheet = oneDevoirWorkbook.worksheets[0];
+      const header1 = (oneDevoirSheet.getRow(8).values as unknown[]).slice(1);
+      const header2 = (oneDevoirSheet.getRow(9).values as unknown[]).slice(1);
+      expect(header1.slice(0, 7)).toEqual([
+        'N°',
+        'Nom et prénoms',
+        'Matricule',
+        'Sexe',
+        'Note 1',
+        'Note 2',
+        'Note 3',
+      ]);
+      expect(header2.slice(7)).toEqual([
+        'Interro 1',
+        'Interro 2',
+        'Devoir',
+        'Compo',
+      ]);
+
+      // Whatever the counts, every roster row still carries only real data
+      // for its first four cells - the rest stay blank for hand-filling.
+      const dataRow = oneDevoirSheet.getRow(10).values as unknown[];
+      expect(dataRow.slice(1, 5)).toEqual([1, 'DIALLO Awa', 'MAT-001', 'F']);
+    });
+
+    it('le nombre de colonnes Interro est aussi parametrable', async () => {
+      const service = createService();
+
+      // 0 interros: straight from the default 2 notes to the default 1
+      // devoir, no "Interro *" column between them at all.
+      const zeroBuffer = await service.renderGradeSheetExcel(roll, {
+        interroCount: 0,
+      });
+      const zeroWorkbook = new ExcelJS.Workbook();
+      await zeroWorkbook.xlsx.load(zeroBuffer as unknown as ExcelJS.Buffer);
+      const zeroSheet = zeroWorkbook.worksheets[0];
+      const zeroHeader2 = (zeroSheet.getRow(9).values as unknown[]).slice(7);
+      expect(zeroHeader2).toEqual(['Devoir', 'Compo']);
+
+      // A single interro stays the bare "Interro" label (same rule as
+      // "Devoir"), only numbered once there's more than one.
+      const oneBuffer = await service.renderGradeSheetExcel(roll, {
+        interroCount: 1,
+      });
+      const oneWorkbook = new ExcelJS.Workbook();
+      await oneWorkbook.xlsx.load(oneBuffer as unknown as ExcelJS.Buffer);
+      const oneSheet = oneWorkbook.worksheets[0];
+      const oneHeader2 = (oneSheet.getRow(9).values as unknown[]).slice(7);
+      expect(oneHeader2).toEqual(['Interro', 'Devoir', 'Compo']);
+
+      // 4 interros, numbered.
+      const fourBuffer = await service.renderGradeSheetExcel(roll, {
+        interroCount: 4,
+      });
+      const fourWorkbook = new ExcelJS.Workbook();
+      await fourWorkbook.xlsx.load(fourBuffer as unknown as ExcelJS.Buffer);
+      const fourSheet = fourWorkbook.worksheets[0];
+      const fourHeader2 = (fourSheet.getRow(9).values as unknown[]).slice(7);
+      expect(fourHeader2).toEqual([
+        'Interro 1',
+        'Interro 2',
+        'Interro 3',
+        'Interro 4',
+        'Devoir',
+        'Compo',
+      ]);
+    });
+
+    it('applique le meme nombre de colonnes Note/Devoir au PDF et au Word', async () => {
+      const service = createService();
+
+      const pdf = await service.renderGradeSheetPdf(roll, {
+        noteCount: 4,
+        devoirCount: 2,
+      });
+      // 4 notes + 2 devoirs (numbered) instead of the default 2 + 1 makes
+      // for a wider table - just check it still renders a well-formed,
+      // single-page PDF rather than something pdfkit choked on.
+      expect(pdf.toString('latin1').match(/\/Type \/Page\b/g)?.length).toBe(1);
+
+      const docx = await service.renderGradeSheetDocx(roll, {
+        noteCount: 4,
+        devoirCount: 2,
+      });
+      expect(docx.subarray(0, 2).toString('latin1')).toBe('PK');
+      expect(docx.length).toBeGreaterThan(1000);
+    });
+
+    it('builds the .xlsx sheet with real cell borders and the merged two-row "Notes à saisir" header', async () => {
+      const service = createService();
+      const buffer = await service.renderGradeSheetExcel(roll);
+
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(buffer as unknown as ExcelJS.Buffer);
+      const sheet = workbook.worksheets[0];
+
+      // Row 8 = "N° / Nom et prénoms / .../ Notes à saisir", row 9 = the
+      // "Interro 1/2, Devoir, Compo" sub-header, row 10 = the first student.
+      const headerRow1 = sheet.getRow(8).values as unknown[];
+      const headerRow2 = sheet.getRow(9).values as unknown[];
+      expect(headerRow1.slice(1, 8)).toEqual([
+        'N°',
+        'Nom et prénoms',
+        'Matricule',
+        'Sexe',
+        'Note 1',
+        'Note 2',
+        'Notes à saisir',
+      ]);
+      expect(headerRow2.slice(7, 11)).toEqual([
+        'Interro 1',
+        'Interro 2',
+        'Devoir',
+        'Compo',
+      ]);
+
+      // The roster is real data; the note columns stay blank.
+      const dataRow1 = sheet.getRow(10).values as unknown[];
+      expect(dataRow1.slice(1, 5)).toEqual([1, 'DIALLO Awa', 'MAT-001', 'F']);
+      expect(dataRow1[5]).toBeUndefined();
+
+      // The whole reason this renderer uses exceljs instead of xlsx: real
+      // borders on every table cell, header and data alike.
+      expect(sheet.getCell(8, 1).border?.top?.style).toBe('thin');
+      expect(sheet.getCell(10, 1).border?.top?.style).toBe('thin');
+
+      // Merges: the six lone headers span both header rows, and "Notes à
+      // saisir" spans its four sub-columns.
+      expect(sheet.getCell(8, 2).isMerged).toBe(true);
+      expect(sheet.getCell(9, 2).isMerged).toBe(true);
+      expect(sheet.getCell(8, 10).isMerged).toBe(true);
+    });
+
+    it('produces a real .docx (zip) file for the same grade sheet', async () => {
+      const service = createService();
+      const buffer = await service.renderGradeSheetDocx(roll);
+
+      // "PK\x03\x04" - every .docx is a zip archive.
+      expect(buffer.subarray(0, 2).toString('latin1')).toBe('PK');
+      expect(buffer.length).toBeGreaterThan(1000);
+    });
   });
 });

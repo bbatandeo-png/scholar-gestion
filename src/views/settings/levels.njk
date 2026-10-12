@@ -54,10 +54,11 @@
       </div>
       <div class="table-shell">
         <table class="table-report">
-          <thead><tr><th>Code</th><th>Libelle</th><th>Ordre</th><th>Cycle</th><th>Actions</th></tr></thead>
+          <thead><tr><th>N°</th><th>Code</th><th>Libelle</th><th>Ordre</th><th>Cycle</th><th>Actions</th></tr></thead>
           <tbody>
             {% for item in levels %}
               <tr>
+                <td>{{ loop.index }}</td>
                 <td>{{ item.code }}</td>
                 <td>{{ item.label }}</td>
                 <td>{{ item.sortOrder }}</td>

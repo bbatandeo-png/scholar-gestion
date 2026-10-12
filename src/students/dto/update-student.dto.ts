@@ -1,14 +1,20 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
   IsDateString,
   IsIn,
+  IsMongoId,
   IsOptional,
   IsString,
   ValidateNested,
 } from 'class-validator';
 import { GuardianInputDto } from './guardian-input.dto';
+
+// A blank <select>/<input> submits '' - @IsOptional() only skips null/undefined.
+function emptyToUndefined({ value }: { value: unknown }) {
+  return value === '' ? undefined : value;
+}
 
 export class UpdateStudentDto {
   @IsOptional()
@@ -39,6 +45,11 @@ export class UpdateStudentDto {
   @IsOptional()
   @IsString()
   district?: string;
+
+  @IsOptional()
+  @Transform(emptyToUndefined)
+  @IsMongoId()
+  levelId?: string;
 
   @IsOptional()
   @IsArray()

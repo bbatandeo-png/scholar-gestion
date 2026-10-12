@@ -1,0 +1,67 @@
+{% extends "layout.njk" %}
+{% import "partials/legend.njk" as legend %}
+{% block content %}
+  <section class="panel">
+    <div class="topbar">
+      <div class="topbar-heading">
+        <div class="topbar-title-row">
+          <h2>Doublons de noms</h2>
+          <p class="muted">{{ groups.length }} groupe(s) d'eleves partageant exactement le meme nom et prenoms.</p>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <a class="button secondary" href="/students">Retour aux eleves</a>
+      </div>
+    </div>
+    <p class="muted">Un nom partage n'est pas forcement une erreur (de vrais homonymes existent) - cette liste sert a verifier au cas par cas, a titre d'information seulement.</p>
+
+    {% if groups.length %}
+      {% for duplicateGroup in groups %}
+        <div class="panel form-section top-gap">
+          <h3>{{ duplicateGroup._id.lastname | upper }} {{ duplicateGroup._id.firstname | upper }} <span class="muted">({{ duplicateGroup.count }} dossiers)</span></h3>
+          <div class="table-shell">
+            <table class="table-report">
+              <thead>
+                <tr>
+                  <th>N°</th>
+                  <th>Matricule</th>
+                  <th>Nom</th>
+                  <th>Prenoms</th>
+                  <th>Statut</th>
+                  <th>Cree le</th>
+                  {% if activeModules and activeModules.finance %}
+                    <th>Total paye</th>
+                    <th>Solde du</th>
+                  {% endif %}
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for student in duplicateGroup.students %}
+                  <tr>
+                    <td>{{ loop.index }}</td>
+                    <td>{{ student.matricule }}</td>
+                    <td>{{ student.lastname }}</td>
+                    <td>{{ student.firstname }}</td>
+                    <td>{% set value = student.status %}{% set group = 'studentStatus' %}{% include "partials/status-badge.njk" %}</td>
+                    <td>{{ student.createdAt | formatDate }}</td>
+                    {% if activeModules and activeModules.finance %}
+                      <td>{{ student.financial.totalPaid }}</td>
+                      <td>{{ student.financial.balanceDue }}</td>
+                    {% endif %}
+                    <td class="actions">
+                      <a class="button secondary btn-sm btn-icon icon-view" href="/students/{{ student._id }}">Fiche</a>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      {% endfor %}
+      {{ legend.render(['studentStatus']) }}
+    {% else %}
+      <p class="notice notice-info top-gap">Aucun doublon de nom detecte.</p>
+    {% endif %}
+  </section>
+{% endblock %}

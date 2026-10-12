@@ -20,12 +20,12 @@
       </div>
       <div class="table-shell">
         <table class="table-report">
-          <thead><tr><th>Nom</th><th>Description</th></tr></thead>
+          <thead><tr><th>N°</th><th>Nom</th><th>Description</th></tr></thead>
           <tbody>
             {% for category in categories %}
-              <tr><td>{{ category.name }}</td><td>{{ category.description }}</td></tr>
+              <tr><td>{{ loop.index }}</td><td>{{ category.name }}</td><td>{{ category.description }}</td></tr>
             {% else %}
-              <tr><td colspan="2">Aucune catégorie enregistrée.</td></tr>
+              <tr><td colspan="3">Aucune catégorie enregistrée.</td></tr>
             {% endfor %}
           </tbody>
         </table>

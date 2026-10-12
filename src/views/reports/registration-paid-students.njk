@@ -7,6 +7,7 @@
         <p class="muted">L'inscription et l'écolage sont calculés et présentés séparément.</p>
       </div>
       <div class="panel-heading-actions">
+        <a class="button secondary btn-icon icon-export" href="/reports/registration-paid/export?filter={{ filter }}{% if levelId %}&levelId={{ levelId }}{% endif %}{% if schoolYearId %}&schoolYearId={{ schoolYearId }}{% endif %}">Télécharger en Excel</a>
         <a class="button secondary btn-icon icon-export" href="/reports/registration-paid/pdf?filter={{ filter }}{% if levelId %}&levelId={{ levelId }}{% endif %}{% if schoolYearId %}&schoolYearId={{ schoolYearId }}{% endif %}">Télécharger le PDF</a>
       </div>
     </div>
@@ -41,22 +42,6 @@
       </label>
       <button type="submit" class="button secondary">Appliquer</button>
     </form>
-
-    <div class="report-document-heading">
-      <strong>{{ schoolName | upper }}</strong>
-      <span>
-        {% if filter == 'tuition' %}
-          Situation de paiement de l'écolage
-        {% elif filter == 'partial' %}
-          Situation des paiements partiels
-        {% elif filter == 'none' %}
-          Situation des élèves sans paiement
-        {% else %}
-          Situation de paiement des frais d'inscription
-        {% endif %}
-      </span>
-      <b>Année scolaire : {{ schoolYearLabel }}</b>
-    </div>
 
     <p class="muted">{{ report.length }} résultat(s). Cliquez sur un en-tête pour trier le tableau.</p>
     <div class="table-shell">

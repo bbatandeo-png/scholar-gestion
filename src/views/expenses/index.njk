@@ -71,10 +71,11 @@
     </form>
     <div class="table-shell">
       <table class="table-report">
-        <thead><tr><th>N°</th><th>Date</th><th>Libellé</th><th>Montant</th><th>Bénéficiaire</th><th>Catégorie</th><th>Motif</th><th>Actions</th></tr></thead>
+        <thead><tr><th>N°</th><th>Reference</th><th>Date</th><th>Libellé</th><th>Montant</th><th>Bénéficiaire</th><th>Catégorie</th><th>Motif</th><th>Actions</th></tr></thead>
         <tbody>
           {% for item in expenses %}
             <tr>
+              <td>{{ loop.index }}</td>
               <td>{{ item.orderNumber }}</td>
               <td>{{ item.expenseDate | formatDate }}</td>
               <td>{{ item.label }}</td>
@@ -88,7 +89,7 @@
               </td>
             </tr>
           {% else %}
-            <tr><td colspan="8">Aucune dépense enregistrée.</td></tr>
+            <tr><td colspan="9">Aucune dépense enregistrée.</td></tr>
           {% endfor %}
         </tbody>
       </table>

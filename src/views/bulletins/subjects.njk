@@ -18,12 +18,12 @@
 
     <div class="table-shell top-gap">
       <table class="table-report">
-        <thead><tr><th>Nom</th><th>Categorie</th></tr></thead>
+        <thead><tr><th>N°</th><th>Nom</th><th>Categorie</th></tr></thead>
         <tbody>
           {% for subject in subjects %}
-            <tr><td>{{ subject.label }}</td><td>{{ ENUM_META.subjectCategory[subject.category].label if ENUM_META.subjectCategory[subject.category] else subject.category }}</td></tr>
+            <tr><td>{{ loop.index }}</td><td>{{ subject.label }}</td><td>{{ ENUM_META.subjectCategory[subject.category].label if ENUM_META.subjectCategory[subject.category] else subject.category }}</td></tr>
           {% else %}
-            <tr><td colspan="2">Aucune matiere.</td></tr>
+            <tr><td colspan="3">Aucune matiere.</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -73,16 +73,17 @@
 
       <div class="table-shell top-gap">
         <table class="table-report">
-          <thead><tr><th>Matiere</th><th>Coefficient</th><th>Professeur</th></tr></thead>
+          <thead><tr><th>N°</th><th>Matiere</th><th>Coefficient</th><th>Professeur</th></tr></thead>
           <tbody>
             {% for cs in classSubjects %}
               <tr>
+                <td>{{ loop.index }}</td>
                 <td>{{ cs.subjectId.label }}</td>
                 <td>{{ cs.coefficient }}</td>
                 <td>{{ cs.teacherName or '—' }}</td>
               </tr>
             {% else %}
-              <tr><td colspan="3">Aucune matiere configuree pour cette classe.</td></tr>
+              <tr><td colspan="4">Aucune matiere configuree pour cette classe.</td></tr>
             {% endfor %}
           </tbody>
         </table>

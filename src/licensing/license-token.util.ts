@@ -7,28 +7,38 @@ export interface LicensePayload {
   expiresAt: string;
 }
 
-function sign(payloadB64: string): string {
-  return createHmac('sha256', getLicenseHmacSecret())
-    .update(payloadB64)
-    .digest('base64url');
+function sign(payloadB64: string, secret: string): string {
+  return createHmac('sha256', secret).update(payloadB64).digest('base64url');
 }
 
-export function createLicenseToken(payload: LicensePayload): string {
+// `secret` defaults to this install's own LICENSE_SECRET (the normal case:
+// signing/verifying against the install's own env). Explicit callers that
+// manage several ecoles' secrets at once - EcolesService.
+// streamInstallationPackage (signs with a given ecole's own persisted
+// provisioningLicenseSecret, never this process's own env) and the
+// `license-cli` tool - pass theirs directly instead.
+export function createLicenseToken(
+  payload: LicensePayload,
+  secret: string = getLicenseHmacSecret(),
+): string {
   const payloadB64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
-  return `${payloadB64}.${sign(payloadB64)}`;
+  return `${payloadB64}.${sign(payloadB64, secret)}`;
 }
 
 // Returns null for anything that isn't a validly-signed, well-formed token -
 // callers must treat null as "no license" (fail closed), never as "skip the
 // check".
-export function verifyLicenseToken(rawToken: string): LicensePayload | null {
+export function verifyLicenseToken(
+  rawToken: string,
+  secret: string = getLicenseHmacSecret(),
+): LicensePayload | null {
   const parts = rawToken.trim().split('.');
   if (parts.length !== 2) {
     return null;
   }
   const [payloadB64, signature] = parts;
 
-  const expected = Buffer.from(sign(payloadB64));
+  const expected = Buffer.from(sign(payloadB64, secret));
   const actual = Buffer.from(signature);
   if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
     return null;

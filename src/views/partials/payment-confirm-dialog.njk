@@ -1,0 +1,42 @@
+{# Confirmation dialog shown before a payment form actually submits.
+   Include once per page, then call window.confirmPaymentSubmit(form) - see
+   the script below - from that form's submit handler. #}
+<dialog id="{{ dialogId }}" class="confirm-dialog payment-confirm-dialog">
+  <h3>Confirmer le paiement</h3>
+  <p>Enregistrer un paiement de <strong class="js-confirm-amount"></strong> (<span class="js-confirm-method"></span>) ?</p>
+  <p class="muted">Cette action ne peut pas etre annulee depuis cette page.</p>
+  <div class="toolbar compact-actions">
+    <button type="button" class="secondary js-confirm-cancel">Annuler</button>
+    <button type="button" class="btn-icon icon-save js-confirm-ok">Confirmer</button>
+  </div>
+</dialog>
+
+<script>
+  // Wires one payment <form> (with [name="amount"] and [name="method"]) to
+  // one confirmation <dialog> - the form only actually submits once the
+  // dialog is confirmed. Returns nothing; call once per (form, dialog) pair.
+  function confirmBeforePaymentSubmit(form, dialog) {
+    if (!form || !dialog || typeof dialog.showModal !== 'function') return;
+    const amountInput = form.querySelector('[name="amount"]');
+    const methodSelect = form.querySelector('[name="method"]');
+    const amountLabel = dialog.querySelector('.js-confirm-amount');
+    const methodLabel = dialog.querySelector('.js-confirm-method');
+    let confirmed = false;
+
+    form.addEventListener('submit', (event) => {
+      if (confirmed) return;
+      event.preventDefault();
+      if (typeof form.reportValidity === 'function' && !form.reportValidity()) return;
+      amountLabel.textContent = amountInput.value;
+      methodLabel.textContent = methodSelect?.options[methodSelect.selectedIndex]?.text || '';
+      dialog.showModal();
+    });
+
+    dialog.querySelector('.js-confirm-cancel').addEventListener('click', () => dialog.close());
+    dialog.querySelector('.js-confirm-ok').addEventListener('click', () => {
+      confirmed = true;
+      dialog.close();
+      form.requestSubmit();
+    });
+  }
+</script>

@@ -18,9 +18,16 @@ import { LevelsService } from '../levels/levels.service';
 import { BillingService } from '../billing/billing.service';
 import { PaymentsService } from '../payments/payments.service';
 import { SchoolYearsService } from '../school-years/school-years.service';
+import { SettingsService } from '../settings/settings.service';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { GuardianType, Role } from '../common/enums/domain.enums';
+import {
+  EnrollmentType,
+  GuardianType,
+  PaymentMethod,
+  Role,
+} from '../common/enums/domain.enums';
+import { EcoleModulesService } from '../ecole-modules/ecole-modules.service';
 import { AuthenticatedGuard } from '../common/guards/authenticated.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { setFlash } from '../common/utils/flash.util';
@@ -50,6 +57,8 @@ export class StudentsController {
     private readonly levelsService: LevelsService,
     private readonly billingService: BillingService,
     private readonly paymentsService: PaymentsService,
+    private readonly ecoleModulesService: EcoleModulesService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   @Get()
@@ -59,21 +68,47 @@ export class StudentsController {
     const year = await this.schoolYearsService.resolveSelected(
       req.session.selectedSchoolYearId,
     );
+    // ?schoolYearId= (no UI control for it anymore, but still honoured -
+    // see the student-search bug's e2e coverage) searches a different year
+    // than the one selected for the rest of the app - never changes that
+    // selection, only which year's enrollments this one list looks at.
+    const filterSchoolYearId = query.schoolYearId ?? String(year._id);
     const page = Math.max(1, Number(query.page ?? 1));
     const pageSize = Math.min(100, Math.max(5, Number(query.pageSize ?? 20)));
     const result = await this.studentsService.searchPaginated(
       query.q,
       page,
       pageSize,
-      String(year._id),
+      filterSchoolYearId,
+      {
+        levelId: query.levelId,
+        status: query.status,
+        matricule: query.matricule,
+      },
     );
 
     return {
       title: 'Eleves',
       students: result.items,
+      // For "Creer un eleve" / "Liste nominative" below: always the truly
+      // selected year, never the (now UI-less, but still query-param
+      // addressable) year this search happens to filter on.
       levels: await this.levelsService.listForSchoolYear(String(year._id)),
+      // So "Creer un eleve" can show what enrolling into each class costs -
+      // see create()'s auto-enrollment, which targets the truly open year;
+      // this reads the same one whenever it matches the selected year (the
+      // normal case) and simply shows no fee hint otherwise.
+      feesByLevel: await this.getFeesByLevel(String(year._id)),
+      registrationPaymentRequired:
+        await this.settingsService.getRegistrationPaymentRequired(),
       openSchoolYear: year,
       query: query.q ?? '',
+      filters: {
+        levelId: query.levelId ?? '',
+        status: query.status ?? '',
+        matricule: query.matricule ?? '',
+        schoolYearId: query.schoolYearId ?? '',
+      },
       pagination: {
         page: result.page,
         pageSize: result.pageSize,
@@ -85,6 +120,24 @@ export class StudentsController {
         nextPage: Math.min(result.totalPages, result.page + 1),
       },
     };
+  }
+
+  private async getFeesByLevel(schoolYearId: string) {
+    const schedules = await this.billingService.listFeeSchedules(schoolYearId);
+    const fees: Record<
+      string,
+      { registrationFee: number; tuitionFee: number }
+    > = {};
+    for (const schedule of schedules) {
+      const levelId = toDisplayString(
+        schedule.levelId?._id ?? schedule.levelId,
+      );
+      fees[levelId] = {
+        registrationFee: Number(schedule.registrationFee ?? 0),
+        tuitionFee: Number(schedule.tuitionFee ?? 0),
+      };
+    }
+    return fees;
   }
 
   @Get('/export')
@@ -99,7 +152,12 @@ export class StudentsController {
     );
     const students = await this.studentsService.search(
       query.q,
-      String(year._id),
+      query.schoolYearId ?? String(year._id),
+      {
+        levelId: query.levelId,
+        status: query.status,
+        matricule: query.matricule,
+      },
     );
     const buffer = buildExcelBuffer(
       'Eleves',
@@ -178,24 +236,96 @@ export class StudentsController {
     };
   }
 
+  // JSON, appele par le script de la page "Creer un eleve" juste avant la
+  // soumission du formulaire - voir students/index.njk. Jamais bloquant en
+  // soi (deux eleves peuvent reellement porter le meme nom), juste de quoi
+  // demander confirmation.
+  @Get('/check-duplicate')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT, Role.AUDITEUR)
+  async checkDuplicateName(
+    @Query('lastname') lastname = '',
+    @Query('firstname') firstname = '',
+  ) {
+    if (!lastname.trim() || !firstname.trim()) {
+      return { matches: [] };
+    }
+    const matches = await this.studentsService.checkDuplicateName(
+      lastname,
+      firstname,
+    );
+    return {
+      matches: matches.map((student) => ({
+        matricule: student.matricule,
+        status: student.status,
+      })),
+    };
+  }
+
+  @Get('/duplicates')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT, Role.AUDITEUR)
+  @Render('students/duplicates')
+  async duplicates() {
+    const groups = await this.studentsService.findDuplicateGroups();
+    const studentIds = groups.flatMap((group) =>
+      group.students.map((student) => String(student._id)),
+    );
+    const financials =
+      await this.studentsService.getFinancialSummaries(studentIds);
+    const groupsWithFinancials = groups.map((group) => ({
+      ...group,
+      students: group.students.map((student) => ({
+        ...student,
+        financial: financials.get(String(student._id)) ?? {
+          totalPaid: 0,
+          balanceDue: 0,
+        },
+      })),
+    }));
+    return {
+      title: 'Doublons de noms',
+      groups: groupsWithFinancials,
+    };
+  }
+
   @Post()
   @Roles(Role.SUPER_ADMIN, Role.SECRETARIAT)
   async create(
     @Body() dto: CreateStudentDto,
     @Req() req: Request,
     @Res() res: Response,
+    @CurrentUser() user: SessionUser | undefined,
   ) {
+    // Checked before creating anything: some schools require the
+    // registration payment up front (Ecole.registrationPaymentRequired, set
+    // on /platform/ecoles and baked into this install's own Settings at
+    // first boot - see scripts/seed.ts). Only applicable when a class is
+    // being chosen at all (the Paiement a l'inscription panel is itself only
+    // shown then) and when FINANCE is active (same gate the panel's own
+    // visibility already uses - nothing to enforce otherwise).
+    if (dto.levelId && Number(dto.paymentAmount ?? 0) <= 0) {
+      const ecoleId = req.session?.user?.ecoleId;
+      const financeActive =
+        !!ecoleId &&
+        (await this.ecoleModulesService.isActive(ecoleId, 'FINANCE'));
+      if (
+        financeActive &&
+        (await this.settingsService.getRegistrationPaymentRequired())
+      ) {
+        setFlash(
+          req,
+          'error',
+          "Le paiement a l'inscription est obligatoire pour cette ecole - indiquez un montant et un mode de paiement.",
+        );
+        return res.redirect('/students');
+      }
+    }
+
+    let student: Awaited<ReturnType<StudentsService['create']>>;
     try {
-      const student = await this.studentsService.create(dto);
+      student = await this.studentsService.create(dto);
       await this.studentsService.savePhoto(
         String(student._id),
         pickUploadedFile(req, 'photo'),
-      );
-      const guardiansCount = student.guardiansCount;
-      setFlash(
-        req,
-        'success',
-        `Dossier eleve cree avec le matricule ${student.matricule}. Responsables enregistres: ${guardiansCount}`,
       );
     } catch (error) {
       const isDuplicateKey =
@@ -211,8 +341,98 @@ export class StudentsController {
             ? error.message
             : 'Impossible de creer le dossier eleve',
       );
+      return res.redirect('/students');
     }
 
+    // Most schools never create a student without immediately enrolling and
+    // collecting something - the class chosen above (mandatory on this
+    // form) doubles as "enroll them now" instead of leaving that for a
+    // separate trip through /enrollments. A failure here (no open school
+    // year, payment refused, ...) never hides that the student record
+    // itself was created successfully.
+    if (dto.levelId) {
+      try {
+        const openYear = await this.schoolYearsService.requireOpen();
+        const paymentAmount = Number(dto.paymentAmount ?? 0);
+        const wantsPayment = paymentAmount > 0;
+
+        if (wantsPayment) {
+          const ecoleId = req.session?.user?.ecoleId;
+          if (
+            ecoleId &&
+            !(await this.ecoleModulesService.isActive(ecoleId, 'FINANCE'))
+          ) {
+            setFlash(
+              req,
+              'error',
+              `Dossier eleve cree (matricule ${student.matricule}), mais le module FINANCE est desactive : ni l'inscription ni le paiement n'ont ete enregistres.`,
+            );
+            return res.redirect('/students');
+          }
+        }
+
+        const result = await this.enrollmentsService.createEnrollment(
+          {
+            studentId: String(student._id),
+            schoolYearId: String(openYear._id),
+            levelId: dto.levelId,
+            type: EnrollmentType.INITIAL,
+          },
+          user?.id,
+        );
+
+        if (!wantsPayment) {
+          setFlash(
+            req,
+            'success',
+            `Dossier eleve cree avec le matricule ${student.matricule} et inscrit en ${openYear.label}. Responsables enregistres : ${student.guardiansCount}`,
+          );
+          return res.redirect('/students');
+        }
+
+        try {
+          const payment = await this.paymentsService.createPayment(
+            {
+              invoiceId: result.invoiceId,
+              amount: paymentAmount,
+              method: dto.paymentMethod ?? PaymentMethod.CASH,
+              reference: dto.paymentReference,
+            },
+            user?.id,
+          );
+          setFlash(
+            req,
+            'success',
+            `Dossier eleve cree (matricule ${student.matricule}), inscrit en ${openYear.label} et paiement de ${paymentAmount} enregistre`,
+          );
+          return res.redirect(`/receipts/${payment.payment._id.toString()}`);
+        } catch (error) {
+          setFlash(
+            req,
+            'error',
+            `Dossier eleve cree et inscrit, mais le paiement n'a pas ete enregistre : ${
+              error instanceof Error ? error.message : 'erreur inconnue'
+            }`,
+          );
+          return res.redirect('/students');
+        }
+      } catch (error) {
+        setFlash(
+          req,
+          'error',
+          `Dossier eleve cree avec le matricule ${student.matricule}, mais l'inscription n'a pas ete effectuee : ${
+            error instanceof Error ? error.message : 'erreur inconnue'
+          }`,
+        );
+        return res.redirect('/students');
+      }
+    }
+
+    setFlash(
+      req,
+      'success',
+      `Dossier eleve cree avec le matricule ${student.matricule}. Responsables enregistres: ${student.guardiansCount}`,
+    );
     return res.redirect('/students');
   }
 
@@ -446,6 +666,7 @@ export class StudentsController {
       history,
       paymentHistory,
       currentEnrollment,
+      studentClass: await this.studentsService.getClassInfo(id),
       selectedYear,
       schoolYears: [selectedYear],
       levels: await this.levelsService.listForSchoolYear(
@@ -469,6 +690,7 @@ export class StudentsController {
       req.session.selectedSchoolYearId,
     );
     const detail = await this.studentsService.detail(id);
+    const studentClass = await this.studentsService.getClassInfo(id);
     const history = await this.enrollmentsService.findStudentHistory(
       id,
       String(selectedYear._id),
@@ -492,6 +714,7 @@ export class StudentsController {
 
     return {
       student: detail.student,
+      studentClass,
       currentEnrollment,
       currentInvoice,
       openArrearsCount: totalOpenArrears > 0 ? 1 : 0,

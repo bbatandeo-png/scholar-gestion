@@ -215,6 +215,66 @@ export class PaymentsService {
     });
   }
 
+  // Lists (and, on demand, repairs) invoices whose paid amount and payment
+  // ledger disagree - see ledger.util.ts for why they can. The invoice is the
+  // reference: it is what the school corrected by hand and what every printed
+  // list shows, so the ledger is brought to it with a signed 'correction'
+  // entry rather than the other way round.
+  async getLedgerReconciliation(schoolYearId: string) {
+    const rows = await this.billingService.listLedgerDivergences(schoolYearId);
+    return {
+      rows,
+      totalDifference: rows.reduce((sum, row) => sum + row.difference, 0),
+    };
+  }
+
+  async applyLedgerCorrections(schoolYearId: string, actorId?: string) {
+    const { rows } = await this.getLedgerReconciliation(schoolYearId);
+    if (!rows.length) {
+      return { corrected: 0, totalDifference: 0 };
+    }
+
+    await runWithMongoTransactionFallback(this.connection, async (session) => {
+      for (const row of rows) {
+        const delta = -row.difference;
+        await this.billingService.recordPaymentCorrection(
+          {
+            invoiceId: row.invoiceId,
+            schoolYearId,
+            delta,
+            reason: 'Alignement du registre sur la facture',
+            actorId,
+          },
+          session,
+        );
+        await this.auditService.log(
+          {
+            schoolYearId,
+            actorId,
+            action: AuditAction.PAYMENT_CORRECTED,
+            entityType: 'EnrollmentInvoice',
+            entityId: row.enrollmentId || row.invoiceId,
+            details: {
+              // Same shape as the manual financial-details edit (see
+              // EnrollmentsService.updateFinancialDetails) so both sources
+              // render identically on the global payment-modifications
+              // history page and the per-enrollment audit trail.
+              paidAmountBefore: row.ledgerPaid,
+              paidAmountAfter: row.invoicePaid,
+              reason: `Registre des paiements aligne sur la facture (${row.ledgerPaid} -> ${row.invoicePaid})`,
+            },
+          },
+          session,
+        );
+      }
+    });
+
+    return {
+      corrected: rows.length,
+      totalDifference: rows.reduce((sum, row) => sum + row.difference, 0),
+    };
+  }
+
   async findReceiptById(id: string): Promise<ReceiptPaymentLean> {
     const payment = (await this.paymentModel
       .findById(id)

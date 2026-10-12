@@ -37,8 +37,13 @@ export class PaymentsController {
     private readonly ecolesService: EcolesService,
   ) {}
 
+  // Secretariat included: it can already record a payment while enrolling
+  // a student (EnrollmentsController.create() calls createPayment()
+  // directly) - excluding it here would only be reachable from this
+  // standalone form, an inconsistent, confusing restriction on the exact
+  // same action.
   @Post('/payments')
-  @Roles(Role.SUPER_ADMIN, Role.COMPTABILITE)
+  @Roles(Role.SUPER_ADMIN, Role.SECRETARIAT, Role.COMPTABILITE)
   async create(
     @Body() dto: CreatePaymentDto,
     @Req() req: Request,
@@ -54,8 +59,58 @@ export class PaymentsController {
     return res.redirect(`/receipts/${result.payment._id.toString()}`);
   }
 
-  @Get('/receipts/:id')
+  @Get('/payments/reconciliation')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.COMPTABILITE, Role.AUDITEUR)
+  async reconciliation(@Req() req: Request, @Res() res: Response) {
+    const year = await this.schoolYearsService.resolveSelected(
+      req.session.selectedSchoolYearId,
+    );
+    const report = await this.paymentsService.getLedgerReconciliation(
+      String(year._id),
+    );
+    return res.render('payments/reconciliation', {
+      title: 'Coherence des paiements',
+      selectedYear: year,
+      rows: report.rows,
+      totalDifference: report.totalDifference,
+    });
+  }
+
+  @Post('/payments/reconciliation')
+  @Roles(Role.SUPER_ADMIN, Role.COMPTABILITE)
+  async applyReconciliation(
+    @Req() req: Request,
+    @Res() res: Response,
+    @CurrentUser() user: SessionUser | undefined,
+  ) {
+    const year = await this.schoolYearsService.resolveSelected(
+      req.session.selectedSchoolYearId,
+    );
+    await this.schoolYearsService.assertWritable(String(year._id));
+    const result = await this.paymentsService.applyLedgerCorrections(
+      String(year._id),
+      user?.id,
+    );
+    setFlash(
+      req,
+      'success',
+      result.corrected
+        ? `${result.corrected} ecart(s) corrige(s) : le tableau de bord et les listes concordent maintenant.`
+        : 'Aucun ecart a corriger.',
+    );
+    return res.redirect('/payments/reconciliation');
+  }
+
+  // Secretariat included: it can take a payment while enrolling and hands
+  // the receipt over at the same desk.
+  @Get('/receipts/:id')
+  @Roles(
+    Role.SUPER_ADMIN,
+    Role.DIRECTION,
+    Role.SECRETARIAT,
+    Role.COMPTABILITE,
+    Role.AUDITEUR,
+  )
   async receipt(
     @Param('id') id: string,
     @Query('format') format: string | undefined,

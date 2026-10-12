@@ -186,10 +186,11 @@
       </div>
       <div class="table-shell">
         <table class="table-report">
-          <thead><tr><th>Annee</th><th>Niveau</th><th>Inscription</th><th>Ecolage</th><th>Actions</th></tr></thead>
+          <thead><tr><th>N°</th><th>Annee</th><th>Niveau</th><th>Inscription</th><th>Ecolage</th><th>Actions</th></tr></thead>
           <tbody>
             {% for item in feeSchedules %}
               <tr>
+                <td>{{ loop.index }}</td>
                 <td>{{ item.schoolYearId.label if item.schoolYearId }}</td>
                 <td>{{ item.levelId.label if item.levelId }}</td>
                 <td>{{ item.registrationFee }}</td>
@@ -197,7 +198,7 @@
                 <td><a class="button btn-sm" href="/settings/fees/{{ item._id }}/edit">Modifier</a></td>
               </tr>
             {% else %}
-              <tr><td colspan="5">Aucun frais configure.</td></tr>
+              <tr><td colspan="6">Aucun frais configure.</td></tr>
             {% endfor %}
           </tbody>
         </table>

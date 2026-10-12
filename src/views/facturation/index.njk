@@ -22,10 +22,11 @@
       </div>
       <div class="table-shell">
         <table class="table-report">
-          <thead><tr><th>Numero</th><th>Periode</th><th>Date</th><th>Montant</th><th>Statut</th><th></th></tr></thead>
+          <thead><tr><th>N°</th><th>Numero</th><th>Periode</th><th>Date</th><th>Montant</th><th>Statut</th><th></th></tr></thead>
           <tbody>
             {% for facture in factures %}
               <tr>
+                <td>{{ loop.index }}</td>
                 <td>{{ facture.numero }}</td>
                 <td>{{ facture.periode }}</td>
                 <td>{{ facture.dateGeneration | formatDate }}</td>
@@ -34,7 +35,7 @@
                 <td><a class="button btn-sm" href="/facturation/factures/{{ facture._id }}/pdf">PDF</a></td>
               </tr>
             {% else %}
-              <tr><td colspan="6">Aucune facture.</td></tr>
+              <tr><td colspan="7">Aucune facture.</td></tr>
             {% endfor %}
           </tbody>
         </table>

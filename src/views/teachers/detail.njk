@@ -1,0 +1,488 @@
+{% extends "layout.njk" %}
+{% import "partials/legend.njk" as legend %}
+{% block content %}
+  <div class="panel">
+    <div class="panel-heading">
+      <div>
+        <h2>{{ teacher.firstname }} {{ teacher.lastname }}</h2>
+        <p class="muted">
+          {% set value = teacher.status %}{% set group = 'teacherStatus' %}{% include "partials/status-badge.njk" %}
+          {% if teacher.specialty %} — {{ teacher.specialty }}{% endif %}
+        </p>
+      </div>
+      <a class="button secondary btn-sm" href="/teachers">Retour</a>
+    </div>
+    {% if teacher.photo %}
+      <img src="/uploads/{{ teacher.photo }}" alt="Photo" style="height:96px;display:block;margin-bottom:12px;" />
+    {% endif %}
+  </div>
+
+  <section class="grid cols-2 top-gap">
+    <div class="panel">
+      <h3>Dossier</h3>
+      <form method="post" action="/teachers/{{ teacher._id }}" enctype="multipart/form-data" class="stack">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+        <div class="form-grid">
+          <label>Nom<input name="lastname" value="{{ teacher.lastname }}" required /></label>
+          <label>Prenoms<input name="firstname" value="{{ teacher.firstname }}" required /></label>
+          <label>Sexe
+            <select name="gender">
+              <option value="">Sélectionner</option>
+              <option value="M" {% if teacher.gender == 'M' %}selected{% endif %}>M</option>
+              <option value="F" {% if teacher.gender == 'F' %}selected{% endif %}>F</option>
+            </select>
+          </label>
+          <label>Date de naissance<input type="date" name="birthDate" value="{{ teacher.birthDate | inputDate }}" /></label>
+          <label>Lieu de naissance<input name="birthPlace" value="{{ teacher.birthPlace }}" /></label>
+          <label>Telephone<input name="phone" value="{{ teacher.phone }}" /></label>
+          <label>Email<input type="email" name="email" value="{{ teacher.email }}" /></label>
+          <label>Adresse<input name="address" value="{{ teacher.address }}" /></label>
+          <label>Diplome<input name="diploma" value="{{ teacher.diploma }}" /></label>
+          <label>Specialite<input name="specialty" value="{{ teacher.specialty }}" /></label>
+          <label>Date d'embauche<input type="date" name="hireDate" value="{{ teacher.hireDate | inputDate }}" /></label>
+          <label>Statut
+            <select name="status">
+              {% for key, meta in ENUM_META.teacherStatus %}
+                <option value="{{ key }}" {% if teacher.status == key %}selected{% endif %}>{{ meta.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Photo
+            <input type="file" name="photo" accept="image/png,image/jpeg,image/webp,image/gif" />
+          </label>
+        </div>
+        <label>Notes <span class="muted">(facultatif)</span>
+          <textarea name="notes" rows="2">{{ teacher.notes }}</textarea>
+        </label>
+        <button type="submit">Mettre à jour</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h3>Nouvelle affectation</h3>
+      <p class="muted">Annee scolaire : <strong>{{ openSchoolYear.label if openSchoolYear else 'aucune annee ouverte' }}</strong> (toujours l'annee en cours, non modifiable ici).</p>
+      <form method="post" action="/teachers/{{ teacher._id }}/assignments" class="stack">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+        <div class="form-grid">
+          <label>Classe(s) <span class="muted">(plusieurs possibles)</span>
+            <select name="levelIds" multiple required size="5">
+              {% for level in levels %}
+                <option value="{{ level._id }}">{{ level.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Matiere
+            <select name="subjectId" required>
+              <option value="">Choisir</option>
+              {% for subject in subjects %}
+                <option value="{{ subject._id }}">{{ subject.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Volume horaire (h/semaine)
+            <input type="number" name="hoursPerWeek" min="0" step="0.5" required />
+          </label>
+        </div>
+        <label class="toggle-option">
+          <input type="checkbox" name="isTitulaire" value="true" />
+          Titulaire de la/les classe(s) choisie(s)
+        </label>
+        <p class="muted">Cocher cette case retire automatiquement le titulaire actuel de chaque classe choisie, s'il y en a un.</p>
+        <button type="submit">Ajouter l'affectation</button>
+      </form>
+
+      <div class="table-shell top-gap">
+        <table class="table-report">
+          <thead>
+            <tr>
+              <th>N°</th>
+              <th>Annee</th>
+              <th>Classe</th>
+              <th>Matiere</th>
+              <th>H/semaine</th>
+              <th>Titulaire</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for assignment in assignments %}
+              <tr>
+                <td>{{ loop.index }}</td>
+                <td>{{ assignment.schoolYearId.label }}</td>
+                <td>{{ assignment.levelId.label }}</td>
+                <td>{{ assignment.subjectId.label }}</td>
+                <td>{{ assignment.hoursPerWeek }}</td>
+                <td>{% if assignment.isTitulaire %}<span class="badge active">Oui</span>{% else %}—{% endif %}</td>
+                <td>
+                  <button
+                    type="button"
+                    class="button secondary btn-sm js-edit-assignment"
+                    data-action="/teachers/{{ teacher._id }}/assignments/{{ assignment._id }}"
+                    data-subject-id="{{ assignment.subjectId._id }}"
+                    data-hours-per-week="{{ assignment.hoursPerWeek }}"
+                    data-is-titulaire="{{ assignment.isTitulaire }}"
+                  >Modifier</button>
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="7">Aucune affectation enregistree.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="grid cols-2 top-gap">
+    <div class="panel">
+      <h3>Nouveau contrat</h3>
+      <p class="muted">Enregistrer un nouveau contrat cloture automatiquement le contrat actif en cours (renouvellement).</p>
+      <form method="post" action="/teachers/{{ teacher._id }}/contracts" class="stack">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+        <div class="form-grid">
+          <label>Type
+            <select name="type" required>
+              {% for key, meta in ENUM_META.teacherContractType %}
+                <option value="{{ key }}">{{ meta.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Date de debut<input type="date" name="startDate" value="{{ today }}" required /></label>
+          <label>Date de fin <span class="muted">(facultatif)</span><input type="date" name="endDate" /></label>
+        </div>
+        <label>Notes <span class="muted">(facultatif)</span>
+          <textarea name="notes" rows="2"></textarea>
+        </label>
+        <button type="submit">Enregistrer le contrat</button>
+      </form>
+
+      <div class="table-shell top-gap">
+        <table class="table-report">
+          <thead>
+            <tr>
+              <th>N°</th>
+              <th>Type</th>
+              <th>Debut</th>
+              <th>Fin</th>
+              <th>Statut</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for contract in contracts %}
+              <tr>
+                <td>{{ loop.index }}</td>
+                <td>{% set value = contract.type %}{% set group = 'teacherContractType' %}{% include "partials/status-badge.njk" %}</td>
+                <td>{{ contract.startDate | formatDate }}</td>
+                <td>{{ contract.endDate | formatDate if contract.endDate else '—' }}</td>
+                <td>{% set value = contract.status %}{% set group = 'teacherContractStatus' %}{% include "partials/status-badge.njk" %}</td>
+                <td>
+                  <div class="table-actions">
+                    <button
+                      type="button"
+                      class="button secondary btn-sm js-edit-contract"
+                      data-action="/teachers/{{ teacher._id }}/contracts/{{ contract._id }}"
+                      data-type="{{ contract.type }}"
+                      data-start-date="{{ contract.startDate | inputDate }}"
+                      data-end-date="{{ contract.endDate | inputDate if contract.endDate else '' }}"
+                      data-notes="{{ contract.notes or '' }}"
+                    >Modifier</button>
+                    {% if contract.status == 'actif' %}
+                      <form method="post" action="/teachers/{{ teacher._id }}/contracts/{{ contract._id }}/terminate" onsubmit="return confirm('Resilier ce contrat ?');">
+                        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+                        <button type="submit" class="button secondary btn-sm">Resilier</button>
+                      </form>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="6">Aucun contrat enregistre.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {{ legend.render(['teacherContractType', 'teacherContractStatus']) }}
+    </div>
+
+    <div class="panel">
+      <h3>Suivi</h3>
+      <p class="muted">Annee scolaire : <strong>{{ openSchoolYear.label if openSchoolYear else 'aucune annee ouverte' }}</strong> (toujours l'annee en cours, non modifiable ici).</p>
+      <form method="post" action="/teachers/{{ teacher._id }}/tracking" class="stack">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+        <div class="form-grid">
+          <label>Type
+            <select name="type" required>
+              {% for key, meta in ENUM_META.teacherTrackingType %}
+                <option value="{{ key }}">{{ meta.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Date<input type="date" name="date" value="{{ today }}" required /></label>
+        </div>
+        <label>Note <span class="muted">(optionnel)</span>
+          <textarea name="note" rows="2"></textarea>
+        </label>
+        <button type="submit">Ajouter</button>
+      </form>
+
+      <div class="table-shell top-gap">
+        <table class="table-report">
+          <thead>
+            <tr>
+              <th>N°</th>
+              <th>Annee</th>
+              <th>Date</th>
+              <th>Type</th>
+              <th>Note</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for record in tracking %}
+              <tr>
+                <td>{{ loop.index }}</td>
+                <td>{{ record.schoolYearId.label }}</td>
+                <td>{{ record.date | formatDate }}</td>
+                <td>{% set value = record.type %}{% set group = 'teacherTrackingType' %}{% include "partials/status-badge.njk" %}</td>
+                <td>{{ record.note or '—' }}</td>
+                <td>
+                  <button
+                    type="button"
+                    class="button secondary btn-sm js-edit-tracking"
+                    data-action="/teachers/{{ teacher._id }}/tracking/{{ record._id }}"
+                    data-type="{{ record.type }}"
+                    data-date="{{ record.date | inputDate }}"
+                    data-note="{{ record.note or '' }}"
+                  >Modifier</button>
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="6">Aucune entree de suivi.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {{ legend.render(['teacherTrackingType']) }}
+    </div>
+  </section>
+
+  <section class="panel top-gap">
+    <h3>Documents du dossier</h3>
+    <form method="post" action="/teachers/{{ teacher._id }}/documents" enctype="multipart/form-data" class="toolbar compact-actions">
+      <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+      <label class="field-inline">
+        Libelle
+        <input name="label" placeholder="Diplome, CNI, CV..." required />
+      </label>
+      <label class="field-inline">
+        Fichier
+        <input type="file" name="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx" required />
+      </label>
+      <button type="submit" class="button">Ajouter le document</button>
+    </form>
+
+    <div class="table-shell top-gap">
+      <table class="table-report">
+        <thead>
+          <tr>
+            <th>N°</th>
+            <th>Libelle</th>
+            <th>Fichier</th>
+            <th>Ajoute le</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for doc in documents %}
+            <tr>
+              <td>{{ loop.index }}</td>
+              <td>{{ doc.label }}</td>
+              <td><a href="/uploads/{{ doc.relativePath }}" target="_blank">{{ doc.originalName }}</a></td>
+              <td>{{ doc.createdAt | formatDate }}</td>
+              <td>
+                <button
+                  type="button"
+                  class="button secondary btn-sm js-edit-document"
+                  data-action="/teachers/{{ teacher._id }}/documents/{{ doc._id }}"
+                  data-label="{{ doc.label }}"
+                >Modifier</button>
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="5">Aucun document deposé.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <dialog id="assignmentEditDialog" class="confirm-dialog">
+    <h3>Modifier l'affectation</h3>
+    <form method="post" id="assignmentEditForm">
+      <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+      <div class="form-grid">
+        <label>Matiere
+          <select name="subjectId" required>
+            {% for subject in subjects %}
+              <option value="{{ subject._id }}">{{ subject.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Volume horaire (h/semaine)
+          <input type="number" name="hoursPerWeek" min="0" step="0.5" required />
+        </label>
+      </div>
+      <label class="toggle-option">
+        <input type="checkbox" name="isTitulaire" value="true" />
+        Titulaire de cette classe
+      </label>
+      <label>Motif de la modification
+        <textarea name="modificationReason" rows="2" required></textarea>
+      </label>
+      <div class="toolbar compact-actions">
+        <button type="button" class="secondary js-edit-cancel">Annuler</button>
+        <button type="submit">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="contractEditDialog" class="confirm-dialog">
+    <h3>Modifier le contrat</h3>
+    <form method="post" id="contractEditForm">
+      <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+      <div class="form-grid">
+        <label>Type
+          <select name="type" required>
+            {% for key, meta in ENUM_META.teacherContractType %}
+              <option value="{{ key }}">{{ meta.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Date de debut<input type="date" name="startDate" required /></label>
+        <label>Date de fin <span class="muted">(facultatif)</span><input type="date" name="endDate" /></label>
+      </div>
+      <label>Notes <span class="muted">(facultatif)</span>
+        <textarea name="notes" rows="2"></textarea>
+      </label>
+      <label>Motif de la modification
+        <textarea name="modificationReason" rows="2" required></textarea>
+      </label>
+      <div class="toolbar compact-actions">
+        <button type="button" class="secondary js-edit-cancel">Annuler</button>
+        <button type="submit">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="trackingEditDialog" class="confirm-dialog">
+    <h3>Modifier l'entree de suivi</h3>
+    <form method="post" id="trackingEditForm">
+      <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+      <div class="form-grid">
+        <label>Type
+          <select name="type" required>
+            {% for key, meta in ENUM_META.teacherTrackingType %}
+              <option value="{{ key }}">{{ meta.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Date<input type="date" name="date" required /></label>
+      </div>
+      <label>Note <span class="muted">(optionnel)</span>
+        <textarea name="note" rows="2"></textarea>
+      </label>
+      <label>Motif de la modification
+        <textarea name="modificationReason" rows="2" required></textarea>
+      </label>
+      <div class="toolbar compact-actions">
+        <button type="button" class="secondary js-edit-cancel">Annuler</button>
+        <button type="submit">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="documentEditDialog" class="confirm-dialog">
+    <h3>Modifier le document</h3>
+    <form method="post" id="documentEditForm" enctype="multipart/form-data">
+      <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+      <label>Libelle
+        <input name="label" required />
+      </label>
+      <label>Remplacer le fichier <span class="muted">(optionnel)</span>
+        <input type="file" name="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx" />
+      </label>
+      <label>Motif de la modification
+        <textarea name="modificationReason" rows="2" required></textarea>
+      </label>
+      <div class="toolbar compact-actions">
+        <button type="button" class="secondary js-edit-cancel">Annuler</button>
+        <button type="submit">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script>
+    // Chaque bouton "Modifier" pre-remplit le formulaire du dialogue partage
+    // de sa section a partir de ses data-* puis l'ouvre - jamais de
+    // suppression sur cette page, toute correction passe par ces formulaires
+    // (motif obligatoire, voir TeachersService).
+    (() => {
+      function wireEditDialog(dialog, buttonSelector, fill) {
+        if (!dialog || typeof dialog.showModal !== 'function') return;
+        const form = dialog.querySelector('form');
+        document.querySelectorAll(buttonSelector).forEach((button) => {
+          button.addEventListener('click', () => {
+            form.action = button.dataset.action;
+            form.querySelector('[name="modificationReason"]').value = '';
+            fill(form, button.dataset);
+            dialog.showModal();
+          });
+        });
+        dialog.querySelector('.js-edit-cancel').addEventListener('click', () => {
+          dialog.close();
+        });
+      }
+
+      wireEditDialog(
+        document.getElementById('assignmentEditDialog'),
+        '.js-edit-assignment',
+        (form, data) => {
+          form.querySelector('[name="subjectId"]').value = data.subjectId;
+          form.querySelector('[name="hoursPerWeek"]').value = data.hoursPerWeek;
+          form.querySelector('[name="isTitulaire"]').checked = data.isTitulaire === 'true';
+        },
+      );
+
+      wireEditDialog(
+        document.getElementById('contractEditDialog'),
+        '.js-edit-contract',
+        (form, data) => {
+          form.querySelector('[name="type"]').value = data.type;
+          form.querySelector('[name="startDate"]').value = data.startDate;
+          form.querySelector('[name="endDate"]').value = data.endDate;
+          form.querySelector('[name="notes"]').value = data.notes;
+        },
+      );
+
+      wireEditDialog(
+        document.getElementById('trackingEditDialog'),
+        '.js-edit-tracking',
+        (form, data) => {
+          form.querySelector('[name="type"]').value = data.type;
+          form.querySelector('[name="date"]').value = data.date;
+          form.querySelector('[name="note"]').value = data.note;
+        },
+      );
+
+      wireEditDialog(
+        document.getElementById('documentEditDialog'),
+        '.js-edit-document',
+        (form, data) => {
+          form.querySelector('[name="label"]').value = data.label;
+          form.querySelector('[name="file"]').value = '';
+        },
+      );
+    })();
+  </script>
+{% endblock %}

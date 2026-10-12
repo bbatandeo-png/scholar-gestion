@@ -38,7 +38,13 @@ declare global {
         selected: unknown;
         isHistorical: boolean;
       };
-      activeModules?: { finance: boolean; bulletins: boolean } | null;
+      activeModules?: {
+        finance: boolean;
+        bulletins: boolean;
+        discipline: boolean;
+        stock: boolean;
+        enseignants: boolean;
+      } | null;
       licenseEnforcementEnabled?: boolean;
       licenseStatus?: unknown;
     }

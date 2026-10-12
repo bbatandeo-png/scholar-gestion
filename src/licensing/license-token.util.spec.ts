@@ -34,4 +34,20 @@ describe('createLicenseToken / verifyLicenseToken', () => {
     expect(verifyLicenseToken('not-a-token')).toBeNull();
     expect(verifyLicenseToken('a.b.c')).toBeNull();
   });
+
+  // An explicit secret parameter is what lets EcolesService.
+  // streamInstallationPackage and license-cli sign/verify with a given
+  // ecole's own persisted secret, never this process's own env -
+  // see the function's own comment.
+  it('signs and verifies against an explicitly passed secret, independent of each other', () => {
+    const tokenA = createLicenseToken(payload, 'secret-ecole-a');
+    const tokenB = createLicenseToken(payload, 'secret-ecole-b');
+
+    expect(verifyLicenseToken(tokenA, 'secret-ecole-a')).toEqual(payload);
+    expect(verifyLicenseToken(tokenB, 'secret-ecole-b')).toEqual(payload);
+    // Cross-verifying with the other ecole's secret must fail - this is the
+    // whole point of each ecole having its own unique secret.
+    expect(verifyLicenseToken(tokenA, 'secret-ecole-b')).toBeNull();
+    expect(verifyLicenseToken(tokenB, 'secret-ecole-a')).toBeNull();
+  });
 });

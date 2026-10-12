@@ -1,0 +1,68 @@
+{# Confirmation dialog shown when "Creer un eleve" is submitted and a
+   student with the exact same nom/prenoms already exists. Include once on
+   the page, then call confirmDuplicateNameBeforeSubmit(form, dialog,
+   checkUrl) - see the script below. #}
+<dialog id="{{ dialogId }}" class="confirm-dialog">
+  <h3>Eleve deja enregistre</h3>
+  <p>Un eleve nomme <strong class="js-dup-name"></strong> existe deja (matricule <span class="js-dup-matricules"></span>).</p>
+  <p class="muted">De vrais homonymes existent - voulez-vous quand meme creer un nouveau dossier ?</p>
+  <div class="toolbar compact-actions">
+    <button type="button" class="secondary js-confirm-cancel">Annuler</button>
+    <button type="button" class="btn-icon icon-save js-confirm-ok">Creer quand meme</button>
+  </div>
+</dialog>
+
+<script>
+  // Wires a student creation <form> (with [name="lastname"]/[name="firstname"])
+  // to a duplicate-name check + confirmation <dialog>. The form submits
+  // immediately when no duplicate is found, and only after explicit
+  // confirmation otherwise.
+  function confirmDuplicateNameBeforeSubmit(form, dialog, checkUrl) {
+    if (!form || !dialog || typeof dialog.showModal !== 'function') return;
+    const lastnameInput = form.querySelector('[name="lastname"]');
+    const firstnameInput = form.querySelector('[name="firstname"]');
+    const nameLabel = dialog.querySelector('.js-dup-name');
+    const matriculesLabel = dialog.querySelector('.js-dup-matricules');
+    if (!lastnameInput || !firstnameInput) return;
+    let confirmed = false;
+
+    form.addEventListener('submit', (event) => {
+      if (confirmed) return;
+      const lastname = lastnameInput.value.trim();
+      const firstname = firstnameInput.value.trim();
+      if (!lastname || !firstname) return;
+
+      event.preventDefault();
+      fetch(
+        checkUrl + '?lastname=' + encodeURIComponent(lastname) +
+          '&firstname=' + encodeURIComponent(firstname),
+        { headers: { Accept: 'application/json' } },
+      )
+        .then((response) => (response.ok ? response.json() : { matches: [] }))
+        .then((payload) => {
+          const matches = Array.isArray(payload.matches) ? payload.matches : [];
+          if (matches.length === 0) {
+            confirmed = true;
+            form.requestSubmit();
+            return;
+          }
+          nameLabel.textContent = lastname + ' ' + firstname;
+          matriculesLabel.textContent = matches.map((m) => m.matricule).join(', ');
+          dialog.showModal();
+        })
+        .catch(() => {
+          // Le controle n'est qu'une aide - en cas d'echec reseau, ne
+          // jamais bloquer la creation reelle.
+          confirmed = true;
+          form.requestSubmit();
+        });
+    });
+
+    dialog.querySelector('.js-confirm-cancel').addEventListener('click', () => dialog.close());
+    dialog.querySelector('.js-confirm-ok').addEventListener('click', () => {
+      confirmed = true;
+      dialog.close();
+      form.requestSubmit();
+    });
+  }
+</script>

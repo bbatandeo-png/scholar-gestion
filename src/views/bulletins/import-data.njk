@@ -31,6 +31,7 @@
       <thead>
         <tr>
           {% if session.status == 'validated' %}<th rowspan="2"><input type="checkbox" id="select-all-bulletins" /></th>{% endif %}
+          <th rowspan="2">N°</th>
           <th rowspan="2">Eleve</th>
           <th rowspan="2">Sexe</th>
           <th rowspan="2">Statut</th>
@@ -51,6 +52,7 @@
             {% if session.status == 'validated' %}
               <td>{% if row.studentId %}<input type="checkbox" class="bulletin-checkbox" name="studentIds" value="{{ row.studentId }}" />{% endif %}</td>
             {% endif %}
+            <td>{{ loop.index }}</td>
             <td>{{ row.displayName }} {% if row.matricule %}({{ row.matricule }}){% endif %}</td>
             <td>{{ row.sexeRaw or '—' }}</td>
             <td>{% set value = row.matchStatus %}{% set group = 'importRowMatchStatus' %}{% include "partials/status-badge.njk" %}</td>
@@ -66,7 +68,7 @@
             {% endfor %}
           </tr>
         {% else %}
-          <tr><td colspan="3">Aucune donnee importee.</td></tr>
+          <tr><td colspan="4">Aucune donnee importee.</td></tr>
         {% endfor %}
       </tbody>
     </table>

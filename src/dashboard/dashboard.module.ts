@@ -5,12 +5,14 @@ import {
   ArrearCarryForward,
   ArrearCarryForwardSchema,
 } from '../arrears/schemas/arrear-carry-forward.schema';
+import { AuditModule } from '../audit/audit.module';
 import { Invoice, InvoiceSchema } from '../billing/schemas/invoice.schema';
 import {
   Enrollment,
   EnrollmentSchema,
 } from '../enrollments/schemas/enrollment.schema';
 import { Expense, ExpenseSchema } from '../expenses/schemas/expense.schema';
+import { LevelsModule } from '../levels/levels.module';
 import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
 import { SchoolYearsModule } from '../school-years/school-years.module';
 import { Student, StudentSchema } from '../students/schemas/student.schema';
@@ -29,6 +31,8 @@ import { DashboardService } from './dashboard.service';
       { name: Payment.name, schema: PaymentSchema },
     ]),
     SchoolYearsModule,
+    AuditModule,
+    LevelsModule,
   ],
   controllers: [DashboardController],
   providers: [DashboardService],

@@ -1,82 +1,6 @@
 {% extends "layout.njk" %}
 {% import "partials/legend.njk" as legend %}
 {% block content %}
-  <section class="panel">
-    <div class="topbar">
-      <div class="topbar-heading">
-        <div class="topbar-title-row">
-          <h2>Élèves</h2>
-          <p class="muted">{{ pagination.total }} élève(s) • page {{ pagination.page }} / {{ pagination.totalPages }}</p>
-        </div>
-      </div>
-
-      <div class="topbar-actions student-list-actions">
-        <form method="get" action="/students" class="inline-form" id="main-search">
-          <label class="search-controls">
-            <input type="search" name="q" value="{{ query }}" placeholder="Rechercher par nom, prénom ou matricule" />
-            <button type="submit" class="button btn-icon icon-search">Rechercher</button>
-            <button type="button" id="toggle-advanced" class="button secondary">Filtres</button>
-          </label>
-        </form>
-
-        <a class="button secondary" href="/students/search">Anciens élèves</a>
-
-        <form method="get" action="/students/export" class="inline-form">
-          <input type="hidden" name="q" value="{{ query }}" />
-          <button type="submit" class="button secondary btn-icon icon-export">Exporter</button>
-        </form>
-      </div>
-    </div>
-
-    <form method="get" action="/reports/nominal-roll/pdf" target="_blank" class="toolbar compact-actions page-toolbar">
-      <label class="field-inline nominal-roll-field">
-        Liste nominative de la classe
-        <select name="levelId" required>
-          <option value="">Sélectionner une classe</option>
-          {% for level in levels %}
-            <option value="{{ level._id }}">{{ level.label }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <button type="submit" class="button secondary btn-icon icon-export" {% if not openSchoolYear %}disabled{% endif %}>
-        Ouvrir le PDF
-      </button>
-      {% if openSchoolYear %}
-        <span class="muted">Année scolaire : {{ openSchoolYear.label }}</span>
-      {% else %}
-        <span class="notice notice-warning">Ouvrez une année scolaire avant d'imprimer la liste.</span>
-      {% endif %}
-    </form>
-
-    <div id="advanced-filters" style="display:none;margin-top:14px;">
-      <div class="panel form-section">
-        <form method="get" action="/students" class="form-grid" id="advanced-search">
-          <input type="hidden" name="q" value="{{ query }}" />
-          <label>Niveau
-            <input name="level" placeholder="Ex: 6ème, 5ème" />
-          </label>
-          <label>Statut
-            <select name="status">
-              <option value="">Tous</option>
-              <option value="active">Actif</option>
-              <option value="inactive">Inactif</option>
-            </select>
-          </label>
-          <label>Matricule
-            <input name="matricule" placeholder="Matricule exact" />
-          </label>
-          <label>Année scolaire
-            <input name="schoolYear" placeholder="Ex: 2025/2026" />
-          </label>
-          <div>
-            <button type="submit" class="button">Appliquer</button>
-            <a href="/students" class="button secondary">Réinitialiser</a>
-          </div>
-        </form>
-      </div>
-    </div>
-  </section>
-
   <section class="stack">
     <div class="panel">
       <h2>Importer des eleves</h2>
@@ -93,7 +17,7 @@
 
     <div class="panel">
       <h2>Creer un eleve</h2>
-      <form method="post" action="/students" enctype="multipart/form-data" class="stack">
+      <form method="post" action="/students" enctype="multipart/form-data" class="stack" id="createStudentForm">
         <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
         <div class="form-grid">
           <label>Matricule
@@ -111,10 +35,36 @@
           <label>Date de naissance<input type="date" name="birthDate" /></label>
           <label>Lieu de naissance<input name="birthPlace" /></label>
           <label>Quartier<input name="district" /></label>
+          <label>Classe
+            <select name="levelId" required>
+              <option value="" selected>Choisir une classe</option>
+              {% for level in levels %}
+                <option value="{{ level._id }}">{{ level.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
           <label>Photo (pour la carte scolaire)
             <input type="file" name="photo" accept="image/png,image/jpeg,image/webp,image/gif" />
           </label>
         </div>
+
+        {% if activeModules and activeModules.finance and currentUser and (currentUser.role == 'super_admin' or currentUser.role == 'secretariat') %}
+          <h3>Paiement a l'inscription <span class="muted">{{ '(obligatoire)' if registrationPaymentRequired else '(optionnel)' }}</span></h3>
+          <p id="createFeeHint" class="muted">Choisissez une classe pour voir le montant de l'inscription.</p>
+          <div class="form-grid">
+            <label>Montant paye maintenant
+              <input type="number" name="paymentAmount" id="createPaymentAmount" min="{{ '1' if registrationPaymentRequired else '0' }}" placeholder="0" {% if registrationPaymentRequired %}required{% endif %} />
+            </label>
+            <label>Mode de paiement
+              <select name="paymentMethod">
+                {% for key, meta in ENUM_META.paymentMethod %}
+                  <option value="{{ key }}">{{ meta.label }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <label>Reference<input name="paymentReference" /></label>
+          </div>
+        {% endif %}
 
         <h3>Responsables (parents / tuteur)</h3>
         <p class="muted">Renseigne au moins les informations disponibles (nom, prenoms, contact).</p>
@@ -154,15 +104,110 @@
         </div>
 
         <p class="muted">Le matricule sera genere automatiquement si le champ reste vide.</p>
-        <button type="submit" class="btn-lg btn-icon icon-save">Creer le dossier</button>
+        <button type="submit" class="btn-lg btn-icon icon-save" id="createStudentSubmit">Creer le dossier</button>
       </form>
+      {% set dialogId = 'duplicateNameDialog' %}
+      {% include "partials/duplicate-name-confirm-dialog.njk" %}
     </div>
 
+    <script>
+      // Fee hint + dynamic button label for "Creer un eleve" - mirrors the
+      // enrollment form's own version (see enrollments/index.njk). The class
+      // chosen here doubles as an immediate enrollment (StudentsController.
+      // create()), so the same "what will this cost" hint applies.
+      (() => {
+        const feesByLevel = {{ (feesByLevel or {}) | dump | safe }};
+        const level = document.querySelector('#createStudentForm select[name="levelId"]');
+        const hint = document.getElementById('createFeeHint');
+        const amount = document.getElementById('createPaymentAmount');
+        const submitButton = document.getElementById('createStudentSubmit');
+        if (!level) return;
+
+        const refresh = () => {
+          if (hint) {
+            const fee = feesByLevel[level.value];
+            hint.textContent = !level.value
+              ? 'Choisissez une classe pour voir le montant de l\'inscription.'
+              : !fee
+                ? 'Aucun frais defini pour cette classe.'
+                : "Inscription : " + fee.registrationFee + " - Ecolage : " + fee.tuitionFee +
+                  " - Total a payer : " + (fee.registrationFee + fee.tuitionFee) + " (hors impayes reportes)";
+          }
+          if (submitButton) {
+            submitButton.textContent = Number(amount?.value || 0) > 0
+              ? "Creer le dossier et enregistrer le paiement"
+              : 'Creer le dossier';
+          }
+        };
+        level.addEventListener('change', refresh);
+        amount?.addEventListener('input', refresh);
+        refresh();
+      })();
+
+      // Popup de confirmation (dialog stylee, voir
+      // partials/duplicate-name-confirm-dialog.njk) si un eleve du meme nom
+      // existe deja - n'empeche jamais la creation (de vrais homonymes
+      // existent), demande juste de confirmer.
+      confirmDuplicateNameBeforeSubmit(
+        document.getElementById('createStudentForm'),
+        document.getElementById('duplicateNameDialog'),
+        '/students/check-duplicate',
+      );
+    </script>
+
     <div class="panel">
-      <h2>Liste des eleves</h2>
-      <p class="muted">{{ pagination.total }} eleve(s) • page {{ pagination.page }} / {{ pagination.totalPages }}</p>
+      <div class="topbar">
+        <div class="topbar-heading">
+          <div class="topbar-title-row">
+            <h2>Élèves</h2>
+            <p class="muted">{{ pagination.total }} élève(s) • page {{ pagination.page }} / {{ pagination.totalPages }}</p>
+          </div>
+        </div>
+
+        <div class="topbar-actions student-list-actions">
+          <form method="get" action="/students" class="inline-form" id="main-search">
+            <label class="search-controls">
+              <input type="search" name="q" value="{{ query }}" placeholder="Rechercher par nom, prénom ou matricule" />
+              <button type="submit" class="button btn-icon icon-search">Rechercher</button>
+            </label>
+          </form>
+
+          <a class="button secondary" href="/students/search">Anciens élèves</a>
+          <a class="button secondary" href="/students/duplicates">Doublons</a>
+
+          <form method="get" action="/students/export" class="inline-form">
+            <input type="hidden" name="q" value="{{ query }}" />
+            <input type="hidden" name="levelId" value="{{ filters.levelId }}" />
+            <input type="hidden" name="status" value="{{ filters.status }}" />
+            <input type="hidden" name="matricule" value="{{ filters.matricule }}" />
+            <input type="hidden" name="schoolYearId" value="{{ filters.schoolYearId }}" />
+            <button type="submit" class="button secondary btn-icon icon-export">Exporter</button>
+          </form>
+        </div>
+      </div>
+
+      <form method="get" action="/reports/nominal-roll/pdf" target="_blank" class="toolbar compact-actions page-toolbar">
+        <label class="field-inline nominal-roll-field">
+          Liste nominative de la classe
+          <select name="levelId" required>
+            <option value="">Sélectionner une classe</option>
+            {% for level in levels %}
+              <option value="{{ level._id }}">{{ level.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <button type="submit" class="button secondary btn-icon icon-export" {% if not openSchoolYear %}disabled{% endif %}>
+          Ouvrir le PDF
+        </button>
+        {% if openSchoolYear %}
+          <span class="muted">Année scolaire : {{ openSchoolYear.label }}</span>
+        {% else %}
+          <span class="notice notice-warning">Ouvrez une année scolaire avant d'imprimer la liste.</span>
+        {% endif %}
+      </form>
+
       <div class="table-shell">
-        <table class="table-report js-sortable">
+        <table class="table-report js-sortable" data-no-filter>
           <thead>
             <tr>
               <th>N°</th>
@@ -183,7 +228,14 @@
                 <td>{{ student.currentLevel }}</td>
                 <td>{% set value = student.status %}{% set group = 'studentStatus' %}{% include "partials/status-badge.njk" %}</td>
                 <td>{{ student.createdAt | formatDate }}</td>
-                <td><a class="button secondary btn-sm btn-icon icon-view" href="/students/{{ student._id }}">Voir</a></td>
+                <td>
+                  <div class="table-actions">
+                    <a class="button secondary btn-sm btn-icon icon-view" href="/students/{{ student._id }}">Voir</a>
+                    {% if activeModules and activeModules.finance %}
+                      <a class="button btn-sm btn-icon icon-pay" href="/enrollments?studentId={{ student._id }}">Payer</a>
+                    {% endif %}
+                  </div>
+                </td>
               </tr>
             {% else %}
               <tr><td colspan="7">Aucun eleve trouve.</td></tr>
@@ -195,6 +247,10 @@
       <div class="pagination-row">
         <form method="get" action="/students" class="inline-form">
           <input type="hidden" name="q" value="{{ query }}" />
+          <input type="hidden" name="levelId" value="{{ filters.levelId }}" />
+          <input type="hidden" name="status" value="{{ filters.status }}" />
+          <input type="hidden" name="matricule" value="{{ filters.matricule }}" />
+          <input type="hidden" name="schoolYearId" value="{{ filters.schoolYearId }}" />
           <input type="hidden" name="pageSize" value="{{ pagination.pageSize }}" />
           <input type="hidden" name="page" value="{{ pagination.prevPage }}" />
           <button type="submit" class="secondary btn-sm btn-icon icon-prev" {% if not pagination.hasPrev %}disabled{% endif %}>Precedent</button>
@@ -202,6 +258,10 @@
         <span class="muted">Page {{ pagination.page }} sur {{ pagination.totalPages }}</span>
         <form method="get" action="/students" class="inline-form">
           <input type="hidden" name="q" value="{{ query }}" />
+          <input type="hidden" name="levelId" value="{{ filters.levelId }}" />
+          <input type="hidden" name="status" value="{{ filters.status }}" />
+          <input type="hidden" name="matricule" value="{{ filters.matricule }}" />
+          <input type="hidden" name="schoolYearId" value="{{ filters.schoolYearId }}" />
           <input type="hidden" name="pageSize" value="{{ pagination.pageSize }}" />
           <input type="hidden" name="page" value="{{ pagination.nextPage }}" />
           <button type="submit" class="secondary btn-sm btn-icon icon-next" {% if not pagination.hasNext %}disabled{% endif %}>Suivant</button>
@@ -209,24 +269,4 @@
       </div>
     </div>
   </section>
-
-  <script>
-    (function(){
-      const toggle = document.getElementById('toggle-advanced');
-      const panel = document.getElementById('advanced-filters');
-      if (toggle && panel) {
-        toggle.addEventListener('click', () => {
-          const isHidden = panel.style.display === 'none' || panel.style.display === '';
-          panel.style.display = isHidden ? 'block' : 'none';
-          try { localStorage.setItem('studentsAdvancedFilters', isHidden ? '1' : '0'); } catch(e){}
-        });
-
-        // restore state
-        try {
-          const v = localStorage.getItem('studentsAdvancedFilters');
-          if (v === '1') panel.style.display = 'block';
-        } catch(e){}
-      }
-    })();
-  </script>
 {% endblock %}

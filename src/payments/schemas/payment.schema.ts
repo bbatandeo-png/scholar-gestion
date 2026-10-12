@@ -23,8 +23,24 @@ export class Payment {
   })
   invoiceId: string;
 
-  @Prop({ required: true, min: 0.01 })
+  // Signed: a regular payment is always positive; a 'correction' entry
+  // (see kind) is the +/- difference needed to bring the payment ledger back
+  // in line with an invoice whose paid amount was corrected by hand.
+  @Prop({
+    required: true,
+    validate: {
+      validator: (value: number) => Number.isFinite(value) && value !== 0,
+      message: 'Le montant ne peut pas etre nul',
+    },
+  })
   amount: number;
+
+  @Prop({
+    type: String,
+    enum: ['payment', 'correction'],
+    default: 'payment',
+  })
+  kind: 'payment' | 'correction';
 
   @Prop({ required: true, enum: Object.values(PaymentMethod) })
   method: PaymentMethod;

@@ -1,0 +1,64 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <section class="panel">
+    <div class="panel-heading">
+      <div>
+        <h2>Historique des modifications de paiement</h2>
+        <p class="muted">Année {{ selectedYear.label }} : chaque ligne correspond a une correction du montant paye d'une facture (modification manuelle ou alignement automatique du registre), jamais a un paiement ordinaire.</p>
+      </div>
+    </div>
+
+    {% if rows.length %}
+      <div class="table-shell">
+        <table class="table-report">
+          <thead>
+            <tr>
+              <th>N°</th>
+              <th>Date</th>
+              <th>Eleve</th>
+              <th>Matricule</th>
+              <th>Niveau</th>
+              <th>Avant</th>
+              <th>Apres</th>
+              <th>Ecart</th>
+              <th>Motif</th>
+              <th>Auteur</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+              <tr>
+                <td>{{ (page - 1) * pageSize + loop.index }}</td>
+                <td>{{ row.date | formatDate }}</td>
+                <td>{{ row.studentName }}</td>
+                <td>{{ row.matricule }}</td>
+                <td>{{ row.levelLabel }}</td>
+                <td>{{ row.paidBefore }}</td>
+                <td>{{ row.paidAfter }}</td>
+                <td><strong>{{ row.delta }}</strong></td>
+                <td>{{ row.reason }}</td>
+                <td>{{ row.actorName }}</td>
+                <td>{% if row.enrollmentId %}<a class="button secondary btn-sm" href="/enrollments/{{ row.enrollmentId }}">Voir</a>{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="pagination-row">
+        <form method="get" action="/payments/corrections" class="inline-form">
+          <input type="hidden" name="page" value="{{ page - 1 }}" />
+          <button type="submit" class="secondary btn-sm btn-icon icon-prev" {% if page <= 1 %}disabled{% endif %}>Precedent</button>
+        </form>
+        <span class="muted">Page {{ page }} sur {{ totalPages }} • {{ total }} modification(s)</span>
+        <form method="get" action="/payments/corrections" class="inline-form">
+          <input type="hidden" name="page" value="{{ page + 1 }}" />
+          <button type="submit" class="secondary btn-sm btn-icon icon-next" {% if page >= totalPages %}disabled{% endif %}>Suivant</button>
+        </form>
+      </div>
+    {% else %}
+      <div class="notice notice-info">Aucune modification de paiement enregistree pour cette annee.</div>
+    {% endif %}
+  </section>
+{% endblock %}

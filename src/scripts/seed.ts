@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import * as bcrypt from 'bcryptjs';
 import { getModelToken } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { AppModule } from '../app.module';
 import { BillingService } from '../billing/billing.service';
 import { Level } from '../levels/schemas/level.schema';
@@ -21,6 +21,7 @@ import {
   runWithTenant,
 } from '../common/tenant/tenant-context';
 import { EcoleModulesService } from '../ecole-modules/ecole-modules.service';
+import { LicensingService } from '../licensing/licensing.service';
 
 export function shouldRunSeed(env: NodeJS.ProcessEnv = process.env) {
   if (env.NODE_ENV === 'test') {
@@ -38,6 +39,7 @@ export async function runSeed() {
     const settingsService = app.get(SettingsService);
     const levelsService = app.get(LevelsService);
     const ecoleModulesService = app.get(EcoleModulesService);
+    const licensingService = app.get(LicensingService);
     const schoolYearModel = app.get<Model<SchoolYear>>(
       getModelToken(SchoolYear.name),
     );
@@ -54,11 +56,23 @@ export async function runSeed() {
       .sort({ dateInscription: 1 })
       .lean()
       .exec();
+    // Written into the install package's .env by EcolesService.
+    // streamInstallationPackage - forces this brand-new ecole's _id to
+    // match the one its licence was generated for on the platform's own
+    // tracking instance, so LICENSE_BOOTSTRAP_TOKEN below (signed for that
+    // exact id) actually verifies. Ignored once an ecole already exists:
+    // its real _id is already fixed, never retroactively changed.
+    const seedEcoleId = process.env.SEED_ECOLE_ID;
+    const forcedEcoleId =
+      !existingEcole && seedEcoleId && Types.ObjectId.isValid(seedEcoleId)
+        ? new Types.ObjectId(seedEcoleId)
+        : undefined;
     const ecoleId = existingEcole
       ? String(existingEcole._id)
       : String(
           (
             await ecoleModel.create({
+              ...(forcedEcoleId ? { _id: forcedEcoleId } : {}),
               nom: ecoleName,
               statutCompte: EcoleAccountStatus.ACTIF,
               dateInscription: new Date(),
@@ -89,6 +103,47 @@ export async function runSeed() {
       await runAsPlatformAdmin(() =>
         ecoleModulesService.activate(ecoleId, code, String(admin._id)),
       );
+    }
+
+    // Platform-side decision (REGISTRATION_PAYMENT_REQUIRED, written into
+    // the install package's .env by EcolesService.streamInstallationPackage)
+    // - some schools require an upfront payment to register a student,
+    // others don't. Same idempotent-every-boot treatment as module
+    // activation above, since the .env value is static between restarts.
+    await runWithTenant({ ecoleId, bypass: false }, () =>
+      settingsService.setRegistrationPaymentRequired(
+        process.env.REGISTRATION_PAYMENT_REQUIRED === 'true',
+      ),
+    );
+
+    // Pre-signed licence (LICENSE_BOOTSTRAP_TOKEN, written into the install
+    // package's .env by EcolesService.streamInstallationPackage once the
+    // vendor picks an expiration date before downloading) - applies on
+    // EVERY boot, not just the very first one: a vendor who test-launches a
+    // freshly downloaded package once before actually handing it to the
+    // client (a completely normal workflow) must not have this silently
+    // skipped forever after on every later restart just because
+    // `existingEcole` is now truthy. Safe unconditionally because
+    // applyRenewalCode() itself already refuses a token whose ecoleId
+    // doesn't match this install's own ecole (SEED_ECOLE_ID having forced it
+    // on first boot) or whose expiresAt doesn't move the date forward -
+    // both expected, non-fatal outcomes here, never a reason to abort boot.
+    const bootstrapToken = process.env.LICENSE_BOOTSTRAP_TOKEN;
+    if (bootstrapToken) {
+      try {
+        await runAsPlatformAdmin(() =>
+          licensingService.applyRenewalCode(
+            ecoleId,
+            bootstrapToken,
+            String(admin._id),
+          ),
+        );
+      } catch (error) {
+        console.warn(
+          'LICENSE_BOOTSTRAP_TOKEN present mais non applique :',
+          error instanceof Error ? error.message : error,
+        );
+      }
     }
 
     // Only on the very first boot of a brand new ecole - the hardcoded

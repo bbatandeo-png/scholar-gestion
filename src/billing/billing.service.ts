@@ -8,6 +8,9 @@ import {
   FeeScheduleDocument,
 } from './schemas/fee-schedule.schema';
 import { Invoice, InvoiceDocument } from './schemas/invoice.schema';
+import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
+import { computeLedgerDivergences } from './ledger.util';
+import { toDisplayString } from '../common/utils/safe-string.util';
 import { UpsertFeeScheduleDto } from './dto/upsert-fee-schedule.dto';
 import {
   PopulatedLevelLean,
@@ -29,6 +32,8 @@ export class BillingService {
     private readonly feeScheduleModel: Model<FeeScheduleDocument>,
     @InjectModel(Invoice.name)
     private readonly invoiceModel: Model<InvoiceDocument>,
+    @InjectModel(Payment.name)
+    private readonly paymentModel: Model<PaymentDocument>,
   ) {}
 
   async upsertFeeSchedule(dto: UpsertFeeScheduleDto) {
@@ -156,6 +161,171 @@ export class BillingService {
       },
       { upsert: true, new: true, setDefaultsOnInsert: true, session },
     );
+  }
+
+  private generateCorrectionNumber() {
+    const stamp = new Date()
+      .toISOString()
+      .replace(/[-:TZ.]/g, '')
+      .slice(0, 14);
+    const random = Math.floor(Math.random() * 10000)
+      .toString()
+      .padStart(4, '0');
+    return `CO-${stamp}-${random}`;
+  }
+
+  // Writes the signed ledger entry that keeps the payment ledger equal to an
+  // invoice's paidAmount after that amount was changed by hand. The entry is
+  // a normal Payment document (kind 'correction') so every ledger-based
+  // total - dashboard, revenue report, the "already paid" check in
+  // PaymentsService.createPayment - picks it up with no special casing.
+  // Splits a correction's delta across the ledger's existing allocation
+  // buckets ('current_fees' first, spilling into 'arrear') instead of always
+  // tagging it 'current_fees'. Without this, reducing the paid amount on an
+  // invoice that also has an arrear payment could drive the 'current_fees'
+  // total negative - an impossible value that then silently corrupted
+  // registrationRevenue/tuitionRevenue on the dashboard (they use
+  // Math.min/Math.max against that total, which happily returns a negative
+  // number instead of clamping). A positive delta (paid amount raised) still
+  // goes to 'current_fees' - the reverse case (which bucket newly-added
+  // money belongs to) needs the school's allocation rule, not just the
+  // ledger's past composition, and simply adding is never negative/wrong,
+  // only occasionally over-attributed.
+  private splitCorrectionAllocation(
+    delta: number,
+    existingByType: { currentFees: number; arrear: number },
+  ): Array<{ type: string; amount: number }> {
+    if (delta >= 0) {
+      return [{ type: 'current_fees', amount: delta }];
+    }
+    const allocation: Array<{ type: string; amount: number }> = [];
+    let remaining = delta;
+
+    const reduceCurrentFees = Math.max(remaining, -existingByType.currentFees);
+    if (reduceCurrentFees !== 0) {
+      allocation.push({ type: 'current_fees', amount: reduceCurrentFees });
+    }
+    remaining -= reduceCurrentFees;
+
+    if (remaining < 0) {
+      const reduceArrear = Math.max(remaining, -existingByType.arrear);
+      if (reduceArrear !== 0) {
+        allocation.push({ type: 'arrear', amount: reduceArrear });
+      }
+      remaining -= reduceArrear;
+    }
+
+    // Ledger has less recorded in these two buckets than the correction
+    // needs to remove (should not normally happen) - keep the ledger total
+    // exactly equal to invoice.paidAmount rather than silently dropping it.
+    if (remaining !== 0) {
+      allocation.push({ type: 'current_fees', amount: remaining });
+    }
+    return allocation;
+  }
+
+  async recordPaymentCorrection(
+    payload: {
+      invoiceId: string;
+      schoolYearId: string;
+      delta: number;
+      reason: string;
+      actorId?: string;
+    },
+    session?: ClientSession,
+  ) {
+    const existingPayments = await this.paymentModel
+      .find({ invoiceId: payload.invoiceId })
+      .session(session ?? null)
+      .lean()
+      .exec();
+    const existingByType = { currentFees: 0, arrear: 0 };
+    for (const payment of existingPayments) {
+      for (const item of payment.allocation ?? []) {
+        const amount = Number((item as { amount?: number }).amount ?? 0);
+        if (item.type === 'current_fees') existingByType.currentFees += amount;
+        else if (item.type === 'arrear') existingByType.arrear += amount;
+      }
+    }
+
+    const created = await this.paymentModel.create(
+      [
+        {
+          schoolYearId: payload.schoolYearId,
+          invoiceId: payload.invoiceId,
+          amount: payload.delta,
+          kind: 'correction',
+          method: 'other',
+          reference: payload.reason,
+          receiptNumber: this.generateCorrectionNumber(),
+          allocation: this.splitCorrectionAllocation(
+            payload.delta,
+            existingByType,
+          ),
+          createdBy: payload.actorId,
+          paidAt: new Date(),
+        },
+      ],
+      { session },
+    );
+    return created[0];
+  }
+
+  // Invoices whose paidAmount no longer equals what the payment ledger says,
+  // with the student/level to identify each one on screen.
+  async listLedgerDivergences(schoolYearId: string) {
+    const [invoices, payments] = await Promise.all([
+      this.invoiceModel
+        .find({ schoolYearId })
+        .populate({
+          path: 'enrollmentId',
+          select: 'studentSnapshot levelSnapshot studentId levelId',
+          populate: [
+            { path: 'studentId', select: 'matricule lastname firstname' },
+            { path: 'levelId', select: 'label' },
+          ],
+        })
+        .lean()
+        .exec(),
+      this.paymentModel
+        .find({ schoolYearId })
+        .select('invoiceId amount')
+        .lean()
+        .exec(),
+    ]);
+
+    type NamedStudent = {
+      matricule?: string;
+      lastname?: string;
+      firstname?: string;
+    };
+    type InvoiceWithEnrollment = {
+      enrollmentId?: {
+        _id?: unknown;
+        studentSnapshot?: NamedStudent;
+        levelSnapshot?: { label?: string };
+        studentId?: NamedStudent;
+        levelId?: { label?: string };
+      };
+    };
+    const invoiceById = new Map(
+      invoices.map((invoice) => [String(invoice._id), invoice]),
+    );
+    return computeLedgerDivergences(invoices, payments).map((row) => {
+      const enrollment = (
+        invoiceById.get(row.invoiceId) as InvoiceWithEnrollment | undefined
+      )?.enrollmentId;
+      const student = enrollment?.studentSnapshot ?? enrollment?.studentId;
+      const level = enrollment?.levelSnapshot ?? enrollment?.levelId;
+      return {
+        ...row,
+        enrollmentId: enrollment?._id ? toDisplayString(enrollment._id) : '',
+        studentName:
+          `${student?.lastname ?? ''} ${student?.firstname ?? ''}`.trim(),
+        matricule: student?.matricule ?? '',
+        levelLabel: level?.label ?? '',
+      };
+    });
   }
 
   async findInvoiceByEnrollment(enrollmentId: string) {

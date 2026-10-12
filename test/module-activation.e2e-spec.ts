@@ -137,4 +137,122 @@ describe('Activation des modules par ecole (e2e)', () => {
 
     expect(response.status).toBe(403);
   });
+
+  // DISCIPLINE and STOCK used to be gated differently (Discipline piggybacked
+  // on BULLETINS, Stock wasn't gated at all - see their controllers' own git
+  // history) before each got its own independent platform-admin toggle, same
+  // mechanics as Finance above.
+  it('bloque une ecriture Discipline quand DISCIPLINE est inactif pour cette ecole', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/discipline')
+      .set('x-test-role', 'super_admin')
+      .set('x-test-ecole-id', ecoleId)
+      .send({});
+
+    expect(response.status).toBe(403);
+  });
+
+  it('laisse toujours passer une lecture Discipline, module inactif ou non', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/discipline')
+      .set('x-test-role', 'super_admin')
+      .set('x-test-ecole-id', ecoleId);
+
+    expect(response.status).not.toBe(403);
+  });
+
+  it('autorise une ecriture Discipline une fois DISCIPLINE active pour cette ecole', async () => {
+    await ecoleModuleModel.create({
+      ecoleId,
+      code: 'DISCIPLINE',
+      actif: true,
+      dateActivation: new Date(),
+      dateDesactivation: null,
+      activePar: new Types.ObjectId(),
+    });
+
+    const response = await request(app.getHttpServer())
+      .post('/discipline')
+      .set('x-test-role', 'super_admin')
+      .set('x-test-ecole-id', ecoleId)
+      .send({});
+
+    expect(response.status).not.toBe(403);
+  });
+
+  it('bloque une ecriture Stock quand STOCK est inactif pour cette ecole', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/stock')
+      .set('x-test-role', 'super_admin')
+      .set('x-test-ecole-id', ecoleId)
+      .send({});
+
+    expect(response.status).toBe(403);
+  });
+
+  it('laisse toujours passer une lecture Stock, module inactif ou non', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/stock')
+      .set('x-test-role', 'super_admin')
+      .set('x-test-ecole-id', ecoleId);
+
+    expect(response.status).not.toBe(403);
+  });
+
+  it('autorise une ecriture Stock une fois STOCK active pour cette ecole', async () => {
+    await ecoleModuleModel.create({
+      ecoleId,
+      code: 'STOCK',
+      actif: true,
+      dateActivation: new Date(),
+      dateDesactivation: null,
+      activePar: new Types.ObjectId(),
+    });
+
+    const response = await request(app.getHttpServer())
+      .post('/stock')
+      .set('x-test-role', 'super_admin')
+      .set('x-test-ecole-id', ecoleId)
+      .send({});
+
+    expect(response.status).not.toBe(403);
+  });
+
+  it('bloque une ecriture Enseignants quand ENSEIGNANTS est inactif pour cette ecole', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/teachers')
+      .set('x-test-role', 'super_admin')
+      .set('x-test-ecole-id', ecoleId)
+      .send({});
+
+    expect(response.status).toBe(403);
+  });
+
+  it('laisse toujours passer une lecture Enseignants, module inactif ou non', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/teachers')
+      .set('x-test-role', 'super_admin')
+      .set('x-test-ecole-id', ecoleId);
+
+    expect(response.status).not.toBe(403);
+  });
+
+  it('autorise une ecriture Enseignants une fois ENSEIGNANTS active pour cette ecole', async () => {
+    await ecoleModuleModel.create({
+      ecoleId,
+      code: 'ENSEIGNANTS',
+      actif: true,
+      dateActivation: new Date(),
+      dateDesactivation: null,
+      activePar: new Types.ObjectId(),
+    });
+
+    const response = await request(app.getHttpServer())
+      .post('/teachers')
+      .set('x-test-role', 'super_admin')
+      .set('x-test-ecole-id', ecoleId)
+      .send({});
+
+    expect(response.status).not.toBe(403);
+  });
 });

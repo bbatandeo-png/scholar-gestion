@@ -2,12 +2,22 @@
 {% import "partials/legend.njk" as legend %}
 {% block content %}
   <section class="panel">
-    <h2>Synthese eleve</h2>
+    <div class="panel-heading">
+      <div>
+        <h2>Synthese eleve</h2>
+      </div>
+      {% if activeModules and activeModules.finance %}
+        <a class="button btn-icon icon-pay" href="/enrollments?studentId={{ student._id }}">Payer</a>
+      {% endif %}
+    </div>
     {% if currentEnrollment %}
       <p><strong>Niveau actuel:</strong> {{ currentEnrollment.levelSnapshot.label if currentEnrollment.levelSnapshot else currentEnrollment.levelId.label }} - {{ currentEnrollment.schoolYearId.label if currentEnrollment.schoolYearId }}</p>
       <p><strong>Statut inscription:</strong> {% set value = currentEnrollment.status %}{% set group = 'enrollmentStatus' %}{% include "partials/status-badge.njk" %}</p>
     {% else %}
       <p>Aucune inscription active ou historique disponible.</p>
+    {% endif %}
+    {% if studentClass and studentClass.declared %}
+      <p><strong>Classe indiquee:</strong> {{ studentClass.declared }}</p>
     {% endif %}
   </section>
 
@@ -29,6 +39,14 @@
           <label>Date de naissance<input type="date" name="birthDate" value="{{ student.birthDate | inputDate }}" /></label>
           <label>Lieu de naissance<input name="birthPlace" value="{{ student.birthPlace }}" /></label>
           <label>Quartier<input name="district" value="{{ student.district }}" /></label>
+          <label>Classe
+            <select name="levelId">
+              <option value="">{{ 'Garder : ' + studentClass.declared if studentClass and studentClass.declared else 'Non definie' }}</option>
+              {% for level in levels %}
+                <option value="{{ level._id }}">{{ level.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
           <label>Photo (pour la carte scolaire)
             <input type="file" name="photo" accept="image/png,image/jpeg,image/webp,image/gif" />
             {% if student.photo %}
@@ -84,12 +102,12 @@
       <h2>Responsables</h2>
       <div class="table-shell">
         <table>
-          <thead><tr><th>Type</th><th>Nom</th><th>Contact</th></tr></thead>
+          <thead><tr><th>N°</th><th>Type</th><th>Nom</th><th>Contact</th></tr></thead>
           <tbody>
             {% for guardian in guardians %}
-              <tr><td>{{ guardian.type }}</td><td>{{ guardian.lastname }} {{ guardian.firstname }}</td><td>{{ guardian.phone or '-' }}</td></tr>
+              <tr><td>{{ loop.index }}</td><td>{{ guardian.type }}</td><td>{{ guardian.lastname }} {{ guardian.firstname }}</td><td>{{ guardian.phone or '-' }}</td></tr>
             {% else %}
-              <tr><td colspan="3">Aucun responsable enregistre.</td></tr>
+              <tr><td colspan="4">Aucun responsable enregistre.</td></tr>
             {% endfor %}
           </tbody>
         </table>
@@ -101,17 +119,18 @@
     <h2>Historique administratif et financier</h2>
     <div class="table-shell">
       <table class="table-report">
-        <thead><tr><th>Annee</th><th>Niveau</th><th>Type</th><th>Statut</th></tr></thead>
+        <thead><tr><th>N°</th><th>Annee</th><th>Niveau</th><th>Type</th><th>Statut</th></tr></thead>
         <tbody>
           {% for item in history %}
             <tr>
+              <td>{{ loop.index }}</td>
               <td>{{ item.schoolYearId.label if item.schoolYearId }}</td>
               <td>{{ item.levelSnapshot.label if item.levelSnapshot else item.levelId.label }}</td>
               <td>{{ ENUM_META.enrollmentType[item.type].label if ENUM_META.enrollmentType[item.type] else item.type }}</td>
               <td>{% set value = item.status %}{% set group = 'enrollmentStatus' %}{% include "partials/status-badge.njk" %}</td>
             </tr>
           {% else %}
-            <tr><td colspan="4">Aucun historique.</td></tr>
+            <tr><td colspan="5">Aucun historique.</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -122,10 +141,11 @@
     <h2>Historique des paiements</h2>
     <div class="table-shell">
       <table class="table-report">
-        <thead><tr><th>Date</th><th>Montant</th><th>Mode</th><th>Recu</th><th>Annee</th><th>Niveau</th></tr></thead>
+        <thead><tr><th>N°</th><th>Date</th><th>Montant</th><th>Mode</th><th>Recu</th><th>Annee</th><th>Niveau</th></tr></thead>
         <tbody>
           {% for payment in paymentHistory %}
             <tr>
+              <td>{{ loop.index }}</td>
               <td>{{ payment.paidAt | formatDate }}</td>
               <td>{{ payment.amount }}</td>
               <td>{{ ENUM_META.paymentMethod[payment.method].label if ENUM_META.paymentMethod[payment.method] else payment.method }}</td>
@@ -134,11 +154,46 @@
               <td>{{ payment.enrollment.levelId.label if payment.enrollment and payment.enrollment.levelId }}</td>
             </tr>
           {% else %}
-            <tr><td colspan="6">Aucun paiement enregistre pour cet eleve.</td></tr>
+            <tr><td colspan="7">Aucun paiement enregistre pour cet eleve.</td></tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
     {{ legend.render(['enrollmentType', 'enrollmentStatus', 'paymentMethod']) }}
   </section>
+
+  {% if activeModules and activeModules.bulletins %}
+    <section class="panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Discipline</h2>
+          <p class="muted">Les 5 dernieres entrees du journal, toutes annees confondues.</p>
+        </div>
+        <div class="panel-heading-actions">
+          <a class="button secondary btn-sm" href="/discipline?studentId={{ student._id }}">Voir tout</a>
+          <a class="button btn-sm" href="/discipline/new?studentId={{ student._id }}">Ajouter</a>
+        </div>
+      </div>
+      <div class="table-shell">
+        <table class="table-report">
+          <thead><tr><th>N°</th><th>Date</th><th>Annee</th><th>Type</th><th>Motif</th><th>Mesure</th></tr></thead>
+          <tbody>
+            {% for record in disciplineRecords %}
+              <tr>
+                <td>{{ loop.index }}</td>
+                <td>{{ record.date | formatDate }}</td>
+                <td>{{ record.schoolYearId.label if record.schoolYearId }}</td>
+                <td>{% set value = record.type %}{% set group = 'disciplineRecordType' %}{% include "partials/status-badge.njk" %}</td>
+                <td>{{ record.motif }}</td>
+                <td>{{ record.mesure or '—' }}</td>
+              </tr>
+            {% else %}
+              <tr><td colspan="6">Aucune entree au journal de discipline pour cet eleve.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {{ legend.render(['disciplineRecordType']) }}
+    </section>
+  {% endif %}
 {% endblock %}

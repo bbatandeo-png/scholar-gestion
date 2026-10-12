@@ -4,7 +4,6 @@ import { EcoleModulesModule } from '../ecole-modules/ecole-modules.module';
 import { SchoolYearsModule } from '../school-years/school-years.module';
 import { UsersModule } from '../users/users.module';
 import { DashboardModule } from '../dashboard/dashboard.module';
-import { LicensingModule } from '../licensing/licensing.module';
 import { Ecole, EcoleSchema } from './schemas/ecole.schema';
 import { EcolesController } from './ecoles.controller';
 import { EcolesService } from './ecoles.service';
@@ -16,7 +15,6 @@ import { EcolesService } from './ecoles.service';
     SchoolYearsModule,
     EcoleModulesModule,
     DashboardModule,
-    LicensingModule,
   ],
   controllers: [EcolesController],
   providers: [EcolesService],

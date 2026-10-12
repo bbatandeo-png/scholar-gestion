@@ -32,6 +32,7 @@ import {
   saveUploadedImage,
 } from '../common/utils/uploaded-image.util';
 import { getReleaseAssetsRoot } from '../common/utils/runtime-paths.util';
+import { createLicenseToken } from '../licensing/license-token.util';
 
 export type UploadedLogoFile = UploadedImageFile;
 
@@ -198,6 +199,20 @@ export class EcolesService {
     return ecole;
   }
 
+  // Platform-side decision only - see the schema field's own comment on how
+  // (and when) this actually reaches a client's own install.
+  async setRegistrationPaymentRequired(
+    id: string,
+    required: boolean,
+  ): Promise<void> {
+    const result = await this.ecoleModel
+      .updateOne({ _id: id }, { registrationPaymentRequired: required })
+      .exec();
+    if (result.matchedCount === 0) {
+      throw new NotFoundException('Ecole introuvable');
+    }
+  }
+
   async update(id: string, dto: UpdateEcoleDto) {
     // couleurCarte/couleurBulletin only take effect when their "custom
     // color" checkbox was checked - explicitly nulling them out otherwise
@@ -270,6 +285,24 @@ export class EcolesService {
     );
   }
 
+  // For display only, on the platform_admin edit screen - the actual
+  // LICENSE_SECRET this ecole's exe was shipped with, if a package has
+  // already been downloaded for it (see ensureProvisioningSecrets). Never
+  // generates one itself: a page view must not have the side effect of
+  // minting a secret nobody has shipped yet. Showing it here (rather than
+  // making the vendor dig it out of an already-downloaded .env) is what
+  // lets `npm run license -- set-secret` register the client's real
+  // secret, the one that actually matters - not a freshly invented one
+  // that would never verify against what the client's exe was built with.
+  async getProvisioningLicenseSecret(id: string): Promise<string | null> {
+    const ecole = await this.ecoleModel
+      .findById(id)
+      .select('+provisioningLicenseSecret')
+      .lean()
+      .exec();
+    return ecole?.provisioningLicenseSecret ?? null;
+  }
+
   // Generated once per ecole, then reused forever - see the schema fields'
   // comment on why re-generating on every download would be actively
   // harmful (silently invalidates an already-deployed license/sessions).
@@ -331,16 +364,41 @@ export class EcolesService {
   // ensureProvisioningSecrets). Streams straight into the response; nothing
   // is written to disk on this server.
   //
-  // Also stamps the "Suivi licence (manuel)" bookkeeping fields
-  // (releaseVersion, licenseActivatedAt) with what was just shipped - purely
-  // a delivery record. licenseExpiresAt/licenseActivationKey are
-  // deliberately left untouched here: those represent a commercial decision
-  // (how long this period runs), made explicitly via "Generer et appliquer",
-  // never as a side effect of re-downloading a package.
-  async streamInstallationPackage(id: string, res: Response): Promise<void> {
+  // `expiresAt` is optional, picked on the download screen before the file
+  // is built. SEED_ECOLE_ID (the ecole's own _id) is always written, even
+  // without a chosen date - it costs nothing on a brand-new install and
+  // guarantees that whenever a licence eventually gets issued (now or at a
+  // later redownload), its ecoleId already matches what scripts/seed.ts
+  // seeds, with no client round-trip needed to report a device code back.
+  // When a date IS chosen, it's additionally signed into a
+  // LICENSE_BOOTSTRAP_TOKEN and enforcement is switched on, so the install
+  // is already licensed on its very first launch and stops working on its
+  // own once the date is reached. Leaving the date blank ships the old,
+  // unrestricted behaviour (enforcement off, no token) - e.g. for a trial
+  // install whose licence will be decided later. The token is also stamped
+  // onto this ecole's own bookkeeping (licenseExpiresAt/licenseActivationKey)
+  // so a later redownload or a `npm run license -- generate` renewal always
+  // has the last-issued expiry to hand.
+  async streamInstallationPackage(
+    id: string,
+    expiresAt: Date | undefined,
+    res: Response,
+  ): Promise<void> {
     if (!this.isReleaseAssetsConfigured()) {
       throw new BadRequestException(
         "Pack d'installation indisponible sur cette instance (aucun exe pre-construit dans RELEASE_ASSETS_DIR)",
+      );
+    }
+    if (expiresAt && Number.isNaN(expiresAt.getTime())) {
+      throw new BadRequestException("Date d'expiration invalide");
+    }
+    // A past date would ship an install already in its grace period (or
+    // already blocked) on its very first launch - caught here too, not just
+    // by the form's own `min`, since this is a platform-admin-only screen
+    // where a stale bookmark/retry can still submit an old value.
+    if (expiresAt && expiresAt.getTime() < Date.now()) {
+      throw new BadRequestException(
+        "Date d'expiration invalide - elle doit etre dans le futur",
       );
     }
 
@@ -359,31 +417,63 @@ export class EcolesService {
       )
     ).map((m) => m.code);
 
+    const bootstrapToken = expiresAt
+      ? createLicenseToken(
+          {
+            ecoleId: id,
+            issuedAt: new Date().toISOString(),
+            expiresAt: expiresAt.toISOString(),
+          },
+          licenseSecret,
+        )
+      : undefined;
+
     await this.ecoleModel
       .updateOne(
         { _id: id },
         {
           releaseVersion: this.resolveAppVersion(),
           licenseActivatedAt: new Date(),
+          ...(bootstrapToken
+            ? {
+                licenseExpiresAt: expiresAt,
+                licenseActivationKey: bootstrapToken,
+              }
+            : {}),
         },
       )
       .exec();
 
+    // Unique per ecole (name slug + a slice of its own _id, so two schools
+    // sharing a name never collide) rather than the old fixed
+    // "scolar-gestion" for every single install - a vendor who test-launches
+    // several downloaded packages on the SAME machine (their own dev PC, or
+    // genuinely two schools on one office computer) used to have them all
+    // silently share one database, each overwriting the other's seeded
+    // ecole/license state.
+    const safeName = ecole.nom.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+    const dbName = `scolar-gestion-${safeName}-${id.slice(-6)}`;
+
     const envContent = [
       'PORT=3000',
-      'MONGODB_URI=mongodb://127.0.0.1:27017/scolar-gestion?replicaSet=rs0',
+      `MONGODB_URI=mongodb://127.0.0.1:27017/${dbName}?replicaSet=rs0`,
       `SESSION_SECRET=${sessionSecret}`,
       `ADMIN_NAME=${primaryAdmin?.name ?? 'Super Admin'}`,
       `ADMIN_EMAIL=${primaryAdmin?.email ?? 'admin@scolar-gestion.local'}`,
       `ADMIN_PASSWORD=${adminPassword}`,
       `ACTIVE_MODULES=${activeModuleCodes.join(',')}`,
-      '# Off par defaut - activer une fois la licence generee (voir /platform/ecoles)',
-      '# LICENSE_ENFORCEMENT=on',
+      `REGISTRATION_PAYMENT_REQUIRED=${ecole.registrationPaymentRequired ? 'true' : 'false'}`,
+      `SEED_ECOLE_ID=${id}`,
       `LICENSE_SECRET=${licenseSecret}`,
+      bootstrapToken
+        ? 'LICENSE_ENFORCEMENT=on'
+        : '# Off par defaut - laisser vide ou renseigner "on" une fois la licence decidee',
+      bootstrapToken
+        ? `LICENSE_BOOTSTRAP_TOKEN=${bootstrapToken}`
+        : '# LICENSE_BOOTSTRAP_TOKEN=',
       '',
     ].join('\n');
 
-    const safeName = ecole.nom.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader(
       'Content-Disposition',

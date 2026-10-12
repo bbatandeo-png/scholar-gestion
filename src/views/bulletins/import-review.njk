@@ -36,11 +36,12 @@
   <div class="table-shell">
     <table class="table-report">
       <thead>
-        <tr><th>Nom (fichier)</th><th>Matricule</th><th>Sexe</th><th>Statut</th><th>Correspondance</th></tr>
+        <tr><th>N°</th><th>Nom (fichier)</th><th>Matricule</th><th>Sexe</th><th>Statut</th><th>Correspondance</th></tr>
       </thead>
       <tbody>
         {% for row in rows %}
           <tr>
+            <td>{{ loop.index }}</td>
             <td>{{ row.rawIdentity.nameRaw }}</td>
             <td>{{ row.rawIdentity.matriculeRaw or '—' }}</td>
             <td>{{ row.rawIdentity.sexeRaw or '—' }}</td>
@@ -63,7 +64,7 @@
             </td>
           </tr>
         {% else %}
-          <tr><td colspan="5">Aucune ligne importee.</td></tr>
+          <tr><td colspan="6">Aucune ligne importee.</td></tr>
         {% endfor %}
       </tbody>
     </table>

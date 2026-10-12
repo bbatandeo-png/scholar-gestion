@@ -5,10 +5,12 @@ import { AuditModule } from '../audit/audit.module';
 import { BillingModule } from '../billing/billing.module';
 import { EcoleModulesModule } from '../ecole-modules/ecole-modules.module';
 import { LevelsModule } from '../levels/levels.module';
+import { PaymentsModule } from '../payments/payments.module';
 import { SchoolYearsModule } from '../school-years/school-years.module';
 import { StudentsModule } from '../students/students.module';
 import { UsersModule } from '../users/users.module';
 import { EnrollmentsController } from './enrollments.controller';
+import { PaymentCorrectionsController } from './payment-corrections.controller';
 import { EnrollmentsService } from './enrollments.service';
 import { Enrollment, EnrollmentSchema } from './schemas/enrollment.schema';
 
@@ -19,6 +21,7 @@ import { Enrollment, EnrollmentSchema } from './schemas/enrollment.schema';
     ]),
     BillingModule,
     ArrearsModule,
+    forwardRef(() => PaymentsModule),
     SchoolYearsModule,
     LevelsModule,
     AuditModule,
@@ -26,7 +29,7 @@ import { Enrollment, EnrollmentSchema } from './schemas/enrollment.schema';
     EcoleModulesModule,
     forwardRef(() => StudentsModule),
   ],
-  controllers: [EnrollmentsController],
+  controllers: [EnrollmentsController, PaymentCorrectionsController],
   providers: [EnrollmentsService],
   exports: [EnrollmentsService, MongooseModule],
 })

@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument } from 'mongoose';
+import { HydratedDocument, SchemaTypes } from 'mongoose';
 import { StudentStatus } from '../../common/enums/domain.enums';
 import { ecoleScopePlugin } from '../../common/mongoose/ecole-scope.plugin';
 
@@ -30,6 +30,12 @@ export class Student {
 
   @Prop({ trim: true })
   district?: string;
+
+  // Optional class the student is meant for, recorded when the file is
+  // created so it can be shown (not applied) when the student is enrolled -
+  // the actual class of a school year lives on that year's Enrollment.
+  @Prop({ type: SchemaTypes.ObjectId, ref: 'Level' })
+  levelId?: string;
 
   // Relative path under the uploads root (see uploaded-image.util) - never
   // a raw URL, so it works fully offline like the ecole logo.

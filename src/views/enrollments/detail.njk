@@ -15,32 +15,33 @@
       <p><strong>Type:</strong> {{ ENUM_META.enrollmentType[enrollment.type].label if ENUM_META.enrollmentType[enrollment.type] else enrollment.type }}</p>
       <p><strong>Statut:</strong> {% set value = enrollment.status %}{% set group = 'enrollmentStatus' %}{% include "partials/status-badge.njk" %}</p>
 
-      <form method="post" action="/enrollments/{{ enrollment._id }}?_method=PUT" class="stack">
+      <form id="modifier" method="post" action="/enrollments/{{ enrollment._id }}?_method=PUT" class="stack">
         <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
         <div class="form-grid">
           <label>Eleve
-            <select name="studentId">
+            <select name="studentId" required>
               {% for student in students %}
                 <option value="{{ student._id }}" {% if enrollment.studentId and enrollment.studentId._id and student._id and enrollment.studentId._id.toString() == student._id.toString() %}selected{% endif %}>{{ student.matricule }} - {{ student.lastname }} {{ student.firstname }}</option>
               {% endfor %}
             </select>
           </label>
           <label>Annee
-            <select name="schoolYearId">
+            <select name="schoolYearId" required>
               {% for year in schoolYears %}
                 <option value="{{ year._id }}" {% if enrollment.schoolYearId and enrollment.schoolYearId._id and year._id and enrollment.schoolYearId._id.toString() == year._id.toString() %}selected{% endif %}>{{ year.label }}</option>
               {% endfor %}
             </select>
           </label>
           <label>Niveau
-            <select name="levelId">
+            <select name="levelId" required>
+              <option value="" selected>Choisir un niveau (actuel : {{ enrollment.levelId.label if enrollment.levelId }})</option>
               {% for level in levels %}
-                <option value="{{ level._id }}" {% if enrollment.levelId and enrollment.levelId._id and level._id and enrollment.levelId._id.toString() == level._id.toString() %}selected{% endif %}>{{ level.label }}</option>
+                <option value="{{ level._id }}">{{ level.label }}</option>
               {% endfor %}
             </select>
           </label>
           <label>Type
-            <select name="type">
+            <select name="type" required>
               {% for key, meta in ENUM_META.enrollmentType %}
                 <option value="{{ key }}" {% if enrollment.type == key %}selected{% endif %} title="{{ meta.description }}">{{ meta.label }}</option>
               {% endfor %}
@@ -99,7 +100,7 @@
 
         <div class="stack">
           <h3>Paiement</h3>
-          <form method="post" action="/payments" class="stack">
+          <form method="post" action="/payments" class="stack" id="paymentForm">
             <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
             <input type="hidden" name="invoiceId" value="{{ invoice._id }}" />
             <div class="form-grid">
@@ -115,6 +116,15 @@
             </div>
             <button type="submit">Enregistrer le paiement</button>
           </form>
+
+          {% set dialogId = 'paymentConfirmDialog' %}
+          {% include "partials/payment-confirm-dialog.njk" %}
+          <script>
+            confirmBeforePaymentSubmit(
+              document.getElementById('paymentForm'),
+              document.getElementById('paymentConfirmDialog'),
+            );
+          </script>
         </div>
         {{ legend.render(['invoiceStatus']) }}
 
