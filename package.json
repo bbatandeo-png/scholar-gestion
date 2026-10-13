@@ -21,6 +21,7 @@
     "migrate:add-ecole-id": "ts-node --files -r tsconfig-paths/register src/scripts/migrate-add-ecole-id.ts",
     "create:platform-admin": "ts-node --files -r tsconfig-paths/register src/scripts/create-platform-admin.ts",
     "migrate:add-level-cycle": "ts-node --files -r tsconfig-paths/register src/scripts/migrate-add-level-cycle.ts",
+    "sync-indexes": "ts-node --files -r tsconfig-paths/register src/scripts/sync-indexes.ts",
     "license": "ts-node --files -r tsconfig-paths/register src/scripts/license-cli.ts",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
