@@ -67,14 +67,14 @@
             </div>
             {% if activeModules.bulletins or activeModules.discipline %}
               <div class="nav-group">
-                <details class="nav-details" {% if currentPath and (currentPath.startsWith('/bulletins') or currentPath.startsWith('/discipline') or currentPath.startsWith('/reports/exam-statistics')) %}open{% endif %}>
+                <details class="nav-details" {% if currentPath and (currentPath.startsWith('/bulletins') or currentPath.startsWith('/discipline') or currentPath.startsWith('/reports/exam-statistics') or currentPath.startsWith('/reports/grade-sheet')) %}open{% endif %}>
                   <summary>Gestion pédagogique</summary>
                   <div class="nav-submenu">
                     {% if activeModules.bulletins %}
                       <a href="/bulletins" class="{% if currentPath == '/bulletins' or (currentPath and currentPath.startsWith('/bulletins/') and not currentPath.startsWith('/bulletins/new') and not currentPath.startsWith('/bulletins/matieres')) %}is-active{% endif %}">Sessions de bulletins</a>
                       <a href="/bulletins/new" class="{% if currentPath and currentPath.startsWith('/bulletins/new') %}is-active{% endif %}">Nouvelle session</a>
                       <a href="/bulletins/matieres" class="{% if currentPath and currentPath.startsWith('/bulletins/matieres') %}is-active{% endif %}">Matieres</a>
-                      <a href="/bulletins#fiche-de-notes-vierge">Fiche de notes vierge</a>
+                      <a href="/reports/grade-sheet" class="{% if currentPath and currentPath.startsWith('/reports/grade-sheet') %}is-active{% endif %}">Fiche de notes vierge</a>
                       <a href="/reports/exam-statistics" class="{% if currentPath and currentPath.startsWith('/reports/exam-statistics') %}is-active{% endif %}">Statistiques de fin de période</a>
                     {% endif %}
                     {% if activeModules.discipline %}

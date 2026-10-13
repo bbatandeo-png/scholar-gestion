@@ -1,0 +1,38 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <div class="panel">
+    <div class="panel-heading">
+      <div>
+        <h3>Fiche de notes vierge</h3>
+        <p class="muted">Une feuille par classe, à photocopier pour chaque matière : l'effectif est déjà rempli, le professeur y écrit la matière, le coefficient et les notes à la main.</p>
+      </div>
+    </div>
+    <form method="get" action="/reports/grade-sheet/pdf" class="toolbar compact-actions" id="gradeSheetForm">
+      <label class="field-inline">
+        Classe
+        <select name="levelId" required>
+          <option value="">Sélectionner une classe</option>
+          {% for level in levels %}
+            <option value="{{ level._id }}">{{ level.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="field-inline">
+        Nombre de notes
+        <input type="number" name="noteCount" value="2" min="0" max="8" style="width:64px;" />
+      </label>
+      <label class="field-inline">
+        Nombre d'interrogations
+        <input type="number" name="interroCount" value="2" min="0" max="8" style="width:64px;" />
+      </label>
+      <label class="field-inline">
+        Nombre de devoirs
+        <input type="number" name="devoirCount" value="1" min="0" max="8" style="width:64px;" />
+      </label>
+      <button type="submit" class="button secondary btn-icon icon-export">PDF</button>
+      <button type="submit" formaction="/reports/grade-sheet/docx" class="button secondary btn-icon icon-export">Word</button>
+      <button type="submit" formaction="/reports/grade-sheet/excel" class="button secondary btn-icon icon-export">Excel</button>
+    </form>
+    <p class="muted" style="margin:10px 0 0;">Seule la colonne Composition reste fixe ; le nombre de notes, d'interrogations et de devoirs s'ajuste.</p>
+  </div>
+{% endblock %}

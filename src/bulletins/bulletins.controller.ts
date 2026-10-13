@@ -44,21 +44,11 @@ export class BulletinsController {
 
   @Get()
   @Render('bulletins/index')
-  async index(@Req() req: Request) {
-    const year = await this.schoolYearsService
-      .resolveSelected(req.session.selectedSchoolYearId)
-      .catch(() => null);
-
+  async index() {
     return {
       title: 'Gestion pedagogique — Bulletins',
       sessions: await this.bulletinsService.listSessions(),
       periodeLabels: PERIODE_LABELS,
-      // For the "Fiche de notes" picker below the sessions table - only the
-      // levels actually enabled for the selected year, same as the nominal
-      // roll picker on /students.
-      levels: year
-        ? await this.levelsService.listForSchoolYear(String(year._id))
-        : [],
     };
   }
 

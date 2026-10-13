@@ -2124,6 +2124,14 @@ describe('Scolar Gestion workflows (e2e)', () => {
         applyOpenArrears: 'false',
       });
 
+      // Page autonome (le lien du menu Gestion pedagogique y mene
+      // directement, sans passer par /bulletins) - juste le formulaire.
+      const picker = await request(app.getHttpServer())
+        .get('/reports/grade-sheet')
+        .set('x-test-role', 'secretariat');
+      expect(picker.status).toBe(200);
+      expect(picker.text).toContain(`GS${unique}`);
+
       const pdf = await request(app.getHttpServer())
         .get('/reports/grade-sheet/pdf')
         .query({ levelId: String(level._id) })

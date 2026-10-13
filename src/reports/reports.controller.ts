@@ -79,6 +79,19 @@ export class ReportsController {
     };
   }
 
+  // Standalone picker page - only the filter form, nothing else, so the nav
+  // link lands straight on it instead of the whole /bulletins page scrolled
+  // to an anchor.
+  @Get('/grade-sheet')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT, Role.AUDITEUR)
+  @Render('reports/grade-sheet')
+  async gradeSheetPicker() {
+    return {
+      title: 'Fiche de notes vierge',
+      levels: await this.reportsService.listLevels(),
+    };
+  }
+
   // Blank per-class mark sheet (roster pre-filled, every note column left
   // for a teacher to fill in by hand) - see ReportsService.renderGradeSheet*
   // for why this reuses getNominalRoll() as its data source.
