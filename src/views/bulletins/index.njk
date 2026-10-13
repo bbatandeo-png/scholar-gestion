@@ -1,7 +1,7 @@
 {% extends "layout.njk" %}
 {% import "partials/legend.njk" as legend %}
 {% block content %}
-<div class="panel">
+<div class="panel" id="fiche-de-notes-vierge">
   <div class="panel-heading">
     <div>
       <h3>Fiche de notes vierge</h3>
@@ -35,6 +35,16 @@
     <button type="submit" formaction="/reports/grade-sheet/excel" class="button secondary btn-icon icon-export">Excel</button>
   </form>
   <p class="muted" style="margin:10px 0 0;">Seule la colonne Composition reste fixe ; le nombre de notes, d'interrogations et de devoirs s'ajuste.</p>
+</div>
+
+<div class="panel">
+  <div class="panel-heading">
+    <div>
+      <h3>Statistiques de fin de période</h3>
+      <p class="muted">Répartition des moyennes par matière et effectifs inscrits/présents/admis par sexe, pour l'inspection - par classe ou toutes classes confondues.</p>
+    </div>
+    <a class="button secondary" href="/reports/exam-statistics">Voir les statistiques</a>
+  </div>
 </div>
 
 <div class="panel">

@@ -23,11 +23,15 @@ import {
 } from 'docx';
 import { Enrollment } from '../enrollments/schemas/enrollment.schema';
 import { Invoice } from '../billing/schemas/invoice.schema';
+import { BulletinResult } from '../bulletins/schemas/bulletin-result.schema';
+import { Note } from '../bulletins/schemas/note.schema';
+import { Subject } from '../bulletins/schemas/subject.schema';
 import { Level } from '../levels/schemas/level.schema';
 import { Student } from '../students/schemas/student.schema';
 import { SchoolYear } from '../school-years/schemas/school-year.schema';
 import { EcolesService } from '../ecoles/ecoles.service';
-import { SchoolYearStatus } from '../common/enums/domain.enums';
+import { ENUM_META } from '../common/view-helpers/enum-meta';
+import { Periode, SchoolYearStatus } from '../common/enums/domain.enums';
 import { Payment } from '../payments/schemas/payment.schema';
 import { SettingsService } from '../settings/settings.service';
 import { resolveUploadedImagePath } from '../common/utils/uploaded-image.util';
@@ -119,6 +123,40 @@ type GradeSheetColumnPlan = {
   groupSubWidthsPt: number[];
 };
 
+// Cumulative distribution of moyennePeriode for one subject, matching the
+// paper statistics sheet inspectors ask for: each threshold column counts
+// every student whose average is STRICTLY below it ("Note <5" = average <
+// 5), except lte20 which is <=20 and therefore equals the subject's total
+// (the denominator for successRate).
+export type ExamStatisticsSubjectRow = {
+  label: string;
+  lt5: number;
+  lt8: number;
+  lt10: number;
+  lt12: number;
+  lt14: number;
+  lt16: number;
+  lt18: number;
+  lte20: number;
+  passCount: number;
+  total: number;
+  successRate: number;
+};
+
+export type ExamStatisticsGenderCounts = { g: number; f: number; t: number };
+
+export type ExamStatisticsReport = {
+  schoolName: string;
+  schoolYearLabel: string;
+  levelName: string;
+  periodeLabel: string;
+  subjects: ExamStatisticsSubjectRow[];
+  inscrits: ExamStatisticsGenderCounts;
+  presents: ExamStatisticsGenderCounts;
+  admis: ExamStatisticsGenderCounts;
+  successRate: ExamStatisticsGenderCounts;
+};
+
 @Injectable()
 export class ReportsService {
   constructor(
@@ -130,6 +168,10 @@ export class ReportsService {
     @InjectModel(SchoolYear.name)
     private readonly schoolYearModel: Model<SchoolYear>,
     @InjectModel(Payment.name) private readonly paymentModel: Model<Payment>,
+    @InjectModel(Note.name) private readonly noteModel: Model<Note>,
+    @InjectModel(BulletinResult.name)
+    private readonly bulletinResultModel: Model<BulletinResult>,
+    @InjectModel(Subject.name) private readonly subjectModel: Model<Subject>,
     private readonly ecolesService: EcolesService,
     private readonly settingsService: SettingsService,
   ) {}
@@ -354,6 +396,185 @@ export class ReportsService {
           `${toDisplayString(b.student?.lastname)} ${toDisplayString(b.student?.firstname)}`.trim();
         return aName.localeCompare(bName, 'fr');
       });
+  }
+
+  private countByGender(
+    genders: Array<string | null | undefined>,
+  ): ExamStatisticsGenderCounts {
+    let g = 0;
+    let f = 0;
+    for (const gender of genders) {
+      if (gender === 'M') g += 1;
+      else if (gender === 'F') f += 1;
+    }
+    return { g, f, t: genders.length };
+  }
+
+  private roundPercent(numerator: number, denominator: number): number {
+    return denominator ? Math.round((numerator / denominator) * 1000) / 10 : 0;
+  }
+
+  // Inspector-facing "tableau de repartition des moyennes" - one row per
+  // matiere taught in scope (classe choisie, ou toutes les classes
+  // confondues si levelId est omis), plus les effectifs
+  // inscrits/presents/admis par sexe. "Presents" = a un bulletin valide
+  // pour cette periode (BulletinResult existe), pas juste inscrit -
+  // see TeachersService-style scoping comments for why: un eleve inscrit
+  // peut tres bien n'avoir jamais ete evalue cette periode (depart en
+  // cours de route, bulletin pas encore saisi...).
+  async getExamStatistics(
+    schoolYearId: string,
+    periode: Periode,
+    levelId?: string,
+  ): Promise<ExamStatisticsReport> {
+    const schoolYear = await this.schoolYearModel
+      .findById(schoolYearId)
+      .lean()
+      .exec();
+    if (!schoolYear) {
+      throw new BadRequestException('Annee scolaire introuvable');
+    }
+    const level = levelId
+      ? await this.levelModel.findById(levelId).lean().exec()
+      : null;
+    if (levelId && !level) {
+      throw new NotFoundException('Classe introuvable');
+    }
+    const schoolName = await this.getSchoolName();
+
+    // aggregate() never auto-casts its $match against the schema (unlike
+    // find()) - ObjectId fields must be cast by hand or they silently match
+    // nothing, same rule as ecoleScopePlugin's own aggregate hook above.
+    const noteFilter: Record<string, unknown> = {
+      schoolYearId: new Types.ObjectId(schoolYearId),
+      periode,
+      moyennePeriode: { $ne: null },
+      ...(levelId ? { levelId: new Types.ObjectId(levelId) } : {}),
+    };
+    const subjectAgg = await this.noteModel
+      .aggregate<{
+        _id: Types.ObjectId;
+        total: number;
+        lt5: number;
+        lt8: number;
+        lt10: number;
+        lt12: number;
+        lt14: number;
+        lt16: number;
+        lt18: number;
+        lte20: number;
+        passCount: number;
+      }>([
+        { $match: noteFilter },
+        {
+          $group: {
+            _id: '$subjectId',
+            total: { $sum: 1 },
+            lt5: { $sum: { $cond: [{ $lt: ['$moyennePeriode', 5] }, 1, 0] } },
+            lt8: { $sum: { $cond: [{ $lt: ['$moyennePeriode', 8] }, 1, 0] } },
+            lt10: {
+              $sum: { $cond: [{ $lt: ['$moyennePeriode', 10] }, 1, 0] },
+            },
+            lt12: {
+              $sum: { $cond: [{ $lt: ['$moyennePeriode', 12] }, 1, 0] },
+            },
+            lt14: {
+              $sum: { $cond: [{ $lt: ['$moyennePeriode', 14] }, 1, 0] },
+            },
+            lt16: {
+              $sum: { $cond: [{ $lt: ['$moyennePeriode', 16] }, 1, 0] },
+            },
+            lt18: {
+              $sum: { $cond: [{ $lt: ['$moyennePeriode', 18] }, 1, 0] },
+            },
+            lte20: {
+              $sum: { $cond: [{ $lte: ['$moyennePeriode', 20] }, 1, 0] },
+            },
+            passCount: {
+              $sum: { $cond: [{ $gte: ['$moyennePeriode', 10] }, 1, 0] },
+            },
+          },
+        },
+      ])
+      .exec();
+
+    const subjectDocs = await this.subjectModel
+      .find({ _id: { $in: subjectAgg.map((row) => row._id) } })
+      .lean()
+      .exec();
+    const subjectLabelById = new Map(
+      subjectDocs.map((subject) => [String(subject._id), subject.label]),
+    );
+
+    const subjects: ExamStatisticsSubjectRow[] = subjectAgg
+      .map((row) => ({
+        label: subjectLabelById.get(String(row._id)) ?? '—',
+        lt5: row.lt5,
+        lt8: row.lt8,
+        lt10: row.lt10,
+        lt12: row.lt12,
+        lt14: row.lt14,
+        lt16: row.lt16,
+        lt18: row.lt18,
+        lte20: row.lte20,
+        passCount: row.passCount,
+        total: row.total,
+        successRate: this.roundPercent(row.passCount, row.total),
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'fr'));
+
+    const enrollmentFilter: Record<string, unknown> = {
+      schoolYearId,
+      status: 'active',
+      ...(levelId ? { levelId } : {}),
+    };
+    const enrollments = (await this.enrollmentModel
+      .find(enrollmentFilter)
+      .populate({ path: 'studentId', select: 'gender' })
+      .lean()
+      .exec()) as unknown as Array<{ studentId: { gender?: string } | null }>;
+    const inscrits = this.countByGender(
+      enrollments.map((enrollment) => enrollment.studentId?.gender),
+    );
+
+    const resultFilter: Record<string, unknown> = {
+      schoolYearId,
+      periode,
+      ...(levelId ? { levelId } : {}),
+    };
+    const results = (await this.bulletinResultModel
+      .find(resultFilter)
+      .populate({ path: 'studentId', select: 'gender' })
+      .lean()
+      .exec()) as unknown as Array<{
+      studentId: { gender?: string } | null;
+      moyenneGenerale: number;
+    }>;
+    const presents = this.countByGender(
+      results.map((result) => result.studentId?.gender),
+    );
+    const admis = this.countByGender(
+      results
+        .filter((result) => result.moyenneGenerale >= 10)
+        .map((result) => result.studentId?.gender),
+    );
+    const successRate: ExamStatisticsGenderCounts = {
+      g: this.roundPercent(admis.g, presents.g),
+      f: this.roundPercent(admis.f, presents.f),
+      t: this.roundPercent(admis.t, presents.t),
+    };
+
+    return {
+      schoolName,
+      schoolYearLabel: schoolYear.label,
+      levelName: level ? level.label : 'Toutes les classes',
+      periodeLabel: ENUM_META.periode[periode]?.label ?? periode,
+      subjects,
+      inscrits,
+      presents,
+      admis,
+      successRate,
+    };
   }
 
   async listLevels() {
@@ -1652,6 +1873,469 @@ export class ReportsService {
               width: { size: TABLE_WIDTH, type: WidthType.DXA },
               columnWidths,
               rows: [headerRow1, headerRow2, ...dataRows],
+            }),
+          ],
+        },
+      ],
+    });
+
+    return Packer.toBuffer(doc);
+  }
+
+  // Inspector-facing statistics sheet (see getExamStatistics) - two bordered
+  // tables: per-matiere grade distribution, then schoolwide Inscrits/
+  // Presents/Admis/% Reussite by sex. Short enough (one matiere per row,
+  // one stats row) that no pagination handling is needed, unlike the
+  // roster-length grade sheet above.
+  async renderExamStatisticsPdf(report: ExamStatisticsReport): Promise<Buffer> {
+    const chunks: Buffer[] = [];
+    const doc = new PDFDocument({ margin: 36, size: 'A4', bufferPages: true });
+    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+
+    return await new Promise<Buffer>((resolve) => {
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+
+      const startX = doc.page.margins.left;
+      const usableWidth =
+        doc.page.width - doc.page.margins.left - doc.page.margins.right;
+
+      doc
+        .font('Helvetica-Bold')
+        .fontSize(15)
+        .text(report.schoolName.toUpperCase(), { align: 'center' });
+      doc.moveDown(0.5);
+      doc
+        .font('Helvetica-Bold')
+        .fontSize(13)
+        .text('Statistiques de fin de periode', { align: 'center' });
+      doc.moveDown(0.4);
+      doc
+        .font('Helvetica')
+        .fontSize(10)
+        .text(
+          `Année scolaire : ${report.schoolYearLabel}        Classe : ${report.levelName}        Période : ${report.periodeLabel}`,
+          { align: 'center' },
+        );
+      doc.moveDown(1.2);
+
+      const drawTable = (
+        columns: Array<{ header: string; width: number }>,
+        rows: string[][],
+      ) => {
+        const y0 = doc.y;
+        let x = startX;
+        doc.font('Helvetica-Bold').fontSize(8);
+        columns.forEach((column) => {
+          doc.rect(x, y0, column.width, 26).fillAndStroke('#E8E8E8', '#222222');
+          doc.fillColor('#000000').text(column.header, x + 2, y0 + 4, {
+            width: column.width - 4,
+            align: 'center',
+          });
+          x += column.width;
+        });
+        doc.y = y0 + 26;
+
+        const rowHeight = 18;
+        rows.forEach((row) => {
+          const rowY = doc.y;
+          let rowX = startX;
+          doc.font('Helvetica').fontSize(8).fillColor('#000000');
+          row.forEach((value, index) => {
+            const width = columns[index].width;
+            doc.rect(rowX, rowY, width, rowHeight).stroke('#000000');
+            doc.text(value, rowX + 2, rowY + 5, {
+              width: width - 4,
+              align: index === 0 ? 'left' : 'center',
+              ellipsis: true,
+              lineBreak: false,
+            });
+            rowX += width;
+          });
+          doc.y = rowY + rowHeight;
+        });
+        doc.x = startX;
+        doc.moveDown(1);
+      };
+
+      const subjectColumns = [
+        { header: 'Matières', width: usableWidth * 0.17 },
+        { header: 'Note <5', width: usableWidth * 0.082 },
+        { header: 'Note <8', width: usableWidth * 0.082 },
+        { header: 'Note <10', width: usableWidth * 0.082 },
+        { header: 'Note <12', width: usableWidth * 0.082 },
+        { header: 'Note <14', width: usableWidth * 0.082 },
+        { header: 'Note <16', width: usableWidth * 0.082 },
+        { header: 'Note <18', width: usableWidth * 0.082 },
+        { header: 'Note <=20', width: usableWidth * 0.082 },
+        { header: 'Nb moyennes (>=10)', width: usableWidth * 0.1 },
+        { header: '% réussite', width: usableWidth * 0.086 },
+      ];
+      drawTable(
+        subjectColumns,
+        report.subjects.length
+          ? report.subjects.map((subject) => [
+              subject.label,
+              String(subject.lt5),
+              String(subject.lt8),
+              String(subject.lt10),
+              String(subject.lt12),
+              String(subject.lt14),
+              String(subject.lt16),
+              String(subject.lt18),
+              String(subject.lte20),
+              String(subject.passCount),
+              `${subject.successRate}%`,
+            ])
+          : [
+              [
+                'Aucune note validée pour cette période',
+                ...Array<string>(10).fill(''),
+              ],
+            ],
+      );
+
+      doc.moveDown(0.5);
+      doc
+        .font('Helvetica-Bold')
+        .fontSize(11)
+        .text('Statistiques générales', { align: 'left' });
+      doc.moveDown(0.5);
+
+      const genderColumns = [
+        { header: 'Inscrits G', width: usableWidth / 12 },
+        { header: 'Inscrits F', width: usableWidth / 12 },
+        { header: 'Inscrits T', width: usableWidth / 12 },
+        { header: 'Présents G', width: usableWidth / 12 },
+        { header: 'Présents F', width: usableWidth / 12 },
+        { header: 'Présents T', width: usableWidth / 12 },
+        { header: 'Admis G', width: usableWidth / 12 },
+        { header: 'Admis F', width: usableWidth / 12 },
+        { header: 'Admis T', width: usableWidth / 12 },
+        { header: '% Réussite G', width: usableWidth / 12 },
+        { header: '% Réussite F', width: usableWidth / 12 },
+        { header: '% Réussite T', width: usableWidth / 12 },
+      ];
+      drawTable(genderColumns, [
+        [
+          String(report.inscrits.g),
+          String(report.inscrits.f),
+          String(report.inscrits.t),
+          String(report.presents.g),
+          String(report.presents.f),
+          String(report.presents.t),
+          String(report.admis.g),
+          String(report.admis.f),
+          String(report.admis.t),
+          `${report.successRate.g}%`,
+          `${report.successRate.f}%`,
+          `${report.successRate.t}%`,
+        ],
+      ]);
+
+      doc.end();
+    });
+  }
+
+  async renderExamStatisticsExcel(
+    report: ExamStatisticsReport,
+  ): Promise<Buffer> {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Statistiques');
+
+    sheet.addRow([report.schoolName.toUpperCase()]);
+    sheet.addRow(['Statistiques de fin de periode']);
+    sheet.addRow([
+      `Année scolaire : ${report.schoolYearLabel}`,
+      `Classe : ${report.levelName}`,
+      `Période : ${report.periodeLabel}`,
+    ]);
+    sheet.addRow([]);
+
+    const subjectHeader = [
+      'Matières',
+      'Note <5',
+      'Note <8',
+      'Note <10',
+      'Note <12',
+      'Note <14',
+      'Note <16',
+      'Note <18',
+      'Note <=20',
+      'Nb moyennes (>=10)',
+      '% réussite',
+    ];
+    const headerRow = sheet.addRow(subjectHeader);
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE8E8E8' },
+      };
+      cell.border = {
+        top: { style: 'thin' },
+        bottom: { style: 'thin' },
+        left: { style: 'thin' },
+        right: { style: 'thin' },
+      };
+    });
+
+    for (const subject of report.subjects) {
+      const row = sheet.addRow([
+        subject.label,
+        subject.lt5,
+        subject.lt8,
+        subject.lt10,
+        subject.lt12,
+        subject.lt14,
+        subject.lt16,
+        subject.lt18,
+        subject.lte20,
+        subject.passCount,
+        `${subject.successRate}%`,
+      ]);
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: 'thin' },
+          bottom: { style: 'thin' },
+          left: { style: 'thin' },
+          right: { style: 'thin' },
+        };
+      });
+    }
+
+    sheet.addRow([]);
+    sheet.addRow(['Statistiques générales']);
+    const genderHeaderRow = sheet.addRow([
+      'Inscrits G',
+      'Inscrits F',
+      'Inscrits T',
+      'Présents G',
+      'Présents F',
+      'Présents T',
+      'Admis G',
+      'Admis F',
+      'Admis T',
+      '% Réussite G',
+      '% Réussite F',
+      '% Réussite T',
+    ]);
+    genderHeaderRow.eachCell((cell) => {
+      cell.font = { bold: true };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE8E8E8' },
+      };
+      cell.border = {
+        top: { style: 'thin' },
+        bottom: { style: 'thin' },
+        left: { style: 'thin' },
+        right: { style: 'thin' },
+      };
+    });
+    const genderDataRow = sheet.addRow([
+      report.inscrits.g,
+      report.inscrits.f,
+      report.inscrits.t,
+      report.presents.g,
+      report.presents.f,
+      report.presents.t,
+      report.admis.g,
+      report.admis.f,
+      report.admis.t,
+      `${report.successRate.g}%`,
+      `${report.successRate.f}%`,
+      `${report.successRate.t}%`,
+    ]);
+    genderDataRow.eachCell((cell) => {
+      cell.border = {
+        top: { style: 'thin' },
+        bottom: { style: 'thin' },
+        left: { style: 'thin' },
+        right: { style: 'thin' },
+      };
+    });
+
+    sheet.columns.forEach((column) => {
+      column.width = 14;
+    });
+    sheet.getColumn(1).width = 24;
+
+    return Buffer.from(await workbook.xlsx.writeBuffer());
+  }
+
+  async renderExamStatisticsDocx(
+    report: ExamStatisticsReport,
+  ): Promise<Buffer> {
+    const TABLE_WIDTH = 10000;
+
+    const headerCell = (text: string, width: number) =>
+      new TableCell({
+        width: { size: width, type: WidthType.DXA },
+        verticalAlign: VerticalAlign.CENTER,
+        shading: { type: ShadingType.CLEAR, fill: 'E8E8E8' },
+        children: [
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: [new TextRun({ text, bold: true, size: 16 })],
+          }),
+        ],
+      });
+
+    const dataCell = (text: string, width: number, center = true) =>
+      new TableCell({
+        width: { size: width, type: WidthType.DXA },
+        verticalAlign: VerticalAlign.CENTER,
+        children: [
+          new Paragraph({
+            alignment: center ? AlignmentType.CENTER : AlignmentType.LEFT,
+            children: [new TextRun({ text, size: 16 })],
+          }),
+        ],
+      });
+
+    const subjectHeaders = [
+      'Matières',
+      'Note <5',
+      'Note <8',
+      'Note <10',
+      'Note <12',
+      'Note <14',
+      'Note <16',
+      'Note <18',
+      'Note <=20',
+      'Nb moyennes (>=10)',
+      '% réussite',
+    ];
+    const subjectWidths = [
+      1700, 820, 820, 820, 820, 820, 820, 820, 820, 1000, 860,
+    ];
+    const subjectHeaderRow = new TableRow({
+      children: subjectHeaders.map((text, index) =>
+        headerCell(text, subjectWidths[index]),
+      ),
+    });
+    const subjectDataRows = (
+      report.subjects.length
+        ? report.subjects.map((subject) => [
+            subject.label,
+            String(subject.lt5),
+            String(subject.lt8),
+            String(subject.lt10),
+            String(subject.lt12),
+            String(subject.lt14),
+            String(subject.lt16),
+            String(subject.lt18),
+            String(subject.lte20),
+            String(subject.passCount),
+            `${subject.successRate}%`,
+          ])
+        : [
+            [
+              'Aucune note validée pour cette période',
+              ...Array<string>(10).fill(''),
+            ],
+          ]
+    ).map(
+      (values) =>
+        new TableRow({
+          children: values.map((text, index) =>
+            dataCell(text, subjectWidths[index], index !== 0),
+          ),
+        }),
+    );
+
+    const genderHeaders = [
+      'Inscrits G',
+      'Inscrits F',
+      'Inscrits T',
+      'Présents G',
+      'Présents F',
+      'Présents T',
+      'Admis G',
+      'Admis F',
+      'Admis T',
+      '% Réussite G',
+      '% Réussite F',
+      '% Réussite T',
+    ];
+    const genderWidth = Math.round(TABLE_WIDTH / 12);
+    const genderHeaderRow = new TableRow({
+      children: genderHeaders.map((text) => headerCell(text, genderWidth)),
+    });
+    const genderDataRow = new TableRow({
+      children: [
+        String(report.inscrits.g),
+        String(report.inscrits.f),
+        String(report.inscrits.t),
+        String(report.presents.g),
+        String(report.presents.f),
+        String(report.presents.t),
+        String(report.admis.g),
+        String(report.admis.f),
+        String(report.admis.t),
+        `${report.successRate.g}%`,
+        `${report.successRate.f}%`,
+        `${report.successRate.t}%`,
+      ].map((text) => dataCell(text, genderWidth)),
+    });
+
+    const doc = new Document({
+      sections: [
+        {
+          children: [
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 100 },
+              children: [
+                new TextRun({
+                  text: report.schoolName.toUpperCase(),
+                  bold: true,
+                  size: 28,
+                }),
+              ],
+            }),
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 100 },
+              children: [
+                new TextRun({
+                  text: 'Statistiques de fin de periode',
+                  bold: true,
+                  size: 24,
+                }),
+              ],
+            }),
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 280 },
+              children: [
+                new TextRun({
+                  text: `Année scolaire : ${report.schoolYearLabel}        Classe : ${report.levelName}        Période : ${report.periodeLabel}`,
+                  size: 20,
+                }),
+              ],
+            }),
+            new Table({
+              width: { size: TABLE_WIDTH, type: WidthType.DXA },
+              columnWidths: subjectWidths,
+              rows: [subjectHeaderRow, ...subjectDataRows],
+            }),
+            new Paragraph({
+              spacing: { before: 280, after: 140 },
+              children: [
+                new TextRun({
+                  text: 'Statistiques générales',
+                  bold: true,
+                  size: 22,
+                }),
+              ],
+            }),
+            new Table({
+              width: { size: TABLE_WIDTH, type: WidthType.DXA },
+              columnWidths: Array(12).fill(genderWidth),
+              rows: [genderHeaderRow, genderDataRow],
             }),
           ],
         },

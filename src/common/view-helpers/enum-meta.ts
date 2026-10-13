@@ -11,6 +11,7 @@ import {
   ImportRowMatchStatus,
   InvoiceStatus,
   PaymentMethod,
+  Periode,
   Role,
   SchoolYearStatus,
   StockCategory,
@@ -185,6 +186,28 @@ export const ENUM_META: Record<string, EnumMetaGroup> = {
     [BulletinSessionStatus.VALIDATED]: {
       label: 'Validee',
       description: 'Notes enregistrees definitivement pour cette periode.',
+    },
+  },
+  periode: {
+    [Periode.TRIMESTRE_1]: {
+      label: '1er trimestre',
+      description: "Premier trimestre de l'annee scolaire.",
+    },
+    [Periode.TRIMESTRE_2]: {
+      label: '2e trimestre',
+      description: "Deuxieme trimestre de l'annee scolaire.",
+    },
+    [Periode.TRIMESTRE_3]: {
+      label: '3e trimestre',
+      description: "Troisieme trimestre de l'annee scolaire.",
+    },
+    [Periode.SEMESTRE_1]: {
+      label: '1er semestre',
+      description: "Premier semestre de l'annee scolaire.",
+    },
+    [Periode.SEMESTRE_2]: {
+      label: '2e semestre',
+      description: "Deuxieme semestre de l'annee scolaire.",
     },
   },
   importRowMatchStatus: {

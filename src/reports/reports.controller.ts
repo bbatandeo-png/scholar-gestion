@@ -13,7 +13,7 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { Roles } from '../common/decorators/roles.decorator';
-import { Role } from '../common/enums/domain.enums';
+import { Periode, Role } from '../common/enums/domain.enums';
 import { AuthenticatedGuard } from '../common/guards/authenticated.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { buildExcelBuffer } from '../common/utils/excel.util';
@@ -168,6 +168,123 @@ export class ReportsController {
     res.setHeader(
       'Content-Disposition',
       `attachment; filename="fiche-de-notes-${safeLevelName}.docx"`,
+    );
+    return res.send(buffer);
+  }
+
+  // Inspector-facing statistics sheet (repartition des moyennes par matiere
+  // + effectifs inscrits/presents/admis par sexe) - always the OPEN school
+  // year (requireOpen(), not resolveSelected()) since this is about the
+  // ongoing year's results, never a historical one browsed via the header
+  // selector. levelId omitted = toutes les classes confondues.
+  @Get('/exam-statistics')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT, Role.AUDITEUR)
+  @Render('reports/exam-statistics')
+  async examStatistics(
+    @Query('periode') periode?: Periode,
+    @Query('levelId') levelId?: string,
+  ) {
+    const activeYear = await this.schoolYearsService.requireOpen();
+    const report =
+      periode &&
+      (await this.reportsService.getExamStatistics(
+        String(activeYear._id),
+        periode,
+        levelId || undefined,
+      ));
+    return {
+      title: 'Statistiques de fin de periode',
+      activeYear,
+      levels: await this.reportsService.listLevels(),
+      periode: periode || '',
+      levelId: levelId || '',
+      report: report || null,
+    };
+  }
+
+  @Get('/exam-statistics/pdf')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT, Role.AUDITEUR)
+  async examStatisticsPdf(
+    @Query('periode') periode: Periode,
+    @Query('levelId') levelId: string | undefined,
+    @Res() res: Response,
+  ) {
+    if (!periode) {
+      throw new BadRequestException('Veuillez choisir une periode');
+    }
+    const activeYear = await this.schoolYearsService.requireOpen();
+    const report = await this.reportsService.getExamStatistics(
+      String(activeYear._id),
+      periode,
+      levelId || undefined,
+    );
+    const pdf = await this.reportsService.renderExamStatisticsPdf(report);
+    const safeLevelName = report.levelName.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="statistiques-${safeLevelName}.pdf"`,
+    );
+    return res.send(pdf);
+  }
+
+  @Get('/exam-statistics/excel')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT, Role.AUDITEUR)
+  async examStatisticsExcel(
+    @Query('periode') periode: Periode,
+    @Query('levelId') levelId: string | undefined,
+    @Res() res: Response,
+  ) {
+    if (!periode) {
+      throw new BadRequestException('Veuillez choisir une periode');
+    }
+    const activeYear = await this.schoolYearsService.requireOpen();
+    const report = await this.reportsService.getExamStatistics(
+      String(activeYear._id),
+      periode,
+      levelId || undefined,
+    );
+    const buffer = await this.reportsService.renderExamStatisticsExcel(report);
+    const safeLevelName = report.levelName.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="statistiques-${safeLevelName}.xlsx"`,
+    );
+    return res.send(buffer);
+  }
+
+  @Get('/exam-statistics/docx')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT, Role.AUDITEUR)
+  async examStatisticsDocx(
+    @Query('periode') periode: Periode,
+    @Query('levelId') levelId: string | undefined,
+    @Res() res: Response,
+  ) {
+    if (!periode) {
+      throw new BadRequestException('Veuillez choisir une periode');
+    }
+    const activeYear = await this.schoolYearsService.requireOpen();
+    const report = await this.reportsService.getExamStatistics(
+      String(activeYear._id),
+      periode,
+      levelId || undefined,
+    );
+    const buffer = await this.reportsService.renderExamStatisticsDocx(report);
+    const safeLevelName = report.levelName.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="statistiques-${safeLevelName}.docx"`,
     );
     return res.send(buffer);
   }

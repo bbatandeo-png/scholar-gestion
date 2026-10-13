@@ -2,6 +2,12 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Invoice, InvoiceSchema } from '../billing/schemas/invoice.schema';
 import {
+  BulletinResult,
+  BulletinResultSchema,
+} from '../bulletins/schemas/bulletin-result.schema';
+import { Note, NoteSchema } from '../bulletins/schemas/note.schema';
+import { Subject, SubjectSchema } from '../bulletins/schemas/subject.schema';
+import {
   Enrollment,
   EnrollmentSchema,
 } from '../enrollments/schemas/enrollment.schema';
@@ -27,6 +33,9 @@ import { SettingsModule } from '../settings/settings.module';
       { name: Level.name, schema: LevelSchema },
       { name: SchoolYear.name, schema: SchoolYearSchema },
       { name: Payment.name, schema: PaymentSchema },
+      { name: Note.name, schema: NoteSchema },
+      { name: BulletinResult.name, schema: BulletinResultSchema },
+      { name: Subject.name, schema: SubjectSchema },
     ]),
     EcolesModule,
     SchoolYearsModule,

@@ -3,6 +3,9 @@ import ExcelJS from 'exceljs';
 import { ReportsService } from './reports.service';
 import { Enrollment } from '../enrollments/schemas/enrollment.schema';
 import { Invoice } from '../billing/schemas/invoice.schema';
+import { BulletinResult } from '../bulletins/schemas/bulletin-result.schema';
+import { Note } from '../bulletins/schemas/note.schema';
+import { Subject } from '../bulletins/schemas/subject.schema';
 import { Student } from '../students/schemas/student.schema';
 import { Level } from '../levels/schemas/level.schema';
 import { SchoolYear } from '../school-years/schemas/school-year.schema';
@@ -10,10 +13,10 @@ import { Payment } from '../payments/schemas/payment.schema';
 import { EcolesService } from '../ecoles/ecoles.service';
 import { SettingsService } from '../settings/settings.service';
 
-// Every test below only exercises one or two of ReportsService's 8
+// Every test below only exercises one or two of ReportsService's 11
 // constructor dependencies - this builds a fully-stubbed instance and lets
 // each test override just the mocks it actually cares about, instead of
-// repeating 8 "{} as any" placeholders (and the associated lint noise) at
+// repeating 11 "{} as any" placeholders (and the associated lint noise) at
 // every call site.
 function createService(
   overrides: {
@@ -23,6 +26,9 @@ function createService(
     levelModel?: unknown;
     schoolYearModel?: unknown;
     paymentModel?: unknown;
+    noteModel?: unknown;
+    bulletinResultModel?: unknown;
+    subjectModel?: unknown;
     ecolesService?: unknown;
     settingsService?: unknown;
   } = {},
@@ -34,6 +40,9 @@ function createService(
     (overrides.levelModel ?? {}) as unknown as Model<Level>,
     (overrides.schoolYearModel ?? {}) as unknown as Model<SchoolYear>,
     (overrides.paymentModel ?? {}) as unknown as Model<Payment>,
+    (overrides.noteModel ?? {}) as unknown as Model<Note>,
+    (overrides.bulletinResultModel ?? {}) as unknown as Model<BulletinResult>,
+    (overrides.subjectModel ?? {}) as unknown as Model<Subject>,
     (overrides.ecolesService ?? {}) as unknown as EcolesService,
     (overrides.settingsService ?? {}) as unknown as SettingsService,
   );
@@ -555,6 +564,159 @@ describe('ReportsService', () => {
       // "PK\x03\x04" - every .docx is a zip archive.
       expect(buffer.subarray(0, 2).toString('latin1')).toBe('PK');
       expect(buffer.length).toBeGreaterThan(1000);
+    });
+  });
+
+  describe('ReportsService.getExamStatistics', () => {
+    function buildModels() {
+      const schoolYearModel = {
+        findById: jest.fn().mockReturnValue({
+          lean: jest.fn().mockReturnValue({
+            exec: jest.fn().mockResolvedValue({ label: '2025-2026' }),
+          }),
+        }),
+      };
+      const levelModel = {
+        findById: jest.fn().mockReturnValue({
+          lean: jest.fn().mockReturnValue({
+            exec: jest.fn().mockResolvedValue({ label: 'CM2' }),
+          }),
+        }),
+      };
+      const noteModel = {
+        aggregate: jest.fn().mockReturnValue({
+          exec: jest.fn().mockResolvedValue([
+            {
+              _id: 'subject-1',
+              total: 4,
+              lt5: 0,
+              lt8: 1,
+              lt10: 1,
+              lt12: 2,
+              lt14: 3,
+              lt16: 3,
+              lt18: 4,
+              lte20: 4,
+              passCount: 3,
+            },
+          ]),
+        }),
+      };
+      const subjectModel = {
+        find: jest.fn().mockReturnValue({
+          lean: jest.fn().mockReturnValue({
+            exec: jest
+              .fn()
+              .mockResolvedValue([{ _id: 'subject-1', label: 'Français' }]),
+          }),
+        }),
+      };
+      const enrollmentModel = {
+        find: jest.fn().mockReturnValue({
+          populate: jest.fn().mockReturnValue({
+            lean: jest.fn().mockReturnValue({
+              exec: jest
+                .fn()
+                .mockResolvedValue([
+                  { studentId: { gender: 'M' } },
+                  { studentId: { gender: 'M' } },
+                  { studentId: { gender: 'F' } },
+                ]),
+            }),
+          }),
+        }),
+      };
+      const bulletinResultModel = {
+        find: jest.fn().mockReturnValue({
+          populate: jest.fn().mockReturnValue({
+            lean: jest.fn().mockReturnValue({
+              exec: jest.fn().mockResolvedValue([
+                { studentId: { gender: 'M' }, moyenneGenerale: 12 },
+                { studentId: { gender: 'M' }, moyenneGenerale: 8 },
+                { studentId: { gender: 'F' }, moyenneGenerale: 14 },
+              ]),
+            }),
+          }),
+        }),
+      };
+      const ecolesService = {
+        getCurrentSchoolName: jest.fn().mockResolvedValue('Ecole Test'),
+      };
+      return {
+        schoolYearModel,
+        levelModel,
+        noteModel,
+        subjectModel,
+        enrollmentModel,
+        bulletinResultModel,
+        ecolesService,
+      };
+    }
+
+    const YEAR_ID = '507f1f77bcf86cd799439011';
+    const LEVEL_ID = '507f1f77bcf86cd799439012';
+
+    it('calcule la repartition des moyennes par matiere et les effectifs par sexe pour une classe precise', async () => {
+      const models = buildModels();
+      const service = createService(models);
+
+      const result = await service.getExamStatistics(
+        YEAR_ID,
+        'trimestre_1' as never,
+        LEVEL_ID,
+      );
+
+      expect(models.noteModel.aggregate).toHaveBeenCalled();
+      expect(models.levelModel.findById).toHaveBeenCalledWith(LEVEL_ID);
+      expect(result.levelName).toBe('CM2');
+      expect(result.subjects).toEqual([
+        expect.objectContaining({
+          label: 'Français',
+          lt5: 0,
+          lt8: 1,
+          lt10: 1,
+          passCount: 3,
+          total: 4,
+          successRate: 75,
+        }),
+      ]);
+      // 3 eleves inscrits (2 G, 1 F) ; 3 presents (2 G, 1 F) ; admis (>=10) :
+      // le garcon a 12 passe, celui a 8 echoue, la fille a 14 passe.
+      expect(result.inscrits).toEqual({ g: 2, f: 1, t: 3 });
+      expect(result.presents).toEqual({ g: 2, f: 1, t: 3 });
+      expect(result.admis).toEqual({ g: 1, f: 1, t: 2 });
+      expect(result.successRate).toEqual({ g: 50, f: 100, t: 66.7 });
+    });
+
+    it('ne filtre par aucun niveau quand levelId est omis (statistiques toutes classes confondues)', async () => {
+      const models = buildModels();
+      const service = createService(models);
+
+      const result = await service.getExamStatistics(
+        YEAR_ID,
+        'trimestre_1' as never,
+      );
+
+      expect(models.levelModel.findById).not.toHaveBeenCalled();
+      expect(result.levelName).toBe('Toutes les classes');
+      const aggregateCalls = models.noteModel.aggregate.mock.calls as Array<
+        [Array<{ $match: Record<string, unknown> }>]
+      >;
+      expect(aggregateCalls[0][0][0].$match.levelId).toBeUndefined();
+    });
+
+    it("leve une BadRequestException si l'annee scolaire est introuvable", async () => {
+      const models = buildModels();
+      models.schoolYearModel.findById = jest.fn().mockReturnValue({
+        lean: jest.fn().mockReturnValue({
+          exec: jest.fn().mockResolvedValue(null),
+        }),
+      });
+      const service = createService(models);
+
+      await expect(
+        service.getExamStatistics('missing-year', 'trimestre_1' as never),
+      ).rejects.toThrow('Annee scolaire introuvable');
     });
   });
 });

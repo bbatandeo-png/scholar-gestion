@@ -22,6 +22,8 @@ import { EnrollmentsService } from '../src/enrollments/enrollments.service';
 import { LevelsService } from '../src/levels/levels.service';
 import { Level } from '../src/levels/schemas/level.schema';
 import { Subject } from '../src/bulletins/schemas/subject.schema';
+import { Note } from '../src/bulletins/schemas/note.schema';
+import { BulletinResult } from '../src/bulletins/schemas/bulletin-result.schema';
 import { TeacherAssignment } from '../src/teachers/schemas/teacher-assignment.schema';
 import { Payment } from '../src/payments/schemas/payment.schema';
 import { SchoolYear } from '../src/school-years/schemas/school-year.schema';
@@ -68,6 +70,8 @@ describe('Scolar Gestion workflows (e2e)', () => {
   let arrearModel: Model<Arrear>;
   let invoiceModel: Model<Invoice>;
   let auditLogModel: Model<AuditLog>;
+  let noteModel: Model<Note>;
+  let bulletinResultModel: Model<BulletinResult>;
 
   beforeAll(async () => {
     repl = await startMongoReplSet();
@@ -145,6 +149,8 @@ describe('Scolar Gestion workflows (e2e)', () => {
     schoolYearModel = app.get(getModelToken(SchoolYear.name));
     levelModel = app.get(getModelToken(Level.name));
     subjectModel = app.get(getModelToken(Subject.name));
+    noteModel = app.get(getModelToken(Note.name));
+    bulletinResultModel = app.get(getModelToken(BulletinResult.name));
     assignmentModel = app.get(getModelToken(TeacherAssignment.name));
     paymentModel = app.get(getModelToken(Payment.name));
     enrollmentModel = app.get(getModelToken(Enrollment.name));
@@ -3122,6 +3128,179 @@ describe('Scolar Gestion workflows (e2e)', () => {
         expect(
           secondDetail.text.match(/<span class="badge active">Oui<\/span>/g),
         ).toHaveLength(1);
+      }));
+  });
+
+  describe('statistiques de fin de periode (inspection)', () => {
+    it('calcule la repartition des moyennes et les effectifs par sexe, pour une classe precise puis toutes classes confondues', () =>
+      runWithTenant({ ecoleId: TEST_DEFAULT_ECOLE_ID }, async () => {
+        const unique = Date.now();
+        const year = await schoolYearModel.create({
+          label: `STATS-${unique}`,
+          startDate: new Date('2095-09-01'),
+          endDate: new Date('2096-06-30'),
+          status: SchoolYearStatus.OPEN,
+        });
+        const level = await levelModel.create({
+          code: `STATS-L-${unique}`,
+          label: `STATS-L-${unique}`,
+          sortOrder: 900005,
+        });
+        const subject = await subjectModel.create({
+          label: `Matiere Stats ${unique}`,
+          labelNormalized: `MATIERE STATS ${unique}`,
+          category: 'scientifique',
+          active: true,
+        });
+
+        const boy = await studentModel.create({
+          matricule: `STATS-M-${unique}`,
+          lastname: 'Boy',
+          firstname: 'Stats',
+          gender: 'M',
+          status: 'active',
+        });
+        const girl = await studentModel.create({
+          matricule: `STATS-F-${unique}`,
+          lastname: 'Girl',
+          firstname: 'Stats',
+          gender: 'F',
+          status: 'active',
+        });
+        const boyEnrollment = await enrollmentModel.create({
+          studentId: boy._id,
+          schoolYearId: year._id,
+          levelId: level._id,
+          type: EnrollmentType.INITIAL,
+        });
+        const girlEnrollment = await enrollmentModel.create({
+          studentId: girl._id,
+          schoolYearId: year._id,
+          levelId: level._id,
+          type: EnrollmentType.INITIAL,
+        });
+
+        // Garcon admis (12 >= 10), fille non admise (8 < 10) - pour verifier
+        // le decompte par sexe (Inscrits/Presents/Admis/% reussite) et la
+        // repartition cumulative des moyennes par matiere.
+        await noteModel.create({
+          studentId: boy._id,
+          enrollmentId: boyEnrollment._id,
+          subjectId: subject._id,
+          schoolYearId: year._id,
+          levelId: level._id,
+          periode: 'trimestre_1',
+          coefficient: 2,
+          moyennePeriode: 12,
+        });
+        await noteModel.create({
+          studentId: girl._id,
+          enrollmentId: girlEnrollment._id,
+          subjectId: subject._id,
+          schoolYearId: year._id,
+          levelId: level._id,
+          periode: 'trimestre_1',
+          coefficient: 2,
+          moyennePeriode: 8,
+        });
+        await bulletinResultModel.create({
+          studentId: boy._id,
+          enrollmentId: boyEnrollment._id,
+          schoolYearId: year._id,
+          levelId: level._id,
+          periode: 'trimestre_1',
+          statutNR: 'N',
+          totalPoints: 120,
+          totalCoef: 10,
+          moyenneGenerale: 12,
+          rangGeneral: '1',
+          appreciationGenerale: 'Bien',
+        });
+        await bulletinResultModel.create({
+          studentId: girl._id,
+          enrollmentId: girlEnrollment._id,
+          schoolYearId: year._id,
+          levelId: level._id,
+          periode: 'trimestre_1',
+          statutNR: 'N',
+          totalPoints: 80,
+          totalCoef: 10,
+          moyenneGenerale: 8,
+          rangGeneral: '2',
+          appreciationGenerale: 'Passable',
+        });
+
+        const byLevel = await request(app.getHttpServer())
+          .get('/reports/exam-statistics')
+          .query({ periode: 'trimestre_1', levelId: String(level._id) })
+          .set('x-test-role', 'direction');
+        expect(byLevel.status).toBe(200);
+        expect(byLevel.text).toContain(`Matiere Stats ${unique}`);
+        // Garcon 12, fille 8 : les deux tombent sous <14/<16/<18/<=20 (2),
+        // seule la fille tombe aussi sous <10/<12 (1), aucun sous <5/<8 (0) -
+        // verifie que les seuils cumulatifs sont bien calcules.
+        const rowMatch = byLevel.text.match(
+          new RegExp(`<tr>\\s*<td>Matiere Stats ${unique}[\\s\\S]*?</tr>`),
+        );
+        expect(rowMatch).toBeTruthy();
+        const cells: string[] = rowMatch![0].match(/<td>([^<]*)<\/td>/g) ?? [];
+        expect(cells.map((cell) => cell.replace(/<\/?td>/g, ''))).toEqual([
+          `Matiere Stats ${unique}`,
+          '0', // Note <5
+          '0', // Note <8
+          '1', // Note <10
+          '1', // Note <12
+          '2', // Note <14
+          '2', // Note <16
+          '2', // Note <18
+          '2', // Note <=20
+          '1', // Nb moyennes (>=10)
+          '50%', // % reussite
+        ]);
+        // Table "Statistiques generales" : Inscrits/Presents/Admis G,F,T puis
+        // % Reussite G,F,T - garcon admis (12), fille non admise (8).
+        const generalSection = byLevel.text.slice(
+          byLevel.text.indexOf('Statistiques générales'),
+        );
+        const generalCells = (generalSection.match(/<td>([^<]*)<\/td>/g) ?? [])
+          .slice(0, 12)
+          .map((cell) => cell.replace(/<\/?td>/g, ''));
+        expect(generalCells).toEqual([
+          '1',
+          '1',
+          '2', // Inscrits G,F,T
+          '1',
+          '1',
+          '2', // Presents G,F,T
+          '1',
+          '0',
+          '1', // Admis G,F,T
+          '100%',
+          '0%',
+          '50%', // % Reussite G,F,T
+        ]);
+
+        const pdf = await request(app.getHttpServer())
+          .get('/reports/exam-statistics/pdf')
+          .query({ periode: 'trimestre_1', levelId: String(level._id) })
+          .set('x-test-role', 'direction');
+        expect(pdf.status).toBe(200);
+        expect(pdf.headers['content-type']).toContain('application/pdf');
+
+        const global = await request(app.getHttpServer())
+          .get('/reports/exam-statistics')
+          .query({ periode: 'trimestre_1' })
+          .set('x-test-role', 'direction');
+        expect(global.status).toBe(200);
+        expect(global.text).toContain('Toutes les classes');
+        expect(global.text).toContain(`Matiere Stats ${unique}`);
+
+        // Sans periode choisie, la page s'affiche sans tableau (etat initial).
+        const noPeriode = await request(app.getHttpServer())
+          .get('/reports/exam-statistics')
+          .set('x-test-role', 'direction');
+        expect(noPeriode.status).toBe(200);
+        expect(noPeriode.text).not.toContain(`Matiere Stats ${unique}`);
       }));
   });
 });

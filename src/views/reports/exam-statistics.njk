@@ -1,0 +1,116 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <section class="panel">
+    <div class="panel-heading">
+      <div>
+        <h2>Statistiques de fin de période</h2>
+        <p class="muted">Répartition des moyennes par matière et effectifs inscrits/présents/admis par sexe - pour l'inspection. Toujours l'année scolaire ouverte (<strong>{{ activeYear.label }}</strong>).</p>
+      </div>
+      {% if report %}
+        <div class="toolbar">
+          <a class="button secondary btn-icon icon-export" href="/reports/exam-statistics/pdf?periode={{ periode }}{% if levelId %}&levelId={{ levelId }}{% endif %}">PDF</a>
+          <a class="button secondary btn-icon icon-export" href="/reports/exam-statistics/excel?periode={{ periode }}{% if levelId %}&levelId={{ levelId }}{% endif %}">Excel</a>
+          <a class="button secondary btn-icon icon-export" href="/reports/exam-statistics/docx?periode={{ periode }}{% if levelId %}&levelId={{ levelId }}{% endif %}">Word</a>
+        </div>
+      {% endif %}
+    </div>
+    <form method="get" action="/reports/exam-statistics" class="toolbar-grid">
+      <label>Classe
+        <select name="levelId">
+          <option value="">Toutes les classes</option>
+          {% for level in levels %}
+            <option value="{{ level._id }}" {% if levelId == level._id %}selected{% endif %}>{{ level.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Période
+        <select name="periode" required>
+          <option value="">Choisir une période</option>
+          {% for key, meta in ENUM_META.periode %}
+            <option value="{{ key }}" {% if periode == key %}selected{% endif %}>{{ meta.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button type="submit" class="btn-icon icon-search">Afficher</button>
+    </form>
+
+    {% if report %}
+      <h3 class="top-gap">Répartition des moyennes par matière</h3>
+      <p class="muted">Classe : <strong>{{ report.levelName }}</strong> — Période : <strong>{{ report.periodeLabel }}</strong></p>
+      <div class="table-shell">
+        <table class="table-report">
+          <thead>
+            <tr>
+              <th>Matières</th>
+              <th>Note &lt;5</th>
+              <th>Note &lt;8</th>
+              <th>Note &lt;10</th>
+              <th>Note &lt;12</th>
+              <th>Note &lt;14</th>
+              <th>Note &lt;16</th>
+              <th>Note &lt;18</th>
+              <th>Note &lt;=20</th>
+              <th>Nb moyennes (&gt;=10)</th>
+              <th>% réussite</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for subject in report.subjects %}
+              <tr>
+                <td>{{ subject.label }}</td>
+                <td>{{ subject.lt5 }}</td>
+                <td>{{ subject.lt8 }}</td>
+                <td>{{ subject.lt10 }}</td>
+                <td>{{ subject.lt12 }}</td>
+                <td>{{ subject.lt14 }}</td>
+                <td>{{ subject.lt16 }}</td>
+                <td>{{ subject.lt18 }}</td>
+                <td>{{ subject.lte20 }}</td>
+                <td>{{ subject.passCount }}</td>
+                <td>{{ subject.successRate }}%</td>
+              </tr>
+            {% else %}
+              <tr><td colspan="11">Aucune note validée pour cette période.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="top-gap">Statistiques générales</h3>
+      <div class="table-shell">
+        <table class="table-report">
+          <thead>
+            <tr>
+              <th colspan="3">Inscrits</th>
+              <th colspan="3">Présents</th>
+              <th colspan="3">Admis</th>
+              <th colspan="3">Pourcentage de réussite</th>
+            </tr>
+            <tr>
+              <th>G</th><th>F</th><th>T</th>
+              <th>G</th><th>F</th><th>T</th>
+              <th>G</th><th>F</th><th>T</th>
+              <th>G</th><th>F</th><th>T</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>{{ report.inscrits.g }}</td>
+              <td>{{ report.inscrits.f }}</td>
+              <td>{{ report.inscrits.t }}</td>
+              <td>{{ report.presents.g }}</td>
+              <td>{{ report.presents.f }}</td>
+              <td>{{ report.presents.t }}</td>
+              <td>{{ report.admis.g }}</td>
+              <td>{{ report.admis.f }}</td>
+              <td>{{ report.admis.t }}</td>
+              <td>{{ report.successRate.g }}%</td>
+              <td>{{ report.successRate.f }}%</td>
+              <td>{{ report.successRate.t }}%</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}
