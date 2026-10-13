@@ -5,7 +5,7 @@
     <div class="panel">
       <h2>{% if editYear %}Modifier annee scolaire{% else %}Nouvelle annee scolaire{% endif %}</h2>
       <div class="notice notice-info">
-        La clôture est manuelle. Clôturez l’année ouverte lorsque vous l’avez décidé, puis préparez et activez la nouvelle année depuis la promotion annuelle. Une année ancienne se consulte avec le sélecteur sans modifier son historique.
+        La clôture est manuelle. Clôturez l’année ouverte lorsque vous l’avez décidé. Pour la nouvelle année, ce sont deux actions séparées : "Préparer" (promotion annuelle des élèves vers la classe suivante) et "Ouvrir" (active l’année), à faire dans l’ordre de votre choix. Une année ancienne se consulte avec le sélecteur sans modifier son historique.
       </div>
       <form method="post" action="{% if editYear %}/settings/school-years/{{ editYear._id }}{% else %}/settings/school-years{% endif %}" class="stack">
         <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
@@ -58,7 +58,7 @@
                       <input type="hidden" name="returnTo" value="/dashboard" />
                       <button type="submit" class="button btn-sm secondary">Consulter</button>
                     </form>
-                    {% if item.status == 'draft' %}<a class="button btn-sm" href="/promotions">Préparer et activer</a>{% endif %}
+                    {% if item.status == 'draft' %}<a class="button btn-sm secondary" href="/promotions">Préparer</a>{% endif %}
                     {% if item.status == 'open' %}
                       <form method="post" action="/settings/school-years/{{ item._id }}/status" class="inline-form">
                         <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
