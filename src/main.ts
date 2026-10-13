@@ -169,6 +169,8 @@ async function bootstrap() {
   app.use('/settings/fees', multipartUpload.any());
   // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
   app.use('/teachers', multipartUpload.any());
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+  app.use('/enrollments', multipartUpload.any());
 
   if (!isTest) {
     app.use(csurf());

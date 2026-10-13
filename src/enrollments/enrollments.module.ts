@@ -7,6 +7,7 @@ import { EcoleModulesModule } from '../ecole-modules/ecole-modules.module';
 import { LevelsModule } from '../levels/levels.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { SchoolYearsModule } from '../school-years/school-years.module';
+import { SettingsModule } from '../settings/settings.module';
 import { StudentsModule } from '../students/students.module';
 import { UsersModule } from '../users/users.module';
 import { EnrollmentsController } from './enrollments.controller';
@@ -28,6 +29,7 @@ import { Enrollment, EnrollmentSchema } from './schemas/enrollment.schema';
     UsersModule,
     EcoleModulesModule,
     forwardRef(() => StudentsModule),
+    SettingsModule,
   ],
   controllers: [EnrollmentsController, PaymentCorrectionsController],
   providers: [EnrollmentsService],

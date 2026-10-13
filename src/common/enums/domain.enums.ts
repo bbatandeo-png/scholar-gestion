@@ -125,6 +125,7 @@ export enum SettingKey {
   RECEIPT_MODE = 'receipt_mode',
   CHEF_ETABLISSEMENT_NOM = 'chef_etablissement_nom',
   REGISTRATION_PAYMENT_REQUIRED = 'registration_payment_required',
+  IMPORT_PAID_STUDENTS_ENABLED = 'import_paid_students_enabled',
 }
 
 export enum ReceiptMode {

@@ -193,6 +193,35 @@ export class SettingsService {
     );
   }
 
+  // Not year-scoped, same rationale as registrationPaymentRequired above -
+  // but unlike that one, set by the school itself (see /settings/fees),
+  // never by the platform. Off by default: bulk-importing a "deja paye"
+  // amount per row bypasses the fee schedule entirely (see
+  // EnrollmentsController.importPaidStudents), so a school must opt in
+  // deliberately rather than have it silently available.
+  async getImportPaidStudentsEnabled(): Promise<boolean> {
+    const setting = await this.settingModel
+      .findOne({
+        key: SettingKey.IMPORT_PAID_STUDENTS_ENABLED,
+        schoolYearId: null,
+      })
+      .lean()
+      .exec();
+    return setting?.value === 'true';
+  }
+
+  async setImportPaidStudentsEnabled(value: boolean) {
+    const criteria = {
+      key: SettingKey.IMPORT_PAID_STUDENTS_ENABLED,
+      schoolYearId: null,
+    };
+    return this.settingModel.findOneAndUpdate(
+      criteria,
+      { ...criteria, value: value ? 'true' : 'false' },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
+  }
+
   async copyAnnualSettings(
     sourceSchoolYearId: string,
     targetSchoolYearId: string,

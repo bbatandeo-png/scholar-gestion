@@ -116,6 +116,21 @@
       </div>
 
       <div class="form-section">
+        <span class="form-section-title">Import des élèves déjà payés</span>
+        <p class="form-section-desc">Permet d'importer en masse, depuis /enrollments, des élèves avec leur classe et le montant déjà payé (ex: migration depuis un ancien système). Le montant est enregistré tel quel, sans recalcul par rapport au barème de frais.</p>
+        <form method="post" action="/settings/import-paid-students" class="stack">
+          <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+          <label>État
+            <select name="value" required>
+              <option value="false" {% if not importPaidStudentsEnabled %}selected{% endif %}>Désactivé</option>
+              <option value="true" {% if importPaidStudentsEnabled %}selected{% endif %}>Activé</option>
+            </select>
+          </label>
+          <button type="submit" class="secondary btn-icon icon-save">Mettre à jour</button>
+        </form>
+      </div>
+
+      <div class="form-section">
         <span class="form-section-title">Paramétrage du matricule</span>
         <p class="form-section-desc">Format généré: <strong>{{ matriculePreview }}</strong></p>
         <form method="post" action="/settings/matricule-rule" class="stack">

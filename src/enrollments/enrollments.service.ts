@@ -11,22 +11,42 @@ import { ClientSession, Connection, Model } from 'mongoose';
 import { ArrearsService } from '../arrears/arrears.service';
 import { AuditService } from '../audit/audit.service';
 import { BillingService } from '../billing/billing.service';
+import { normalizeLabel } from '../bulletins/bulletins-import.util';
 import {
   AuditAction,
   EnrollmentStatus,
   EnrollmentType,
   FinalDecision,
+  GuardianType,
+  PaymentMethod,
   Role,
 } from '../common/enums/domain.enums';
 import { runWithMongoTransactionFallback } from '../common/utils/mongo-transaction.util';
 import { PopulatedEnrollmentLean } from '../common/types/populated-refs.types';
+import {
+  parseExcelDate,
+  pickRowValue,
+  readExcelRows,
+} from '../common/utils/excel.util';
 import { toDisplayString } from '../common/utils/safe-string.util';
 import { LevelsService } from '../levels/levels.service';
+import { PaymentsService } from '../payments/payments.service';
 import { SchoolYearsService } from '../school-years/school-years.service';
+import { CreateStudentDto } from '../students/dto/create-student.dto';
 import { StudentsService } from '../students/students.service';
 import { UsersService } from '../users/users.service';
 import { CreateEnrollmentDto } from './dto/create-enrollment.dto';
 import { Enrollment, EnrollmentDocument } from './schemas/enrollment.schema';
+
+export type ImportPaidStudentsReport = {
+  created: number;
+  paid: number;
+  skipped: number;
+  unknownClass: number;
+  missingFields: number;
+  invalidDate: number;
+  creationFailed: number;
+};
 
 function getAuditActionLabel(action: string) {
   // action is deliberately a bare string, not AuditAction: the default
@@ -121,6 +141,8 @@ export class EnrollmentsService {
     private readonly auditService: AuditService,
     @Inject(forwardRef(() => StudentsService))
     private readonly studentsService: StudentsService,
+    @Inject(forwardRef(() => PaymentsService))
+    private readonly paymentsService: PaymentsService,
     @InjectConnection() private readonly connection: Connection,
     private readonly usersService: UsersService,
   ) {}
@@ -809,5 +831,172 @@ export class EnrollmentsService {
       { status: EnrollmentStatus.CLOSED, finalDecision },
       { new: true, session },
     );
+  }
+
+  // Migration-style bulk import (see SettingsService.
+  // getImportPaidStudentsEnabled - off by default, a school opts in).
+  // Creates the student, enrolls into schoolYearId/the row's classe, and -
+  // if a montant_paye was given - records it as-is, no recalculation
+  // against the fee schedule. One row's failure never aborts the batch:
+  // each row is independent, same convention as StudentsService's own
+  // /students/import. levelId is matched from the row's "classe"/"niveau"
+  // text against the levels actually enabled for schoolYearId (accent/case
+  // insensitive via normalizeLabel, same matcher bulletins import uses).
+  async importPaidStudents(
+    fileBuffer: Buffer,
+    schoolYearId: string,
+    actorId?: string,
+  ): Promise<ImportPaidStudentsReport> {
+    const levels = await this.levelsService.listForSchoolYear(schoolYearId);
+    const levelIdByLabel = new Map(
+      levels.map((level) => [normalizeLabel(level.label), String(level._id)]),
+    );
+
+    const rows = readExcelRows(fileBuffer);
+    const report: ImportPaidStudentsReport = {
+      created: 0,
+      paid: 0,
+      skipped: 0,
+      unknownClass: 0,
+      missingFields: 0,
+      invalidDate: 0,
+      creationFailed: 0,
+    };
+
+    for (const row of rows) {
+      const classeRaw = pickRowValue(row, ['classe', 'niveau']);
+      const levelId = classeRaw
+        ? levelIdByLabel.get(normalizeLabel(classeRaw))
+        : undefined;
+      if (!classeRaw || !levelId) {
+        report.skipped += 1;
+        report.unknownClass += 1;
+        continue;
+      }
+
+      const rawBirthDate = pickRowValue(row, ['birthdate', 'date_naissance']);
+      const parsedBirthDate = rawBirthDate
+        ? parseExcelDate(rawBirthDate)
+        : null;
+      if (rawBirthDate && !parsedBirthDate) {
+        report.skipped += 1;
+        report.invalidDate += 1;
+        continue;
+      }
+
+      const guardians: CreateStudentDto['guardians'] = [];
+      const pereFullname = pickRowValue(row, [
+        'nom_pere',
+        'pere',
+        'nom_complet_pere',
+      ]);
+      if (pereFullname) {
+        guardians.push({
+          type: GuardianType.FATHER,
+          fullname: pereFullname,
+          phone: pickRowValue(row, [
+            'contact_pere',
+            'telephone_pere',
+            'tel_pere',
+          ]),
+          address: pickRowValue(row, ['adresse_pere']),
+        });
+      }
+      const mereFullname = pickRowValue(row, [
+        'nom_mere',
+        'mere',
+        'nom_complet_mere',
+      ]);
+      if (mereFullname) {
+        guardians.push({
+          type: GuardianType.MOTHER,
+          fullname: mereFullname,
+          phone: pickRowValue(row, [
+            'contact_mere',
+            'telephone_mere',
+            'tel_mere',
+          ]),
+          address: pickRowValue(row, ['adresse_mere']),
+        });
+      }
+
+      const montantPayeRaw = pickRowValue(row, [
+        'montant_paye',
+        'montant',
+        'paymentamount',
+      ]);
+      const paymentAmount = montantPayeRaw ? Number(montantPayeRaw) : 0;
+      const modePaiementRaw = pickRowValue(row, [
+        'mode_paiement',
+        'paymentmethod',
+      ])?.toLowerCase();
+      const paymentMethod = (Object.values(PaymentMethod) as string[]).includes(
+        modePaiementRaw ?? '',
+      )
+        ? (modePaiementRaw as PaymentMethod)
+        : PaymentMethod.CASH;
+
+      const dto: CreateStudentDto = {
+        matricule: pickRowValue(row, ['matricule', 'code_eleve']),
+        lastname: pickRowValue(row, ['lastname', 'nom']),
+        firstname: pickRowValue(row, ['firstname', 'prenoms', 'prenom']),
+        gender: (pickRowValue(row, ['gender', 'sexe']) || '')
+          .toString()
+          .trim()
+          .toUpperCase(),
+        birthDate: parsedBirthDate ?? '',
+        birthPlace: pickRowValue(row, ['birthplace', 'lieu_naissance']),
+        district: pickRowValue(row, ['district', 'quartier']),
+        guardians: guardians.length ? guardians : undefined,
+        levelId,
+      };
+
+      if (
+        !dto.lastname ||
+        !dto.firstname ||
+        !dto.gender ||
+        !['M', 'F'].includes(dto.gender) ||
+        !dto.birthDate ||
+        !dto.birthPlace ||
+        !dto.district
+      ) {
+        report.skipped += 1;
+        report.missingFields += 1;
+        continue;
+      }
+
+      try {
+        const student = await this.studentsService.create(dto);
+        report.created += 1;
+
+        const result = await this.createEnrollment(
+          {
+            studentId: String(student._id),
+            schoolYearId,
+            levelId,
+            type: EnrollmentType.INITIAL,
+          },
+          actorId,
+        );
+
+        if (paymentAmount > 0) {
+          await this.paymentsService.createPayment(
+            {
+              invoiceId: result.invoiceId,
+              amount: paymentAmount,
+              method: paymentMethod,
+              reference: pickRowValue(row, ['reference', 'ref']),
+            },
+            actorId,
+          );
+          report.paid += 1;
+        }
+      } catch {
+        report.skipped += 1;
+        report.creationFailed += 1;
+      }
+    }
+
+    return report;
   }
 }

@@ -60,12 +60,14 @@ export class BillingController {
       receiptMode,
       paymentAllocationRule,
       chefEtablissementNom,
+      importPaidStudentsEnabled,
     ] = await Promise.all([
       this.settingsService.getStudentMatriculeRule(),
       this.ecolesService.getCurrentSchoolName(),
       this.settingsService.getReceiptMode(schoolYearId),
       this.settingsService.getPaymentAllocationRule(schoolYearId),
       this.settingsService.getChefEtablissementNom(),
+      this.settingsService.getImportPaidStudentsEnabled(),
     ]);
     const categories = await this.expensesService.listCategories();
     const editCategory = editCategoryId
@@ -83,6 +85,7 @@ export class BillingController {
       receiptMode,
       paymentAllocationRule,
       chefEtablissementNom,
+      importPaidStudentsEnabled,
       matriculePreview: `${matriculeRule.prefix}${matriculeRule.separator}${String(matriculeRule.startAt).padStart(matriculeRule.padding, '0')}`,
       editCategory,
     };
@@ -238,6 +241,7 @@ export class BillingController {
       receiptMode,
       paymentAllocationRule,
       chefEtablissementNom,
+      importPaidStudentsEnabled,
       editFee,
     ] = await Promise.all([
       this.billingService.listFeeSchedules(schoolYearId),
@@ -248,6 +252,7 @@ export class BillingController {
       this.settingsService.getReceiptMode(schoolYearId),
       this.settingsService.getPaymentAllocationRule(schoolYearId),
       this.settingsService.getChefEtablissementNom(),
+      this.settingsService.getImportPaidStudentsEnabled(),
       this.billingService.findFeeScheduleById(id),
     ]);
 
@@ -262,6 +267,7 @@ export class BillingController {
       receiptMode,
       paymentAllocationRule,
       chefEtablissementNom,
+      importPaidStudentsEnabled,
       matriculePreview: `${matriculeRule.prefix}${matriculeRule.separator}${String(matriculeRule.startAt).padStart(matriculeRule.padding, '0')}`,
     };
   }

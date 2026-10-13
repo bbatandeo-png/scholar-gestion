@@ -1,5 +1,16 @@
 import { BadRequestException } from '@nestjs/common';
-import { EnrollmentsService } from './enrollments.service';
+import * as XLSX from 'xlsx';
+import {
+  EnrollmentsService,
+  ImportPaidStudentsReport,
+} from './enrollments.service';
+
+function buildExcelFile(rows: Array<Record<string, unknown>>): Buffer {
+  const sheet = XLSX.utils.json_to_sheet(rows);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, sheet, 'Sheet1');
+  return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+}
 
 describe('EnrollmentsService', () => {
   it('requiert un motif pour une modification financiere sensible', async () => {
@@ -279,5 +290,146 @@ describe('EnrollmentsService.updateFinancialDetails - registre des paiements', (
     expect(fakeDiscountOnly.auditService.log).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'discount_applied' }),
     );
+  });
+});
+
+describe('EnrollmentsService.importPaidStudents', () => {
+  // Off by default (SettingsService.getImportPaidStudentsEnabled) - this
+  // only tests the import mechanics themselves, not the toggle gate (that
+  // lives in EnrollmentsController, checked before this is ever called).
+  function buildFakeThis() {
+    const createEnrollment = jest
+      .fn()
+      .mockResolvedValue({ enrollmentId: 'enr-1', invoiceId: 'inv-1' });
+    const createPayment = jest.fn().mockResolvedValue({});
+    const create = jest.fn().mockResolvedValue({ _id: 'student-1' });
+    const fake = {
+      levelsService: {
+        listForSchoolYear: jest
+          .fn()
+          .mockResolvedValue([{ _id: 'level-cp1', label: 'CP1' }]),
+      },
+      studentsService: { create },
+      paymentsService: { createPayment },
+      // Bound as this.createEnrollment(...) inside the method under test -
+      // mocked directly rather than exercised for real, same convention as
+      // the reenrollStudent test above.
+      createEnrollment,
+    };
+    return { fake, create, createEnrollment, createPayment };
+  }
+
+  const run = (
+    fake: unknown,
+    buffer: Buffer,
+  ): Promise<ImportPaidStudentsReport> =>
+    EnrollmentsService.prototype.importPaidStudents.call(
+      fake,
+      buffer,
+      'year-1',
+      'user-1',
+    ) as Promise<ImportPaidStudentsReport>;
+
+  it('cree l eleve, l inscrit dans la classe trouvee par libelle et enregistre le montant paye tel quel', async () => {
+    const { fake, create, createEnrollment, createPayment } = buildFakeThis();
+    const buffer = buildExcelFile([
+      {
+        nom: 'DUPONT',
+        prenoms: 'Jean',
+        sexe: 'M',
+        date_naissance: '15/03/2015',
+        lieu_naissance: 'Lome',
+        quartier: 'Agoe',
+        classe: 'cp1',
+        montant_paye: 25000,
+        mode_paiement: 'cash',
+      },
+    ]);
+
+    const report = await run(fake, buffer);
+
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lastname: 'DUPONT',
+        firstname: 'Jean',
+        gender: 'M',
+        levelId: 'level-cp1',
+      }),
+    );
+    expect(createEnrollment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        studentId: 'student-1',
+        schoolYearId: 'year-1',
+        levelId: 'level-cp1',
+      }),
+      'user-1',
+    );
+    expect(createPayment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        invoiceId: 'inv-1',
+        amount: 25000,
+        method: 'cash',
+      }),
+      'user-1',
+    );
+    expect(report).toEqual({
+      created: 1,
+      paid: 1,
+      skipped: 0,
+      unknownClass: 0,
+      missingFields: 0,
+      invalidDate: 0,
+      creationFailed: 0,
+    });
+  });
+
+  it('ne cree ni n inscrit rien quand le montant paye est absent (0), classe une classe introuvable et des champs obligatoires manquants sans faire echouer le lot', async () => {
+    const { fake, create, createPayment } = buildFakeThis();
+    const buffer = buildExcelFile([
+      {
+        // Pas de montant_paye : eleve quand meme cree et inscrit, juste pas
+        // de paiement enregistre.
+        nom: 'SANS',
+        prenoms: 'Paiement',
+        sexe: 'F',
+        date_naissance: '10/01/2016',
+        lieu_naissance: 'Kara',
+        quartier: 'Centre',
+        classe: 'CP1',
+      },
+      {
+        // Classe absente du systeme -> ignoree, jamais de creation.
+        nom: 'MAUVAISE',
+        prenoms: 'Classe',
+        sexe: 'M',
+        date_naissance: '10/01/2016',
+        lieu_naissance: 'Kara',
+        quartier: 'Centre',
+        classe: 'TERMINALE-INCONNUE',
+      },
+      {
+        // lieu_naissance manquant -> ignoree.
+        nom: 'INCOMPLET',
+        prenoms: 'Dossier',
+        sexe: 'M',
+        date_naissance: '10/01/2016',
+        quartier: 'Centre',
+        classe: 'CP1',
+      },
+    ]);
+
+    const report = await run(fake, buffer);
+
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(createPayment).not.toHaveBeenCalled();
+    expect(report).toEqual({
+      created: 1,
+      paid: 0,
+      skipped: 2,
+      unknownClass: 1,
+      missingFields: 1,
+      invalidDate: 0,
+      creationFailed: 0,
+    });
   });
 });

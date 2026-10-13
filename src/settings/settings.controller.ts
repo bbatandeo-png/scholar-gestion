@@ -64,6 +64,11 @@ class UpdateChefEtablissementDto {
   value: string;
 }
 
+class UpdateImportPaidStudentsEnabledDto {
+  @IsEnum(['true', 'false'])
+  value: 'true' | 'false';
+}
+
 @Controller('/settings')
 @UseGuards(AuthenticatedGuard, RolesGuard)
 export class SettingsController {
@@ -123,6 +128,26 @@ export class SettingsController {
   ) {
     await this.settingsService.setChefEtablissementNom(dto.value);
     setFlash(req, 'success', 'Nom du chef d etablissement mis a jour');
+    return res.redirect('/settings/fees');
+  }
+
+  @Post('/import-paid-students')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION)
+  async updateImportPaidStudentsEnabled(
+    @Body() dto: UpdateImportPaidStudentsEnabledDto,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    await this.settingsService.setImportPaidStudentsEnabled(
+      dto.value === 'true',
+    );
+    setFlash(
+      req,
+      'success',
+      dto.value === 'true'
+        ? 'Import des eleves deja payes active'
+        : 'Import des eleves deja payes desactive',
+    );
     return res.redirect('/settings/fees');
   }
 

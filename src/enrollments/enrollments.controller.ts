@@ -11,7 +11,7 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
-import { ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { StudentsService } from '../students/students.service';
 import { LevelsService } from '../levels/levels.service';
@@ -25,6 +25,7 @@ import { ModuleGuard } from '../common/guards/module.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { setFlash } from '../common/utils/flash.util';
 import { buildExcelBuffer } from '../common/utils/excel.util';
+import { pickUploadedFile } from '../common/utils/multer.util';
 import { toDisplayString } from '../common/utils/safe-string.util';
 import { CreateEnrollmentDto } from './dto/create-enrollment.dto';
 import { UpdateEnrollmentDto } from './dto/update-enrollment.dto';
@@ -32,6 +33,7 @@ import { EnrollmentsService } from './enrollments.service';
 import { BillingService } from '../billing/billing.service';
 import { PaymentsService } from '../payments/payments.service';
 import { EcoleModulesService } from '../ecole-modules/ecole-modules.service';
+import { SettingsService } from '../settings/settings.service';
 import { SessionUser } from '../common/types/session-user.type';
 
 // NOTE: enrolling/updating a student is deliberately NOT gated by the
@@ -50,6 +52,7 @@ export class EnrollmentsController {
     private readonly billingService: BillingService,
     private readonly paymentsService: PaymentsService,
     private readonly ecoleModulesService: EcoleModulesService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   @Get()
@@ -109,6 +112,8 @@ export class EnrollmentsController {
       // Fees per level, so the form can show what this enrollment costs and
       // offer to pay it in the same step.
       feesByLevel: await this.getFeesByLevel(schoolYearId),
+      importPaidStudentsEnabled:
+        await this.settingsService.getImportPaidStudentsEnabled(),
       pagination: {
         page: result.page,
         pageSize: result.pageSize,
@@ -301,6 +306,105 @@ export class EnrollmentsController {
       );
       return res.redirect(`/enrollments/${result.enrollmentId}`);
     }
+  }
+
+  // Off by default (see SettingsService.getImportPaidStudentsEnabled) - a
+  // school opts in from /settings/fees before this route (and the panel
+  // offering it on /enrollments) does anything. The montant_paye column is
+  // recorded as-is, never recalculated against the fee schedule - meant for
+  // migrating records from an older system, not everyday enrollment.
+  @Get('/import-template')
+  @Roles(Role.SUPER_ADMIN, Role.SECRETARIAT)
+  importTemplate(@Res() res: Response) {
+    const buffer = buildExcelBuffer('Eleves_payes', [
+      {
+        matricule: '',
+        nom: 'DUPONT',
+        prenoms: 'Jean',
+        sexe: 'M',
+        date_naissance: '15/03/2015',
+        lieu_naissance: 'Lome',
+        quartier: 'Agoe',
+        classe: 'CP1',
+        montant_paye: 25000,
+        mode_paiement: 'cash',
+        reference: '',
+        nom_pere: 'DUPONT Pierre',
+        contact_pere: '90000000',
+        adresse_pere: 'Agoe',
+        nom_mere: 'DUPONT Marie',
+        contact_mere: '91000000',
+        adresse_mere: 'Agoe',
+      },
+    ]);
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="modele-import-eleves-payes.xlsx"',
+    );
+    return res.send(buffer);
+  }
+
+  @Post('/import')
+  @Roles(Role.SUPER_ADMIN, Role.SECRETARIAT)
+  async importPaidStudents(
+    @Req() req: Request,
+    @Res() res: Response,
+    @CurrentUser() user: SessionUser | undefined,
+  ) {
+    if (!(await this.settingsService.getImportPaidStudentsEnabled())) {
+      throw new ForbiddenException(
+        "L'import des eleves deja payes n'est pas active pour cette ecole",
+      );
+    }
+    const ecoleId = req.session?.user?.ecoleId;
+    if (
+      ecoleId &&
+      !(await this.ecoleModulesService.isActive(ecoleId, 'FINANCE'))
+    ) {
+      throw new ForbiddenException(
+        'Le module FINANCE est desactive pour cette ecole',
+      );
+    }
+    const file = pickUploadedFile(req, 'file');
+    if (!file?.buffer) {
+      throw new BadRequestException('Fichier Excel requis');
+    }
+
+    const openYear = await this.schoolYearsService.requireOpen();
+    const report = await this.enrollmentsService.importPaidStudents(
+      file.buffer,
+      String(openYear._id),
+      user?.id,
+    );
+
+    const reasons: string[] = [];
+    if (report.unknownClass) {
+      reasons.push(`${report.unknownClass} classe introuvable ou manquante`);
+    }
+    if (report.missingFields) {
+      reasons.push(
+        `${report.missingFields} champ(s) obligatoire(s) manquant(s)`,
+      );
+    }
+    if (report.invalidDate) {
+      reasons.push(`${report.invalidDate} date de naissance illisible`);
+    }
+    if (report.creationFailed) {
+      reasons.push(`${report.creationFailed} en echec (doublon probable)`);
+    }
+    const reasonSuffix = reasons.length ? ` (${reasons.join(', ')})` : '';
+
+    setFlash(
+      req,
+      'success',
+      `Import termine: ${report.created} eleve(s) inscrit(s), ${report.paid} paiement(s) enregistre(s), ${report.skipped} ignore(s)${reasonSuffix}`,
+    );
+    return res.redirect('/enrollments');
   }
 
   @Get('/:id')

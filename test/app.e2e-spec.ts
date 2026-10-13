@@ -3311,4 +3311,66 @@ describe('Scolar Gestion workflows (e2e)', () => {
         expect(noPeriode.text).not.toContain(`Matiere Stats ${unique}`);
       }));
   });
+
+  describe('import des eleves deja payes (parametre par ecole, off par defaut)', () => {
+    afterEach(() =>
+      runWithTenant({ ecoleId: TEST_DEFAULT_ECOLE_ID }, () =>
+        settingsService.setImportPaidStudentsEnabled(false),
+      ),
+    );
+
+    it("masque le panneau et refuse l'import tant que le parametre n'est pas active, puis l'affiche et laisse passer la requete une fois active", () =>
+      runWithTenant({ ecoleId: TEST_DEFAULT_ECOLE_ID }, async () => {
+        const unique = Date.now();
+        // GET /enrollments resout l'annee ouverte meme sans selection
+        // explicite - il en faut une, le beforeEach global ayant ferme
+        // celle des tests precedents.
+        const year = await schoolYearModel.create({
+          label: `IMPORT-PAYES-${unique}`,
+          startDate: new Date('2094-09-01'),
+          endDate: new Date('2095-06-30'),
+          status: SchoolYearStatus.OPEN,
+        });
+
+        await settingsService.setImportPaidStudentsEnabled(false);
+
+        const beforeIndex = await request(app.getHttpServer())
+          .get('/enrollments')
+          .set('x-test-role', 'secretariat');
+        expect(beforeIndex.status).toBe(200);
+        expect(beforeIndex.text).not.toContain(
+          'Importer des élèves déjà payés',
+        );
+
+        const beforeImport = await request(app.getHttpServer())
+          .post('/enrollments/import')
+          .set('x-test-role', 'secretariat')
+          .send({});
+        expect(beforeImport.status).toBe(403);
+
+        const toggleOn = await request(app.getHttpServer())
+          .post('/settings/import-paid-students')
+          .set('x-test-role', 'direction')
+          .send({ value: 'true' });
+        expect(toggleOn.status).toBe(302);
+        expect(await settingsService.getImportPaidStudentsEnabled()).toBe(true);
+
+        const afterIndex = await request(app.getHttpServer())
+          .get('/enrollments')
+          .set('x-test-role', 'secretariat');
+        expect(afterIndex.status).toBe(200);
+        expect(afterIndex.text).toContain('Importer des élèves déjà payés');
+
+        // Plus de 403 une fois active - la requete atteint maintenant le
+        // controle "fichier requis" (pas de multer en e2e, voir le
+        // commentaire plus haut sur les routes multipart non testees ici).
+        const afterImportNoFile = await request(app.getHttpServer())
+          .post('/enrollments/import')
+          .set('x-test-role', 'secretariat')
+          .send({});
+        expect(afterImportNoFile.status).toBe(400);
+
+        await schoolYearModel.deleteOne({ _id: year._id });
+      }));
+  });
 });

@@ -2,6 +2,21 @@
 {% import "partials/legend.njk" as legend %}
 {% block content %}
   <section class="enrollment-layout">
+    {% if importPaidStudentsEnabled and not schoolYearContext.isHistorical %}
+      <div class="panel import-paid-students-panel">
+        <h2>Importer des élèves déjà payés</h2>
+        <p class="muted">Pour une migration depuis un ancien système : crée l'élève, l'inscrit dans la classe indiquée et enregistre le montant déjà payé tel quel (sans recalcul par rapport au barème de frais). Activable/désactivable dans Paramètres.</p>
+        <div class="toolbar compact-actions">
+          <a class="button secondary btn-icon icon-export" href="/enrollments/import-template">Télécharger le modèle (Excel)</a>
+        </div>
+        <form method="post" action="/enrollments/import" enctype="multipart/form-data" class="toolbar compact-actions top-gap">
+          <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+          <input type="file" name="file" accept=".xlsx,.xls" required />
+          <button type="submit" class="button">Importer</button>
+        </form>
+      </div>
+    {% endif %}
+
     {% if not schoolYearContext.isHistorical %}<div class="panel">
       <h2 id="enrollFormTitle">Creer une inscription</h2>
       <p id="alreadyEnrolledNotice" class="notice notice-info" hidden></p>
