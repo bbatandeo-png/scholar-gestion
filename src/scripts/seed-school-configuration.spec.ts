@@ -8,12 +8,17 @@ import { FeeSchedule } from '../billing/schemas/fee-schedule.schema';
 import { ClassSubject } from '../bulletins/schemas/class-subject.schema';
 import { Subject } from '../bulletins/schemas/subject.schema';
 import { LevelCycle, SchoolYearStatus } from '../common/enums/domain.enums';
-import { runWithTenant } from '../common/tenant/tenant-context';
+import {
+  runAsPlatformAdmin,
+  runWithTenant,
+} from '../common/tenant/tenant-context';
+import { EcoleModulesService } from '../ecole-modules/ecole-modules.service';
 import { ExpenseCategory } from '../expenses/schemas/expense-category.schema';
 import { Level } from '../levels/schemas/level.schema';
 import { SchoolYear } from '../school-years/schemas/school-year.schema';
 import { SettingsService } from '../settings/settings.service';
 import {
+  ALL_MODULE_CODES,
   SCHOOL_EXPENSE_CATEGORIES,
   SCHOOL_LEVELS,
   SCHOOL_SUBJECTS,
@@ -176,5 +181,25 @@ describe('seedSchoolConfiguration', () => {
         SCHOOL_SUBJECTS.length,
       );
     });
+  }, 60000);
+
+  it('cree les niveaux et active tous les modules meme pour une ecole sans aucun utilisateur', async () => {
+    const ecoleId = new Types.ObjectId().toHexString();
+
+    const report = await seedSchoolConfiguration(app, {
+      ecoleId,
+      activateAllModules: true,
+    });
+
+    expect(report.levelsCreated).toBe(SCHOOL_LEVELS.length);
+    expect(report.modulesActivated).toEqual(ALL_MODULE_CODES);
+    const ecoleModulesService = app.get(EcoleModulesService);
+    for (const code of ALL_MODULE_CODES) {
+      expect(
+        await runAsPlatformAdmin(() =>
+          ecoleModulesService.isActive(ecoleId, code),
+        ),
+      ).toBe(true);
+    }
   }, 60000);
 });

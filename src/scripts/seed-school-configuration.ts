@@ -627,27 +627,16 @@ export async function seedSchoolConfiguration(
   // --- Modules ------------------------------------------------------------
   if (options.activateAllModules) {
     const actorId =
-      options.actorId ??
-      (await userModel
-        .findOne({ ecoleId, role: Role.SUPER_ADMIN })
-        .lean()
-        .exec()
-        .then((user) => (user ? String(user._id) : undefined)));
-    if (!actorId) {
-      console.warn(
-        'Aucun super administrateur pour cette ecole : modules non actives',
+      options.actorId ?? (await resolveModuleActorId(userModel, ecoleId));
+    for (const code of ALL_MODULE_CODES) {
+      const wasActive = await runAsPlatformAdmin(() =>
+        ecoleModulesService.isActive(ecoleId, code),
       );
-    } else {
-      for (const code of ALL_MODULE_CODES) {
-        const wasActive = await runAsPlatformAdmin(() =>
-          ecoleModulesService.isActive(ecoleId, code),
+      if (!wasActive) {
+        await runAsPlatformAdmin(() =>
+          ecoleModulesService.activate(ecoleId, code, actorId),
         );
-        if (!wasActive) {
-          await runAsPlatformAdmin(() =>
-            ecoleModulesService.activate(ecoleId, code, actorId),
-          );
-          report.modulesActivated.push(code);
-        }
+        report.modulesActivated.push(code);
       }
     }
   }
@@ -655,22 +644,102 @@ export async function seedSchoolConfiguration(
   return report;
 }
 
-// `npm run seed:demo` - applies the full configuration to an existing
-// ecole (DEMO_ECOLE_ID, or the oldest one, like seed.ts) and activates every
-// module so all screens can be shown.
+// EcoleModule.activePar is only an audit field - a school with no super
+// admin (e.g. created from /platform/ecoles before its first user) must
+// not block the demo. Falls back from the ecole's own super admin to any
+// of its users, then to a platform admin, then to a placeholder id.
+async function resolveModuleActorId(
+  userModel: Model<User>,
+  ecoleId: string,
+): Promise<string> {
+  const candidates = [
+    { ecoleId, role: Role.SUPER_ADMIN },
+    { ecoleId, role: Role.DIRECTION },
+    { ecoleId },
+    { role: Role.PLATFORM_ADMIN },
+  ];
+  for (const filter of candidates) {
+    const user = await userModel.findOne(filter).lean().exec();
+    if (user) {
+      return String(user._id);
+    }
+  }
+  console.warn(
+    'Aucun utilisateur trouve : modules actives sans auteur identifie',
+  );
+  return new Types.ObjectId().toHexString();
+}
+
+function readOption(name: string, envName: string): string | undefined {
+  const prefix = `--${name}=`;
+  const arg = process.argv.slice(2).find((a) => a.startsWith(prefix));
+  const value = arg ? arg.slice(prefix.length) : process.env[envName];
+  return value?.trim() || undefined;
+}
+
+// `npm run seed:demo[:prod] [-- --email=<login> | --ecole=<id>]` - applies
+// the full configuration to an existing ecole and activates every module
+// so all screens can be shown. Target ecole, in order: --ecole /
+// DEMO_ECOLE_ID, the ecole of the --email / DEMO_ADMIN_EMAIL user (the
+// login used for the demo - the least error-prone choice), the only ecole
+// if there is just one, else the oldest ecole that has users.
 export async function runSeedSchoolConfiguration() {
   const app = await NestFactory.createApplicationContext(AppModule);
   try {
     const ecoleModel = app.get<Model<Ecole>>(getModelToken(Ecole.name));
-    const requestedId = process.env.DEMO_ECOLE_ID;
-    const ecole = await runAsPlatformAdmin(() =>
-      requestedId && Types.ObjectId.isValid(requestedId)
-        ? ecoleModel.findById(requestedId).lean().exec()
-        : ecoleModel.findOne().sort({ dateInscription: 1 }).lean().exec(),
+    const userModel = app.get<Model<User>>(getModelToken(User.name));
+    const requestedId = readOption('ecole', 'DEMO_ECOLE_ID');
+    const requestedEmail = readOption('email', 'DEMO_ADMIN_EMAIL');
+
+    const ecoles = await runAsPlatformAdmin(() =>
+      ecoleModel.find().sort({ dateInscription: 1 }).lean().exec(),
     );
+    const userCounts = new Map<string, number>();
+    for (const ecole of ecoles) {
+      userCounts.set(
+        String(ecole._id),
+        await userModel.countDocuments({ ecoleId: ecole._id }),
+      );
+    }
+    console.log('Ecoles presentes :');
+    for (const ecole of ecoles) {
+      console.log(
+        `  - ${String(ecole._id)}  "${ecole.nom}"  (${userCounts.get(String(ecole._id))} utilisateur(s))`,
+      );
+    }
+
+    let ecole: (typeof ecoles)[number] | undefined;
+    if (requestedId) {
+      ecole = ecoles.find((e) => String(e._id) === requestedId);
+      if (!ecole) {
+        throw new Error(`Aucune ecole avec l'identifiant ${requestedId}`);
+      }
+    } else if (requestedEmail) {
+      const user = await userModel
+        .findOne({ email: requestedEmail.toLowerCase() })
+        .lean()
+        .exec();
+      if (!user?.ecoleId) {
+        throw new Error(
+          `Aucun utilisateur d'ecole avec l'email ${requestedEmail}`,
+        );
+      }
+      ecole = ecoles.find((e) => String(e._id) === String(user.ecoleId));
+    } else if (ecoles.length === 1) {
+      ecole = ecoles[0];
+    } else {
+      ecole =
+        ecoles.find((e) => (userCounts.get(String(e._id)) ?? 0) > 0) ??
+        ecoles[0];
+      if (ecoles.length > 1) {
+        console.warn(
+          'Plusieurs ecoles : preciser la cible avec -- --email=<email de connexion> ou -- --ecole=<id>',
+        );
+      }
+    }
     if (!ecole) {
       throw new Error(
-        "Aucune ecole trouvee - demarrer l'application une premiere fois (seed initial) ou verifier DEMO_ECOLE_ID",
+        "Aucune ecole trouvee - demarrer l'application une premiere fois (seed initial)",
       );
     }
 
@@ -679,7 +748,10 @@ export async function runSeedSchoolConfiguration() {
       activateAllModules: true,
       chefEtablissementNom: process.env.DEMO_CHEF_ETABLISSEMENT,
     });
-    console.log(`Parametrage applique a l'ecole "${ecole.nom}" :`, report);
+    console.log(
+      `Parametrage applique a l'ecole "${ecole.nom}" (${String(ecole._id)}) :`,
+      report,
+    );
   } finally {
     await app.close();
   }
