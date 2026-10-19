@@ -3,11 +3,8 @@ import * as bcrypt from 'bcryptjs';
 import { getModelToken } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { AppModule } from '../app.module';
-import { BillingService } from '../billing/billing.service';
-import { Level } from '../levels/schemas/level.schema';
 import {
   EcoleAccountStatus,
-  PaymentAllocationRule,
   Role,
   SchoolYearStatus,
 } from '../common/enums/domain.enums';
@@ -15,13 +12,13 @@ import { Ecole, EcoleDocument } from '../ecoles/schemas/ecole.schema';
 import { SchoolYear } from '../school-years/schemas/school-year.schema';
 import { SettingsService } from '../settings/settings.service';
 import { UsersService } from '../users/users.service';
-import { LevelsService } from '../levels/levels.service';
 import {
   runAsPlatformAdmin,
   runWithTenant,
 } from '../common/tenant/tenant-context';
 import { EcoleModulesService } from '../ecole-modules/ecole-modules.service';
 import { LicensingService } from '../licensing/licensing.service';
+import { seedSchoolConfiguration } from './seed-school-configuration';
 
 export function shouldRunSeed(env: NodeJS.ProcessEnv = process.env) {
   if (env.NODE_ENV === 'test') {
@@ -35,15 +32,12 @@ export async function runSeed() {
   const app = await NestFactory.createApplicationContext(AppModule);
   try {
     const usersService = app.get(UsersService);
-    const billingService = app.get(BillingService);
     const settingsService = app.get(SettingsService);
-    const levelsService = app.get(LevelsService);
     const ecoleModulesService = app.get(EcoleModulesService);
     const licensingService = app.get(LicensingService);
     const schoolYearModel = app.get<Model<SchoolYear>>(
       getModelToken(SchoolYear.name),
     );
-    const levelModel = app.get<Model<Level>>(getModelToken(Level.name));
     const ecoleModel = app.get<Model<EcoleDocument>>(getModelToken(Ecole.name));
 
     // Prefer whatever ecole already exists (e.g. the one created by
@@ -157,15 +151,24 @@ export async function runSeed() {
     // actually deleted.
     if (!existingEcole) {
       await runWithTenant({ ecoleId, bypass: false }, () =>
-        seedAcademicData({
-          ecoleId,
-          billingService,
-          settingsService,
-          levelsService,
-          schoolYearModel,
-          levelModel,
-        }),
+        seedSchoolYears(schoolYearModel),
       );
+    }
+
+    // Full school configuration (primaire/collège/lycée levels, fees,
+    // subjects and coefficients, expense categories, settings) - on the
+    // very first boot, or on demand with SEED_DEMO_DATA=true to fill an
+    // already-running install before a demo (every module gets activated
+    // too then). Additive only: never overwrites what the school already
+    // configured, so the flag is safe to leave on across restarts.
+    const seedDemoData = process.env.SEED_DEMO_DATA === 'true';
+    if (!existingEcole || seedDemoData) {
+      await seedSchoolConfiguration(app, {
+        ecoleId,
+        actorId: String(admin._id),
+        activateAllModules: seedDemoData,
+        chefEtablissementNom: process.env.DEMO_CHEF_ETABLISSEMENT,
+      });
     }
 
     console.log('Seed termine.');
@@ -174,22 +177,7 @@ export async function runSeed() {
   }
 }
 
-async function seedAcademicData(deps: {
-  ecoleId: string;
-  billingService: BillingService;
-  settingsService: SettingsService;
-  levelsService: LevelsService;
-  schoolYearModel: Model<SchoolYear>;
-  levelModel: Model<Level>;
-}) {
-  const {
-    billingService,
-    settingsService,
-    levelsService,
-    schoolYearModel,
-    levelModel,
-  } = deps;
-
+async function seedSchoolYears(schoolYearModel: Model<SchoolYear>) {
   const schoolYears = [
     {
       label: '2025-2026',
@@ -212,60 +200,6 @@ async function seedAcademicData(deps: {
       { upsert: true, new: true, setDefaultsOnInsert: true },
     );
   }
-
-  const levels = [
-    'CP1',
-    'CP2',
-    'CE1',
-    'CE2',
-    'CM1',
-    'CM2',
-    '6EME',
-    '5EME',
-    '4EME',
-    '3EME',
-    '2NDE',
-    '1ERE',
-    'TERMINALE',
-  ].map((code, index) => ({ code, label: code, sortOrder: index + 1 }));
-
-  for (const level of levels) {
-    await levelModel.findOneAndUpdate({ code: level.code }, level, {
-      upsert: true,
-      new: true,
-      setDefaultsOnInsert: true,
-    });
-  }
-
-  const openYear = await schoolYearModel
-    .findOne({ label: '2026-2027' })
-    .lean()
-    .exec();
-  const storedLevels = await levelModel
-    .find()
-    .sort({ sortOrder: 1 })
-    .lean()
-    .exec();
-  if (openYear) {
-    for (const level of storedLevels) {
-      await levelsService.enableForSchoolYear(
-        String(openYear._id),
-        String(level._id),
-      );
-      if (level.sortOrder <= 5) {
-        await billingService.upsertFeeSchedule({
-          schoolYearId: String(openYear._id),
-          levelId: String(level._id),
-          registrationFee: 25000 + level.sortOrder * 1000,
-          tuitionFee: 75000 + level.sortOrder * 5000,
-        });
-      }
-    }
-  }
-
-  await settingsService.setPaymentAllocationRule(
-    PaymentAllocationRule.ARREARS_FIRST,
-  );
 }
 
 if (require.main === module) {

@@ -17,6 +17,8 @@
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "seed": "ts-node --files -r tsconfig-paths/register src/scripts/seed.ts",
+    "seed:demo": "ts-node --files -r tsconfig-paths/register src/scripts/seed-school-configuration.ts",
+    "seed:demo:prod": "node dist/scripts/seed-school-configuration.js",
     "migrate:multi-year": "ts-node --files -r tsconfig-paths/register src/scripts/migrate-multi-year.ts",
     "migrate:add-ecole-id": "ts-node --files -r tsconfig-paths/register src/scripts/migrate-add-ecole-id.ts",
     "create:platform-admin": "ts-node --files -r tsconfig-paths/register src/scripts/create-platform-admin.ts",

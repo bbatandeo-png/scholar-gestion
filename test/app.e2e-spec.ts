@@ -48,6 +48,10 @@ import { EcoleModule as EcoleModuleModel } from '../src/ecole-modules/schemas/ec
 import { AuditLog } from '../src/audit/schemas/audit-log.schema';
 import { StockItem } from '../src/stock/schemas/stock-item.schema';
 import { Ecole } from '../src/ecoles/schemas/ecole.schema';
+import {
+  ALL_MODULE_CODES,
+  seedSchoolConfiguration,
+} from '../src/scripts/seed-school-configuration';
 
 describe('Scolar Gestion workflows (e2e)', () => {
   let repl: Awaited<ReturnType<typeof startMongoReplSet>>;
@@ -3372,5 +3376,79 @@ describe('Scolar Gestion workflows (e2e)', () => {
 
         await schoolYearModel.deleteOne({ _id: year._id });
       }));
+  });
+
+  describe('parametrage complet de demonstration (primaire, college, lycee)', () => {
+    it('remplit niveaux, frais, matieres, depenses et active les modules, visibles dans les ecrans de parametrage', async () => {
+      const ecoleModel = app.get<Model<Ecole>>(getModelToken(Ecole.name));
+      const ecole = await ecoleModel.create({
+        nom: `Ecole Demo ${Date.now()}`,
+        statutCompte: 'actif',
+        dateInscription: new Date(),
+      });
+      const ecoleId = String(ecole._id);
+
+      const report = await seedSchoolConfiguration(app, {
+        ecoleId,
+        actorId: TEST_DEFAULT_USER_ID,
+        activateAllModules: true,
+      });
+      expect(report.modulesActivated).toEqual(ALL_MODULE_CODES);
+
+      const levelsPage = await request(app.getHttpServer())
+        .get('/settings/levels')
+        .set('x-test-role', 'super_admin')
+        .set('x-test-ecole-id', ecoleId);
+      expect(levelsPage.status).toBe(200);
+      for (const label of [
+        'CP1',
+        'CM2',
+        '6ème',
+        '3ème',
+        'Seconde',
+        'Terminale',
+      ]) {
+        expect(levelsPage.text).toContain(label);
+      }
+
+      const feesPage = await request(app.getHttpServer())
+        .get('/settings/fees')
+        .set('x-test-role', 'super_admin')
+        .set('x-test-ecole-id', ecoleId);
+      expect(feesPage.status).toBe(200);
+      expect(feesPage.text).toContain('Salaires du personnel');
+
+      const { levelId, schoolYearId } = await runWithTenant(
+        { ecoleId },
+        async () => ({
+          levelId: String(
+            (await levelModel.findOne({ code: 'TERMINALE' }).lean())!._id,
+          ),
+          schoolYearId: String(
+            (await schoolYearModel
+              .findOne({ status: SchoolYearStatus.OPEN })
+              .lean())!._id,
+          ),
+        }),
+      );
+      const subjectsPage = await request(app.getHttpServer())
+        .get(
+          `/bulletins/matieres?schoolYearId=${schoolYearId}&levelId=${levelId}`,
+        )
+        .set('x-test-role', 'super_admin')
+        .set('x-test-ecole-id', ecoleId);
+      expect(subjectsPage.status).toBe(200);
+      expect(subjectsPage.text).toContain('Philosophie');
+
+      // Rejouer le seed ne touche a rien.
+      const replay = await seedSchoolConfiguration(app, {
+        ecoleId,
+        actorId: TEST_DEFAULT_USER_ID,
+        activateAllModules: true,
+      });
+      expect(replay.levelsCreated).toBe(0);
+      expect(replay.classSubjectsCreated).toBe(0);
+      expect(replay.modulesActivated).toEqual([]);
+    });
   });
 });
