@@ -1,0 +1,171 @@
+{% extends "layout.njk" %}
+{% block content %}
+<div class="panel">
+  <div class="panel-heading">
+    <div>
+      <h2>{{ session.levelId.label }} — {{ periodeLabels[session.periode] }} ({{ session.schoolYearId.label }})</h2>
+      <p class="muted">Saisie des notes matière par matière. Les notes enregistrées ici et celles importées depuis Excel se complètent.</p>
+    </div>
+    <a class="button secondary" href="/bulletins/{{ session._id }}">Retour à la session</a>
+  </div>
+
+  {% if readOnly %}
+    <div class="notice notice-info">Session validée : les notes sont consultables mais ne peuvent plus être modifiées.</div>
+  {% endif %}
+
+  {% if not subjects.length %}
+    <div class="notice notice-warning">
+      Aucune matière n'est configurée pour cette classe.
+      <a href="/bulletins/matieres?schoolYearId={{ session.schoolYearId._id }}&levelId={{ session.levelId._id }}">Configurer les matières et leurs coefficients</a>.
+    </div>
+  {% elif not students.length %}
+    <div class="notice notice-warning">
+      Aucun élève n'est inscrit dans cette classe pour cette année : inscrivez les élèves avant de saisir leurs notes.
+    </div>
+  {% else %}
+    <nav class="subject-tabs" aria-label="Matières de la classe">
+      {% for subject in subjects %}
+        <a href="/bulletins/{{ session._id }}/saisie?subjectId={{ subject.subjectId }}"
+           class="subject-tab {% if selected and subject.subjectId == selected.subjectId %}is-active{% endif %} {% if subject.filled == students.length %}is-complete{% endif %}"
+           {% if selected and subject.subjectId == selected.subjectId %}aria-current="page"{% endif %}>
+          <span class="subject-tab-label">{{ subject.label }}</span>
+          <span class="subject-tab-progress">{{ subject.filled }}/{{ students.length }}</span>
+        </a>
+      {% endfor %}
+    </nav>
+
+    <form method="post" action="/bulletins/{{ session._id }}/saisie" id="gradeEntryForm" class="stack">
+      <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+      <input type="hidden" name="subjectId" value="{{ selected.subjectId }}" />
+
+      <p class="muted">
+        <strong>{{ selected.label }}</strong> — coefficient {{ selected.coefficient }}{% if selected.teacherName %} — {{ selected.teacherName }}{% endif %}.
+        Notes de 0 à 20 ; laissez vide une note absente, elle est ignorée dans la moyenne. Touche Entrée : élève suivant.
+      </p>
+
+      <div class="table-shell">
+        <table class="table-report grade-entry-table">
+          <thead>
+            <tr>
+              <th class="num">N°</th>
+              <th>Élève</th>
+              <th>Matricule</th>
+              <th class="num">I1</th>
+              <th class="num">I2</th>
+              <th class="num">Devoir</th>
+              <th class="num">Compo</th>
+              <th class="num">Moy. classe</th>
+              <th class="num">Moy. période</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for student in students %}
+              <tr data-grade-row>
+                <td class="num">{{ loop.index }}</td>
+                <td>{{ student.name }}</td>
+                <td>{{ student.matricule }}</td>
+                {% for field, label in [['i1', 'I1'], ['i2', 'I2'], ['devoir', 'Devoir'], ['compo', 'Compo']] %}
+                  <td class="num">
+                    <input type="number" name="notes[{{ student.studentId }}][{{ field }}]"
+                           value="{{ student[field] if student[field] !== null }}"
+                           min="0" max="20" step="0.01" inputmode="decimal"
+                           data-field="{{ field }}" data-column="{{ loop.index0 }}"
+                           aria-label="{{ label }} — {{ student.name }}"
+                           {% if readOnly %}disabled{% endif %} />
+                  </td>
+                {% endfor %}
+                <td class="num" data-moy-classe>—</td>
+                <td class="num" data-moy-periode>—</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% if not readOnly %}
+        <div class="grade-entry-actions">
+          <button type="submit" class="button btn-icon icon-save">Enregistrer {{ selected.label }}</button>
+          {% if nextSubject %}
+            <button type="submit" class="button secondary" name="nextSubjectId" value="{{ nextSubject.subjectId }}">
+              Enregistrer et passer à {{ nextSubject.label }}
+            </button>
+          {% endif %}
+          <span class="muted" data-dirty-hint hidden>Modifications non enregistrées</span>
+        </div>
+      {% endif %}
+    </form>
+  {% endif %}
+</div>
+
+<script>
+  (() => {
+    const form = document.getElementById('gradeEntryForm');
+    if (!form) {
+      return;
+    }
+    // Apercu des moyennes, meme formule que la validation : moyenne de
+    // classe = moyenne des notes presentes parmi I1, I2, Devoir ; moyenne de
+    // periode = moyenne des presentes parmi (moyenne de classe, Compo).
+    const average = (values) => {
+      const present = values.filter((value) => value !== null);
+      return present.length
+        ? Math.round((present.reduce((sum, value) => sum + value, 0) / present.length) * 100) / 100
+        : null;
+    };
+    const read = (input) => {
+      const raw = input.value.trim().replace(',', '.');
+      if (raw === '') {
+        return null;
+      }
+      const value = Number(raw);
+      return Number.isFinite(value) && value >= 0 && value <= 20 ? value : null;
+    };
+    const format = (value) =>
+      value === null ? '—' : value.toLocaleString('fr-FR', { maximumFractionDigits: 2 });
+    const refresh = (row) => {
+      const get = (field) => read(row.querySelector(`[data-field="${field}"]`));
+      const moyClasse = average([get('i1'), get('i2'), get('devoir')]);
+      const moyPeriode = average([moyClasse, get('compo')]);
+      row.querySelector('[data-moy-classe]').textContent = format(moyClasse);
+      row.querySelector('[data-moy-periode]').textContent = format(moyPeriode);
+    };
+    const rows = Array.from(form.querySelectorAll('[data-grade-row]'));
+    rows.forEach(refresh);
+
+    let dirty = false;
+    const hint = form.querySelector('[data-dirty-hint]');
+    form.addEventListener('input', (event) => {
+      const row = event.target.closest('[data-grade-row]');
+      if (row) {
+        refresh(row);
+      }
+      dirty = true;
+      if (hint) {
+        hint.hidden = false;
+      }
+    });
+    form.addEventListener('submit', () => {
+      dirty = false;
+    });
+    window.addEventListener('beforeunload', (event) => {
+      if (dirty) {
+        event.preventDefault();
+        event.returnValue = '';
+      }
+    });
+
+    // Entree : meme colonne, eleve suivant (comme dans un tableur) au lieu
+    // d'envoyer le formulaire au milieu de la saisie.
+    form.addEventListener('keydown', (event) => {
+      const input = event.target;
+      if (event.key !== 'Enter' || !input.matches('input[data-column]')) {
+        return;
+      }
+      event.preventDefault();
+      const rowIndex = rows.indexOf(input.closest('[data-grade-row]'));
+      const next = rows[rowIndex + (event.shiftKey ? -1 : 1)];
+      next?.querySelector(`input[data-column="${input.dataset.column}"]`)?.focus();
+    });
+  })();
+</script>
+{% endblock %}

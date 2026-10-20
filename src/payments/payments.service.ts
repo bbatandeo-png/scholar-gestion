@@ -60,7 +60,7 @@ export class PaymentsService {
 
   async createPayment(dto: CreatePaymentDto, actorId?: string) {
     if (dto.amount <= 0) {
-      throw new BadRequestException('Le montant doit etre positif');
+      throw new BadRequestException('Le montant doit être positif');
     }
 
     return runWithMongoTransactionFallback(this.connection, async (session) => {
@@ -292,7 +292,7 @@ export class PaymentsService {
       .lean()
       .exec()) as ReceiptPaymentLean | null;
     if (!payment) {
-      throw new NotFoundException('Recu introuvable');
+      throw new NotFoundException('Reçu introuvable');
     }
     const enrollment = payment.invoiceId?.enrollmentId;
     if (enrollment) {
@@ -319,7 +319,7 @@ export class PaymentsService {
       .lean()
       .exec();
     if (!payment) {
-      throw new NotFoundException('Recu introuvable');
+      throw new NotFoundException('Reçu introuvable');
     }
     return String(payment.schoolYearId);
   }

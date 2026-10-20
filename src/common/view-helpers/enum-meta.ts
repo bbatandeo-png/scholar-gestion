@@ -7,6 +7,7 @@ import {
   EcoleAccountStatus,
   EnrollmentStatus,
   EnrollmentType,
+  FinalDecision,
   GuardianType,
   ImportRowMatchStatus,
   InvoiceStatus,
@@ -38,121 +39,121 @@ export const ENUM_META: Record<string, EnumMetaGroup> = {
   enrollmentType: {
     [EnrollmentType.INITIAL]: {
       label: 'Initiale',
-      description: "Premiere inscription de l'eleve dans l'etablissement.",
+      description: "Première inscription de l'élève dans l'établissement.",
     },
     [EnrollmentType.RE_ENROLLMENT]: {
-      label: 'Reinscription',
-      description: "L'eleve revient apres une annee sans inscription active.",
+      label: 'Réinscription',
+      description: "L'élève revient après une année sans inscription active.",
     },
     [EnrollmentType.PROMOTION]: {
       label: 'Promotion',
       description:
-        "L'eleve passe au niveau superieur apres validation de l'annee precedente.",
+        "L'élève passe au niveau supérieur après validation de l'année précédente.",
     },
     [EnrollmentType.REPEAT]: {
       label: 'Redoublement',
-      description: "L'eleve reprend le meme niveau l'annee suivante.",
+      description: "L'élève reprend le même niveau l'année suivante.",
     },
   },
   enrollmentStatus: {
     [EnrollmentStatus.DRAFT]: {
       label: 'Brouillon',
-      description: 'Inscription creee mais pas encore activee.',
+      description: 'Inscription créée mais pas encore activée.',
     },
     [EnrollmentStatus.ACTIVE]: {
       label: 'Active',
-      description: "L'eleve est actuellement inscrit sur cette annee/niveau.",
+      description: "L'élève est actuellement inscrit sur cette année/niveau.",
     },
     [EnrollmentStatus.CLOSED]: {
-      label: 'Cloturee',
-      description: "L'annee scolaire de cette inscription a ete cloturee.",
+      label: 'Clôturée',
+      description: "L'année scolaire de cette inscription a été clôturée.",
     },
     [EnrollmentStatus.ARCHIVED]: {
-      label: 'Archivee',
-      description: 'Inscription conservee a titre historique, non modifiable.',
+      label: 'Archivée',
+      description: 'Inscription conservée à titre historique, non modifiable.',
     },
   },
   studentStatus: {
     [StudentStatus.ACTIVE]: {
       label: 'Actif',
-      description: "L'eleve est actuellement scolarise dans l'etablissement.",
+      description: "L'élève est actuellement scolarisé dans l'établissement.",
     },
     [StudentStatus.ARCHIVED]: {
-      label: 'Archive',
-      description: "Dossier conserve mais l'eleve n'est plus scolarise ici.",
+      label: 'Archivé',
+      description: "Dossier conservé mais l'élève n'est plus scolarisé ici.",
     },
     [StudentStatus.TRANSFERRED]: {
-      label: 'Transfere',
-      description: "L'eleve a quitte l'etablissement pour un autre.",
+      label: 'Transféré',
+      description: "L'élève a quitté l'établissement pour un autre.",
     },
     [StudentStatus.LEFT]: {
       label: 'Parti',
-      description: "L'eleve a quitte l'etablissement (abandon, depart, etc.).",
+      description: "L'élève a quitté l'établissement (abandon, départ, etc.).",
     },
   },
   schoolYearStatus: {
     [SchoolYearStatus.DRAFT]: {
       label: 'Brouillon',
-      description: 'Annee scolaire preparee mais pas encore ouverte.',
+      description: 'Année scolaire préparée mais pas encore ouverte.',
     },
     [SchoolYearStatus.OPEN]: {
       label: 'Ouverte',
       description:
-        'Annee scolaire en cours : inscriptions et paiements actifs.',
+        'Année scolaire en cours : inscriptions et paiements actifs.',
     },
     [SchoolYearStatus.CLOSED]: {
-      label: 'Cloturee',
-      description: 'Annee terminee, plus aucune nouvelle operation.',
+      label: 'Clôturée',
+      description: 'Année terminée, plus aucune nouvelle opération.',
     },
     [SchoolYearStatus.ARCHIVED]: {
-      label: 'Archivee',
-      description: 'Annee ancienne conservee en lecture seule.',
+      label: 'Archivée',
+      description: 'Année ancienne conservée en lecture seule.',
     },
   },
   invoiceStatus: {
     [InvoiceStatus.UNPAID]: {
-      label: 'Impayee',
-      description: 'Aucun paiement enregistre sur cette facture.',
+      label: 'Impayée',
+      description: 'Aucun paiement enregistré sur cette facture.',
     },
     [InvoiceStatus.PARTIAL]: {
-      label: 'Partiellement payee',
-      description: 'Un paiement partiel a ete enregistre, un solde reste du.',
+      label: 'Partiellement payée',
+      description: 'Un paiement partiel a été enregistré, un solde reste dû.',
     },
     [InvoiceStatus.PAID]: {
-      label: 'Payee',
-      description: 'La facture est integralement soldee.',
+      label: 'Payée',
+      description: 'La facture est intégralement soldée.',
     },
   },
   arrearStatus: {
     [ArrearStatus.OPEN]: {
       label: 'Ouvert',
-      description: 'Impaye reporte, encore du en totalite.',
+      description: 'Impayé reporté, encore dû en totalité.',
     },
     [ArrearStatus.PARTIALLY_PAID]: {
-      label: 'Partiellement paye',
-      description: "Une partie de l'impaye a ete reglee.",
+      label: 'Partiellement payé',
+      description: "Une partie de l'impayé a été réglée.",
     },
     [ArrearStatus.PAID]: {
-      label: 'Solde',
-      description: "L'impaye a ete integralement regle.",
+      label: 'Soldé',
+      description: "L'impayé a été intégralement réglé.",
     },
     [ArrearStatus.CANCELLED]: {
-      label: 'Annule',
-      description: "L'impaye a ete annule (abandon de creance, etc.).",
+      label: 'Annulé',
+      description: "L'impayé a été annulé (abandon de créance, etc.).",
     },
   },
   ecoleAccountStatus: {
     [EcoleAccountStatus.ESSAI]: {
       label: 'Essai',
-      description: "Periode d'essai gratuite, acces limite dans le temps.",
+      description: "Période d'essai gratuite, accès limité dans le temps.",
     },
     [EcoleAccountStatus.ACTIF]: {
       label: 'Actif',
-      description: 'Abonnement actif, acces complet a la plateforme.',
+      description: 'Abonnement actif, accès complet à la plateforme.',
     },
     [EcoleAccountStatus.SUSPENDU]: {
       label: 'Suspendu',
-      description: 'Acces suspendu (impaye, decision administrative).',
+      description: 'Accès suspendu (impayé, décision administrative).',
     },
   },
   userStatus: {
@@ -161,112 +162,112 @@ export const ENUM_META: Record<string, EnumMetaGroup> = {
       description: 'Le compte peut se connecter normalement.',
     },
     [UserStatus.DISABLED]: {
-      label: 'Desactive',
+      label: 'Désactivé',
       description: 'Le compte ne peut plus se connecter.',
     },
   },
   bulletinSessionStatus: {
     [BulletinSessionStatus.DRAFT]: {
       label: 'Brouillon',
-      description: "Session creee, aucun fichier importe pour l'instant.",
+      description: "Session créée, aucun fichier importé pour l'instant.",
     },
     [BulletinSessionStatus.IMPORTED]: {
-      label: 'Importee',
-      description: 'Fichier importe, rapprochement pas encore verifie.',
+      label: 'Importée',
+      description: 'Fichier importé, rapprochement pas encore vérifié.',
     },
     [BulletinSessionStatus.PENDING_REVIEW]: {
-      label: 'A verifier',
+      label: 'À vérifier',
       description:
-        'Des eleves ou matieres restent a rapprocher/approuver avant validation.',
+        'Des élèves ou matières restent à rapprocher/approuver avant validation.',
     },
     [BulletinSessionStatus.READY]: {
-      label: 'Prete',
-      description: 'Tout est rapproche et approuve, prete a etre validee.',
+      label: 'Prête',
+      description: 'Tout est rapproché et approuvé, prête à être validée.',
     },
     [BulletinSessionStatus.VALIDATED]: {
-      label: 'Validee',
-      description: 'Notes enregistrees definitivement pour cette periode.',
+      label: 'Validée',
+      description: 'Notes enregistrées définitivement pour cette période.',
     },
   },
   periode: {
     [Periode.TRIMESTRE_1]: {
       label: '1er trimestre',
-      description: "Premier trimestre de l'annee scolaire.",
+      description: "Premier trimestre de l'année scolaire.",
     },
     [Periode.TRIMESTRE_2]: {
       label: '2e trimestre',
-      description: "Deuxieme trimestre de l'annee scolaire.",
+      description: "Deuxième trimestre de l'année scolaire.",
     },
     [Periode.TRIMESTRE_3]: {
       label: '3e trimestre',
-      description: "Troisieme trimestre de l'annee scolaire.",
+      description: "Troisième trimestre de l'année scolaire.",
     },
     [Periode.SEMESTRE_1]: {
       label: '1er semestre',
-      description: "Premier semestre de l'annee scolaire.",
+      description: "Premier semestre de l'année scolaire.",
     },
     [Periode.SEMESTRE_2]: {
       label: '2e semestre',
-      description: "Deuxieme semestre de l'annee scolaire.",
+      description: "Deuxième semestre de l'année scolaire.",
     },
   },
   importRowMatchStatus: {
     [ImportRowMatchStatus.MATCHED]: {
-      label: 'Rapproche',
+      label: 'Rapproché',
       description:
-        'La ligne du fichier correspond a un eleve identifie avec certitude.',
+        'La ligne du fichier correspond à un élève identifié avec certitude.',
     },
     [ImportRowMatchStatus.SUGGESTED]: {
       label: 'Suggestion',
       description:
-        'Des eleves proches ont ete trouves, a confirmer manuellement.',
+        'Des élèves proches ont été trouvés, à confirmer manuellement.',
     },
     [ImportRowMatchStatus.AMBIGUOUS]: {
       label: 'Ambigu',
       description:
-        'Plusieurs eleves correspondent, un choix manuel est necessaire.',
+        'Plusieurs élèves correspondent, un choix manuel est nécessaire.',
     },
     [ImportRowMatchStatus.UNRESOLVED]: {
-      label: 'Non resolu',
-      description: 'Aucun eleve correspondant trouve dans la classe.',
+      label: 'Non résolu',
+      description: 'Aucun élève correspondant trouvé dans la classe.',
     },
   },
   bulletinImportMode: {
     [BulletinImportMode.PREMIER_IMPORT]: {
       label: 'Premier import',
       description:
-        'Aucune donnee existante pour cette session : import initial.',
+        'Aucune donnée existante pour cette session : import initial.',
     },
     [BulletinImportMode.ECRASER]: {
-      label: 'Ecraser',
+      label: 'Écraser',
       description:
-        'Remplace entierement les notes deja importees par le nouveau fichier.',
+        'Remplace entièrement les notes déjà importées par le nouveau fichier.',
     },
     [BulletinImportMode.FUSIONNER]: {
       label: 'Fusionner',
       description:
-        'Complete les notes existantes sans effacer ce qui est deja rapproche.',
+        'Complète les notes existantes sans effacer ce qui est déjà rapproché.',
     },
   },
   bulletinStudentMatchingMode: {
     [BulletinStudentMatchingMode.RECONCILE]: {
       label: 'Rapprochement',
       description:
-        'Chaque ligne du fichier est associee a un eleve deja inscrit.',
+        'Chaque ligne du fichier est associée à un élève déjà inscrit.',
     },
     [BulletinStudentMatchingMode.AUTO_CREATE]: {
-      label: 'Creation automatique',
+      label: 'Création automatique',
       description:
-        'Chaque ligne du fichier cree un nouvel eleve et une nouvelle inscription, sans rapprochement.',
+        'Chaque ligne du fichier crée un nouvel élève et une nouvelle inscription, sans rapprochement.',
     },
   },
   guardianType: {
-    [GuardianType.FATHER]: { label: 'Pere', description: '' },
-    [GuardianType.MOTHER]: { label: 'Mere', description: '' },
+    [GuardianType.FATHER]: { label: 'Père', description: '' },
+    [GuardianType.MOTHER]: { label: 'Mère', description: '' },
     [GuardianType.TUTOR]: { label: 'Tuteur', description: '' },
   },
   paymentMethod: {
-    [PaymentMethod.CASH]: { label: 'Especes', description: '' },
+    [PaymentMethod.CASH]: { label: 'Espèces', description: '' },
     [PaymentMethod.MOBILE_MONEY]: { label: 'Mobile Money', description: '' },
     [PaymentMethod.BANK_TRANSFER]: {
       label: 'Virement bancaire',
@@ -275,14 +276,38 @@ export const ENUM_META: Record<string, EnumMetaGroup> = {
     [PaymentMethod.OTHER]: { label: 'Autre', description: '' },
   },
   subjectCategory: {
-    [SubjectCategory.LITTERAIRE]: { label: 'Litteraire', description: '' },
+    [SubjectCategory.LITTERAIRE]: { label: 'Littéraire', description: '' },
     [SubjectCategory.SCIENTIFIQUE]: { label: 'Scientifique', description: '' },
     [SubjectCategory.AUTRE]: { label: 'Autre', description: '' },
+  },
+  // Decisions de fin d'annee (passage annuel). PENDING n'est jamais proposee :
+  // c'est l'etat d'attente avant la validation.
+  finalDecision: {
+    [FinalDecision.PROMOTED]: {
+      label: 'Admis',
+      description: 'Passe dans la classe supérieure (niveau cible).',
+    },
+    [FinalDecision.REPEATED]: {
+      label: 'Redouble',
+      description: 'Reste dans la même classe l’année suivante.',
+    },
+    [FinalDecision.TRANSFERRED]: {
+      label: 'Transféré',
+      description: 'Part dans un autre établissement à sa demande.',
+    },
+    [FinalDecision.LEFT]: {
+      label: 'Quitte l’école',
+      description: 'Arrête sa scolarité dans l’école (abandon, déménagement…).',
+    },
+    [FinalDecision.ARCHIVED]: {
+      label: 'Archivé',
+      description: 'Dossier clôturé et conservé, sans réinscription.',
+    },
   },
   disciplineRecordType: {
     [DisciplineRecordType.AVERTISSEMENT]: {
       label: 'Avertissement',
-      description: 'Rappel a l ordre consigne au dossier, sans sanction.',
+      description: "Rappel à l'ordre consigné au dossier, sans sanction.",
     },
     [DisciplineRecordType.SANCTION]: {
       label: 'Sanction',
@@ -290,18 +315,18 @@ export const ENUM_META: Record<string, EnumMetaGroup> = {
     },
     [DisciplineRecordType.CONVOCATION]: {
       label: 'Convocation',
-      description: 'Convocation de l eleve et/ou de ses responsables.',
+      description: "Convocation de l'élève et/ou de ses responsables.",
     },
   },
   stockCategory: {
     [StockCategory.PEDAGOGIQUE]: {
       label: 'Pédagogique',
-      description: 'Materiel utilise en classe (fournitures, manuels, etc.).',
+      description: 'Matériel utilisé en classe (fournitures, manuels, etc.).',
     },
     [StockCategory.ADMINISTRATIF]: {
       label: 'Administratif',
       description:
-        'Materiel de bureau et de fonctionnement de l etablissement.',
+        "Matériel de bureau et de fonctionnement de l'établissement.",
     },
     [StockCategory.AUTRE]: { label: 'Autre', description: '' },
   },
@@ -319,15 +344,15 @@ export const ENUM_META: Record<string, EnumMetaGroup> = {
     [TeacherStatus.ACTIF]: {
       label: 'Actif',
       description:
-        "L'enseignant est actuellement en poste dans l'etablissement.",
+        "L'enseignant est actuellement en poste dans l'établissement.",
     },
     [TeacherStatus.INACTIF]: {
       label: 'Inactif',
-      description: 'Dossier conserve mais sans poste actif actuellement.',
+      description: 'Dossier conservé mais sans poste actif actuellement.',
     },
     [TeacherStatus.DEPART]: {
-      label: 'Depart',
-      description: "L'enseignant a quitte l'etablissement.",
+      label: 'Départ',
+      description: "L'enseignant a quitté l'établissement.",
     },
   },
   teacherContractType: {
@@ -342,12 +367,12 @@ export const ENUM_META: Record<string, EnumMetaGroup> = {
       description: 'Contrat en cours.',
     },
     [TeacherContractStatus.EXPIRE]: {
-      label: 'Expire',
-      description: 'La date de fin du contrat est depassee.',
+      label: 'Expiré',
+      description: 'La date de fin du contrat est dépassée.',
     },
     [TeacherContractStatus.RESILIE]: {
-      label: 'Resilie',
-      description: 'Contrat interrompu avant son terme prevu.',
+      label: 'Résilié',
+      description: 'Contrat interrompu avant son terme prévu.',
     },
   },
   teacherTrackingType: {
@@ -356,32 +381,32 @@ export const ENUM_META: Record<string, EnumMetaGroup> = {
       label: 'Observation',
       description: '',
     },
-    [TeacherTrackingType.EVALUATION]: { label: 'Evaluation', description: '' },
+    [TeacherTrackingType.EVALUATION]: { label: 'Évaluation', description: '' },
   },
   role: {
     [Role.PLATFORM_ADMIN]: {
       label: 'Administrateur plateforme',
-      description: 'Gere toutes les ecoles clientes de la plateforme.',
+      description: 'Gère toutes les écoles clientes de la plateforme.',
     },
     [Role.SUPER_ADMIN]: {
       label: 'Super administrateur',
-      description: "Controle total de l'application pour cette ecole.",
+      description: "Contrôle total de l'application pour cette école.",
     },
     [Role.DIRECTION]: {
       label: 'Direction',
-      description: 'Pilotage pedagogique et administratif.',
+      description: 'Pilotage pédagogique et administratif.',
     },
     [Role.SECRETARIAT]: {
-      label: 'Secretariat',
-      description: 'Gestion operationnelle des dossiers scolaires.',
+      label: 'Secrétariat',
+      description: 'Gestion opérationnelle des dossiers scolaires.',
     },
     [Role.COMPTABILITE]: {
-      label: 'Comptabilite',
-      description: 'Gestion financiere et suivi des reglements.',
+      label: 'Comptabilité',
+      description: 'Gestion financière et suivi des règlements.',
     },
     [Role.AUDITEUR]: {
       label: 'Auditeur',
-      description: 'Consultation et controle sans operations sensibles.',
+      description: 'Consultation et contrôle sans opérations sensibles.',
     },
   },
 };

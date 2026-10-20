@@ -11,23 +11,23 @@
     <div class="report-metrics">
       <article class="report-metric">
         <span>Frais courants encaissés</span>
-        <strong>{{ report.currentFeesCollected or 0 }}</strong>
+        <strong>{{ (report.currentFeesCollected or 0) | money }}</strong>
       </article>
       <article class="report-metric">
         <span>Impayés encaissés</span>
-        <strong>{{ report.arrearsCollected or 0 }}</strong>
+        <strong>{{ (report.arrearsCollected or 0) | money }}</strong>
       </article>
       <article class="report-metric">
         <span>Encaisse</span>
-        <strong>{{ report.collected }}</strong>
+        <strong>{{ report.collected | money }}</strong>
       </article>
       <article class="report-metric">
         <span>Reste a encaisser</span>
-        <strong>{{ report.outstanding }}</strong>
+        <strong>{{ report.outstanding | money }}</strong>
       </article>
       <article class="report-metric">
         <span>Total attendu</span>
-        <strong>{{ report.totalDue }}</strong>
+        <strong>{{ report.totalDue | money }}</strong>
       </article>
     </div>
   </section>

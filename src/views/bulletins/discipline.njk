@@ -4,7 +4,7 @@
   <div class="panel-heading">
     <div>
       <h2>Discipline — {{ session.levelId.label }} — {{ periodeLabels[session.periode] }}</h2>
-      <p class="muted">Retards, absences, exclusion et decision du conseil des profs, par eleve — a renseigner avant la validation de la session.</p>
+      <p class="muted">Retards, absences, exclusion et décision du conseil des profs, par élève — à renseigner avant la validation de la session.</p>
     </div>
     <a class="button secondary" href="/bulletins/{{ session._id }}">Retour a la session</a>
   </div>
@@ -14,11 +14,11 @@
       <thead>
         <tr>
           <th>N°</th>
-          <th>Eleve</th>
+          <th>Élève</th>
           <th>Retards (fois)</th>
           <th>Absences (heures)</th>
           <th>Exclusion</th>
-          <th>Decision du conseil</th>
+          <th>Décision du conseil</th>
           <th></th>
         </tr>
       </thead>
@@ -35,7 +35,7 @@
             <td><button type="submit" class="btn-sm" form="{{ formId }}">Enregistrer</button></td>
           </tr>
         {% else %}
-          <tr><td colspan="7">Aucun eleve rapproche pour l'instant.</td></tr>
+          <tr><td colspan="7">Aucun élève rapproché pour l'instant.</td></tr>
         {% endfor %}
       </tbody>
     </table>

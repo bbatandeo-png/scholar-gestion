@@ -49,7 +49,7 @@ export class SchoolYearsService {
   async requireOpen() {
     const year = await this.findOpen();
     if (!year) {
-      throw new BadRequestException('Aucune annee scolaire ouverte');
+      throw new BadRequestException('Aucune année scolaire ouverte');
     }
     return year;
   }
@@ -68,7 +68,7 @@ export class SchoolYearsService {
     const open = await this.requireOpen();
     if (String(open._id) !== String(schoolYearId)) {
       throw new BadRequestException(
-        'Une annee historique est disponible en lecture seule',
+        'Une année historique est disponible en lecture seule',
       );
     }
     return open;
@@ -88,7 +88,7 @@ export class SchoolYearsService {
             .session(session ?? null)
             .exec();
           if (!target) {
-            throw new NotFoundException('Annee scolaire introuvable');
+            throw new NotFoundException('Année scolaire introuvable');
           }
           const currentOpen = await this.schoolYearModel
             .findOne({
@@ -99,7 +99,7 @@ export class SchoolYearsService {
             .exec();
           if (currentOpen) {
             throw new BadRequestException(
-              `Cloturez d abord l annee ${currentOpen.label} avant d activer une autre annee`,
+              `Clôturez d’abord l’année ${currentOpen.label} avant d’activer une autre année`,
             );
           }
           target.status = SchoolYearStatus.OPEN;
@@ -110,7 +110,7 @@ export class SchoolYearsService {
 
     const target = await this.schoolYearModel.findById(id).exec();
     if (!target) {
-      throw new NotFoundException('Annee scolaire introuvable');
+      throw new NotFoundException('Année scolaire introuvable');
     }
     target.status = status;
     return target.save();

@@ -63,7 +63,7 @@ export class PlatformFacturationController {
     await runScopedAsEcole(ecoleId, () =>
       this.facturationService.changeParametre(dto),
     );
-    setFlash(req, 'success', 'Parametre de facturation mis a jour');
+    setFlash(req, 'success', 'Paramètre de facturation mis à jour');
     return res.redirect(`/platform/facturation/${ecoleId}`);
   }
 
@@ -78,14 +78,14 @@ export class PlatformFacturationController {
       await runScopedAsEcole(ecoleId, () =>
         this.facturationService.genererFacture(dto),
       );
-      setFlash(req, 'success', 'Facture generee');
+      setFlash(req, 'success', 'Facture générée');
     } catch (error) {
       setFlash(
         req,
         'error',
         error instanceof Error
           ? error.message
-          : 'Impossible de generer la facture',
+          : 'Impossible de générer la facture',
       );
     }
     return res.redirect(`/platform/facturation/${ecoleId}`);

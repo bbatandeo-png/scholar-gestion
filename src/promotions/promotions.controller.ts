@@ -16,7 +16,7 @@ import { LevelsService } from '../levels/levels.service';
 import { SchoolYearsService } from '../school-years/school-years.service';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { Role } from '../common/enums/domain.enums';
+import { FinalDecision, Role } from '../common/enums/domain.enums';
 import { AuthenticatedGuard } from '../common/guards/authenticated.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { pickRowValue, readExcelRows } from '../common/utils/excel.util';
@@ -33,6 +33,43 @@ import { toDisplayString } from '../common/utils/safe-string.util';
 // inside PromotionsService.validate() itself instead (see that file), since
 // this controller's other routes (index, prepare) are core academic-year
 // functionality with no direct financial write of their own.
+// The Excel file is filled by the school in French ("Admis", "Redouble"…);
+// the English codes stay accepted for files prepared before.
+const DECISION_ALIASES: Record<string, FinalDecision> = {
+  admis: FinalDecision.PROMOTED,
+  admise: FinalDecision.PROMOTED,
+  promu: FinalDecision.PROMOTED,
+  passe: FinalDecision.PROMOTED,
+  redouble: FinalDecision.REPEATED,
+  redoublant: FinalDecision.REPEATED,
+  redoublante: FinalDecision.REPEATED,
+  transfere: FinalDecision.TRANSFERRED,
+  transferee: FinalDecision.TRANSFERRED,
+  'quitte l ecole': FinalDecision.LEFT,
+  quitte: FinalDecision.LEFT,
+  depart: FinalDecision.LEFT,
+  archive: FinalDecision.ARCHIVED,
+  archivee: FinalDecision.ARCHIVED,
+};
+
+export function parseDecision(raw: string): FinalDecision | '' {
+  const key = raw
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[’'_-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!key) return '';
+  const code = Object.values(FinalDecision).find(
+    (value) => String(value) === key,
+  );
+  if (code) {
+    return code === FinalDecision.PENDING ? '' : code;
+  }
+  return DECISION_ALIASES[key] ?? '';
+}
+
 @Controller('/promotions')
 @UseGuards(AuthenticatedGuard, RolesGuard)
 export class PromotionsController {
@@ -61,7 +98,7 @@ export class PromotionsController {
   @Render('promotions/prepare')
   async prepare(@Body() dto: PreparePromotionsDto) {
     return {
-      title: 'Preparation promotion',
+      title: 'Préparation de la promotion',
       schoolYears: await this.schoolYearsService.list(),
       levels: await this.levelsService.list(),
       sourceSchoolYearId: dto.sourceSchoolYearId,
@@ -112,7 +149,7 @@ export class PromotionsController {
         'matricule',
         'code_eleve',
       ]).toLowerCase();
-      const decision = pickRowValue(row, ['decision']).toLowerCase();
+      const decision = parseDecision(pickRowValue(row, ['decision']));
       const targetLevel = pickRowValue(row, [
         'niveau_cible',
         'target_level',
@@ -146,7 +183,7 @@ export class PromotionsController {
     });
 
     return {
-      title: 'Preparation promotion',
+      title: 'Préparation de la promotion',
       schoolYears,
       levels,
       sourceSchoolYearId: dto.sourceSchoolYearId,
@@ -166,7 +203,7 @@ export class PromotionsController {
   ) {
     await this.promotionsService.validate(dto, user?.id);
     req.session.selectedSchoolYearId = dto.targetSchoolYearId;
-    setFlash(req, 'success', 'Promotion terminee et nouvelle annee activee');
+    setFlash(req, 'success', 'Promotion terminée et nouvelle année activée');
     return res.redirect('/dashboard');
   }
 }

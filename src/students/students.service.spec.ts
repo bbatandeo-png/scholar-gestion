@@ -314,7 +314,7 @@ describe('StudentsService.create', () => {
     };
 
     await expect(service.create(dto)).rejects.toThrow(
-      'Un dossier eleve existe deja',
+      'Un dossier élève existe déjà',
     );
   });
 });
@@ -384,7 +384,7 @@ describe('StudentsService.update', () => {
     const { service, updateMany } = buildUpdateService(null);
 
     await expect(service.update('missing', {})).rejects.toThrow(
-      'Eleve introuvable',
+      'Élève introuvable',
     );
     expect(updateMany).not.toHaveBeenCalled();
   });

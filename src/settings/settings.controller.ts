@@ -90,7 +90,7 @@ export class SettingsController {
       dto.value,
       String(year._id),
     );
-    setFlash(req, 'success', 'Regle d imputation mise a jour');
+    setFlash(req, 'success', 'Regle d imputation mise à jour');
     return res.redirect('/settings/fees');
   }
 
@@ -102,7 +102,7 @@ export class SettingsController {
     @Res() res: Response,
   ) {
     await this.settingsService.setStudentMatriculeRule(dto);
-    setFlash(req, 'success', 'Parametrage du matricule mis a jour');
+    setFlash(req, 'success', 'Parametrage du matricule mis à jour');
     return res.redirect('/settings/fees');
   }
 
@@ -115,7 +115,7 @@ export class SettingsController {
   ) {
     const year = await this.schoolYearsService.requireOpen();
     await this.settingsService.setReceiptMode(dto.value, String(year._id));
-    setFlash(req, 'success', 'Mode de recu mis a jour');
+    setFlash(req, 'success', 'Mode de reçu mis à jour');
     return res.redirect('/settings/fees');
   }
 
@@ -127,7 +127,7 @@ export class SettingsController {
     @Res() res: Response,
   ) {
     await this.settingsService.setChefEtablissementNom(dto.value);
-    setFlash(req, 'success', 'Nom du chef d etablissement mis a jour');
+    setFlash(req, 'success', 'Nom du chef d’établissement mis à jour');
     return res.redirect('/settings/fees');
   }
 
@@ -145,8 +145,8 @@ export class SettingsController {
       req,
       'success',
       dto.value === 'true'
-        ? 'Import des eleves deja payes active'
-        : 'Import des eleves deja payes desactive',
+        ? 'Import des élèves déjà payés activé'
+        : 'Import des élèves déjà payés désactivé',
     );
     return res.redirect('/settings/fees');
   }
@@ -160,10 +160,10 @@ export class SettingsController {
     @CurrentEcole() ecoleId: string | null,
   ) {
     if (!ecoleId) {
-      throw new BadRequestException('Aucune ecole associee a ce compte');
+      throw new BadRequestException('Aucune école associée à ce compte');
     }
     await this.ecolesService.update(ecoleId, { nom: dto.name });
-    setFlash(req, 'success', 'Nom de l école mis a jour');
+    setFlash(req, 'success', 'Nom de l école mis à jour');
     return res.redirect('/settings/fees');
   }
 }

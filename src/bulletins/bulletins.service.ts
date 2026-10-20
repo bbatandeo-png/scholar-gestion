@@ -8,7 +8,9 @@ import { Connection, Model, Types } from 'mongoose';
 import * as fs from 'fs';
 import * as path from 'path';
 import PDFDocument from 'pdfkit';
+import ExcelJS from 'exceljs';
 import { EcolesService } from '../ecoles/ecoles.service';
+import { SettingsService } from '../settings/settings.service';
 import {
   AuditAction,
   BulletinImportMode,
@@ -36,6 +38,7 @@ import { StudentsService } from '../students/students.service';
 import {
   diceCoefficient,
   normalizeLabel,
+  DISCIPLINE_HEADERS,
   parseBulletinWorkbook,
   splitNameForMatching,
   type ParsedIdentityRow,
@@ -74,12 +77,22 @@ import {
 import { Note, NoteDocument } from './schemas/note.schema';
 import { Subject, SubjectDocument } from './schemas/subject.schema';
 
+// Date sans heure ecrite dans un fichier Excel : a midi UTC. Excel ne garde
+// pas de fuseau, et une date a minuit peut basculer la veille a la relecture
+// selon le fuseau de la machine (date du conseil decalee d'un jour).
+function middayUtc(date: Date): Date {
+  return new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 12),
+  );
+}
+
 type RosterEntry = {
   enrollmentId: string;
   studentId: string;
   matricule: string;
   lastname: string;
   firstname: string;
+  gender?: string;
 };
 
 type RowMatch = {
@@ -129,6 +142,7 @@ export class BulletinsService {
     private readonly auditService: AuditService,
     private readonly studentsService: StudentsService,
     private readonly ecolesService: EcolesService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   async listSessions() {
@@ -161,13 +175,13 @@ export class BulletinsService {
     }
     if (!level.cycle) {
       throw new BadRequestException(
-        'Le cycle de cette classe (college ou lycee) doit etre configure dans les parametres avant de creer une session de bulletins',
+        'Le cycle de cette classe (collège ou lycée) doit être configuré dans les paramètres avant de créer une session de bulletins',
       );
     }
     const allowedPeriodes = PERIODES_BY_CYCLE[level.cycle];
     if (!allowedPeriodes.includes(dto.periode)) {
       throw new BadRequestException(
-        'Periode invalide pour le cycle de cette classe',
+        'Période invalide pour le cycle de cette classe',
       );
     }
 
@@ -210,6 +224,7 @@ export class BulletinsService {
           matricule: string;
           lastname: string;
           firstname: string;
+          gender?: string;
         };
         return {
           enrollmentId: String(e._id),
@@ -217,6 +232,7 @@ export class BulletinsService {
           matricule: student.matricule,
           lastname: student.lastname,
           firstname: student.firstname,
+          gender: student.gender,
         };
       });
   }
@@ -366,14 +382,14 @@ export class BulletinsService {
       throw new NotFoundException('Session introuvable');
     }
     if (session.status === BulletinSessionStatus.VALIDATED) {
-      throw new BadRequestException('Cette session est deja validee');
+      throw new BadRequestException('Cette session est déjà validée');
     }
     if (
       mode === BulletinImportMode.PREMIER_IMPORT &&
       session.status !== BulletinSessionStatus.DRAFT
     ) {
       throw new BadRequestException(
-        'Cette session a deja ete importee - utilisez le mode "ecraser" ou "fusionner"',
+        'Cette session a déjà été importée - utilisez le mode "écraser" ou "fusionner"',
       );
     }
     if (
@@ -453,7 +469,7 @@ export class BulletinsService {
           const firstSeenAt = seenMatricules.get(matricule);
           if (firstSeenAt) {
             errors.push(
-              `Ligne ${rowNumber} (${row.nameRaw}) : matricule "${row.matriculeRaw}" deja utilise a la ligne ${firstSeenAt} du meme fichier`,
+              `Ligne ${rowNumber} (${row.nameRaw}) : matricule "${row.matriculeRaw}" déjà utilisé à la ligne ${firstSeenAt} du même fichier`,
             );
           } else {
             seenMatricules.set(matricule, rowNumber);
@@ -462,7 +478,7 @@ export class BulletinsService {
       });
       if (errors.length > 0) {
         throw new BadRequestException(
-          `Import impossible : ${errors.length} ligne(s) invalide(s) pour la creation automatique. ${errors.join(' | ')}`,
+          `Import impossible : ${errors.length} ligne(s) invalide(s) pour la création automatique. ${errors.join(' | ')}`,
         );
       }
 
@@ -526,7 +542,22 @@ export class BulletinsService {
           }
         }
         await this.rowModel
-          .updateOne({ _id: existing._id }, { notes: mergedNotes })
+          .updateOne(
+            { _id: existing._id },
+            {
+              notes: mergedNotes,
+              ...(row.discipline
+                ? {
+                    retards: row.discipline.retards ?? existing.retards,
+                    absences: row.discipline.absences ?? existing.absences,
+                    exclusion: row.discipline.exclusion || existing.exclusion,
+                    decisionConseil:
+                      row.discipline.decisionConseil ||
+                      existing.decisionConseil,
+                  }
+                : {}),
+            },
+          )
           .exec();
         continue;
       }
@@ -557,6 +588,14 @@ export class BulletinsService {
         matchStatus: match.matchStatus,
         matchCandidates: match.matchCandidates,
         notes: notesWithSubjectId,
+        ...(row.discipline
+          ? {
+              retards: row.discipline.retards,
+              absences: row.discipline.absences,
+              exclusion: row.discipline.exclusion || undefined,
+              decisionConseil: row.discipline.decisionConseil || undefined,
+            }
+          : {}),
       };
 
       // In ECRASER mode the rows fetched into existingByNameKey were already
@@ -637,14 +676,14 @@ export class BulletinsService {
       throw new NotFoundException('Session introuvable');
     }
     if (session.status === BulletinSessionStatus.VALIDATED) {
-      throw new BadRequestException('Cette session est deja validee');
+      throw new BadRequestException('Cette session est déjà validée');
     }
 
     let subjectId = dto.existingSubjectId;
     if (!subjectId) {
       if (!dto.label || !dto.category) {
         throw new BadRequestException(
-          'Nom et categorie requis pour creer une nouvelle matiere',
+          'Nom et catégorie requis pour créer une nouvelle matière',
         );
       }
       const labelNormalized = normalizeLabel(dto.label);
@@ -704,27 +743,72 @@ export class BulletinsService {
   // (consistent across rows in practice - the file lists one teacher per
   // subject, not per student) so the approval form can pre-fill it instead
   // of asking the operator to retype data already present in the file.
-  async getUnapprovedSubjects(
-    sessionId: string,
-  ): Promise<{ subjectNameRaw: string; profRaw: string }[]> {
+  async getUnapprovedSubjects(sessionId: string): Promise<
+    {
+      subjectNameRaw: string;
+      profRaw: string;
+      // Pre-remplissage du formulaire d'approbation avec ce que le fichier
+      // et le catalogue disent deja (au lieu de tout faire retaper).
+      coefficient: number | null;
+      category: SubjectCategory | null;
+      label: string;
+    }[]
+  > {
     const rows = await this.rowModel.find({ sessionId }).lean().exec();
-    const profBySubject = new Map<string, string>();
+    const bySubject = new Map<
+      string,
+      { profRaw: string; coefCounts: Map<number, number> }
+    >();
     for (const row of rows) {
       for (const note of row.notes) {
         if (note.subjectId) {
           continue;
         }
-        if (!profBySubject.has(note.subjectNameRaw)) {
-          profBySubject.set(note.subjectNameRaw, note.profRaw || '');
-        } else if (!profBySubject.get(note.subjectNameRaw) && note.profRaw) {
-          profBySubject.set(note.subjectNameRaw, note.profRaw);
+        const entry = bySubject.get(note.subjectNameRaw) ?? {
+          profRaw: '',
+          coefCounts: new Map<number, number>(),
+        };
+        if (!entry.profRaw && note.profRaw) {
+          entry.profRaw = note.profRaw;
         }
+        if (typeof note.coef === 'number' && Number.isFinite(note.coef)) {
+          entry.coefCounts.set(
+            note.coef,
+            (entry.coefCounts.get(note.coef) ?? 0) + 1,
+          );
+        }
+        bySubject.set(note.subjectNameRaw, entry);
       }
     }
-    return [...profBySubject.entries()].map(([subjectNameRaw, profRaw]) => ({
-      subjectNameRaw,
-      profRaw,
-    }));
+
+    // Matiere deja connue au catalogue (autre classe) : reprendre son nom
+    // exact et sa categorie.
+    const catalog = await this.subjectModel
+      .find({
+        labelNormalized: {
+          $in: [...bySubject.keys()].map((name) => normalizeLabel(name)),
+        },
+      })
+      .lean()
+      .exec();
+    const catalogByNormalized = new Map(
+      catalog.map((subject) => [subject.labelNormalized, subject]),
+    );
+
+    return [...bySubject.entries()].map(([subjectNameRaw, entry]) => {
+      // Coefficient le plus frequent dans le fichier pour cette matiere.
+      const coefficient =
+        [...entry.coefCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ??
+        null;
+      const known = catalogByNormalized.get(normalizeLabel(subjectNameRaw));
+      return {
+        subjectNameRaw,
+        profRaw: entry.profRaw,
+        coefficient,
+        category: known?.category ?? null,
+        label: known?.label ?? subjectNameRaw,
+      };
+    });
   }
 
   async getRosterForSession(sessionId: string) {
@@ -795,7 +879,7 @@ export class BulletinsService {
       .lean()
       .exec();
     if (session?.status === BulletinSessionStatus.VALIDATED) {
-      throw new BadRequestException('Cette session est deja validee');
+      throw new BadRequestException('Cette session est déjà validée');
     }
   }
 
@@ -905,13 +989,652 @@ export class BulletinsService {
       .lean()
       .exec();
     if (existing) {
-      throw new BadRequestException('Cette matiere existe deja');
+      throw new BadRequestException('Cette matière existe déjà');
     }
     return this.subjectModel.create({
       label: dto.label,
       labelNormalized,
       category: dto.category,
     });
+  }
+
+  // Saisie des notes dans l'application, une matiere a la fois (comme sur
+  // la fiche papier d'un enseignant). Ecrit dans les memes lignes
+  // BulletinImportRow que l'import Excel : revue, discipline, validation et
+  // PDF restent identiques, et import Excel / saisie peuvent se completer.
+  async getGradeEntry(sessionId: string, subjectId?: string) {
+    const session = await this.getSession(sessionId);
+    const yearId = String(
+      (session.schoolYearId as unknown as { _id: Types.ObjectId })._id,
+    );
+    const levelId = String(
+      (session.levelId as unknown as { _id: Types.ObjectId })._id,
+    );
+    const [classSubjects, roster, rows] = await Promise.all([
+      this.listClassSubjects(yearId, levelId),
+      this.getRoster(yearId, levelId),
+      this.rowModel.find({ sessionId }).lean().exec(),
+    ]);
+
+    const subjects = classSubjects.map((cs) => {
+      const subject = cs.subjectId as unknown as {
+        _id: Types.ObjectId;
+        label: string;
+      };
+      return {
+        subjectId: String(subject._id),
+        label: subject.label,
+        coefficient: cs.coefficient,
+        teacherName: cs.teacherName ?? '',
+      };
+    });
+    const rowByStudent = new Map(
+      rows
+        .filter((row) => row.studentId)
+        .map((row) => [String(row.studentId), row]),
+    );
+    const noteFor = (
+      studentId: string,
+      subject: { subjectId: string; label: string },
+    ) =>
+      rowByStudent
+        .get(studentId)
+        ?.notes.find(
+          (note) =>
+            String(note.subjectId) === subject.subjectId ||
+            normalizeLabel(note.subjectNameRaw) ===
+              normalizeLabel(subject.label),
+        );
+    const hasValue = (note?: ImportRowNote) =>
+      Boolean(
+        note &&
+        [note.i1, note.i2, note.devoir, note.compo].some(
+          (value) => value !== null && value !== undefined,
+        ),
+      );
+
+    const sortedRoster = [...roster].sort((a, b) =>
+      `${a.lastname} ${a.firstname}`.localeCompare(
+        `${b.lastname} ${b.firstname}`,
+        'fr',
+        { sensitivity: 'base' },
+      ),
+    );
+    const selected =
+      subjects.find((subject) => subject.subjectId === subjectId) ??
+      subjects[0] ??
+      null;
+    const students = sortedRoster.map((entry) => {
+      const note = selected ? noteFor(entry.studentId, selected) : undefined;
+      return {
+        studentId: entry.studentId,
+        name: `${entry.lastname} ${entry.firstname}`.trim(),
+        matricule: entry.matricule,
+        i1: note?.i1 ?? null,
+        i2: note?.i2 ?? null,
+        devoir: note?.devoir ?? null,
+        compo: note?.compo ?? null,
+      };
+    });
+    // Avancement par matiere : nombre d'eleves ayant au moins une note.
+    const progress = subjects.map((subject) => ({
+      ...subject,
+      filled: sortedRoster.filter((entry) =>
+        hasValue(noteFor(entry.studentId, subject)),
+      ).length,
+    }));
+
+    return {
+      session,
+      subjects: progress,
+      selected,
+      students,
+      readOnly: session.status === BulletinSessionStatus.VALIDATED,
+    };
+  }
+
+  async saveGradeEntry(
+    sessionId: string,
+    subjectId: string,
+    values: Record<
+      string,
+      {
+        i1: number | null;
+        i2: number | null;
+        devoir: number | null;
+        compo: number | null;
+      }
+    >,
+  ): Promise<{ subjectLabel: string; studentCount: number }> {
+    const session = await this.sessionModel.findById(sessionId).exec();
+    if (!session) {
+      throw new NotFoundException('Session introuvable');
+    }
+    if (session.status === BulletinSessionStatus.VALIDATED) {
+      throw new BadRequestException(
+        'Cette session est déjà validée : les notes ne peuvent plus être modifiées.',
+      );
+    }
+    const classSubject = await this.classSubjectModel
+      .findOne({
+        schoolYearId: session.schoolYearId,
+        levelId: session.levelId,
+        subjectId,
+      })
+      .populate('subjectId')
+      .lean()
+      .exec();
+    if (!classSubject) {
+      throw new BadRequestException(
+        "Cette matière n'est pas configurée pour la classe de la session.",
+      );
+    }
+    const subjectLabel = (
+      classSubject.subjectId as unknown as { label: string }
+    ).label;
+    const roster = await this.getRoster(
+      String(session.schoolYearId),
+      String(session.levelId),
+    );
+
+    const FIELD_LABELS = {
+      i1: 'I1',
+      i2: 'I2',
+      devoir: 'Devoir',
+      compo: 'Compo',
+    } as const;
+    const errors: string[] = [];
+    for (const entry of roster) {
+      const studentValues = values[entry.studentId];
+      if (!studentValues) {
+        continue;
+      }
+      for (const field of Object.keys(FIELD_LABELS) as Array<
+        keyof typeof FIELD_LABELS
+      >) {
+        const value = studentValues[field];
+        if (
+          value !== null &&
+          (!Number.isFinite(value) || value < 0 || value > 20)
+        ) {
+          errors.push(
+            `${entry.lastname} ${entry.firstname} — ${FIELD_LABELS[field]} : saisissez une note entre 0 et 20`,
+          );
+        }
+      }
+    }
+    if (errors.length > 0) {
+      throw new BadRequestException(
+        `Notes non enregistrées. ${errors.slice(0, 5).join(' ; ')}${errors.length > 5 ? ` (et ${errors.length - 5} autre(s))` : ''}.`,
+      );
+    }
+
+    const rows = await this.rowModel.find({ sessionId }).exec();
+    const rowByStudent = new Map(
+      rows
+        .filter((row) => row.studentId)
+        .map((row) => [String(row.studentId), row]),
+    );
+    const isSameSubject = (note: ImportRowNote) =>
+      String(note.subjectId) === subjectId ||
+      normalizeLabel(note.subjectNameRaw) === normalizeLabel(subjectLabel);
+
+    for (const entry of roster) {
+      const studentValues = values[entry.studentId] ?? {
+        i1: null,
+        i2: null,
+        devoir: null,
+        compo: null,
+      };
+      const note: ImportRowNote = {
+        subjectNameRaw: subjectLabel,
+        subjectId,
+        i1: studentValues.i1,
+        i2: studentValues.i2,
+        devoir: studentValues.devoir,
+        compo: studentValues.compo,
+        coef: classSubject.coefficient,
+        profRaw: classSubject.teacherName ?? '',
+      };
+      const existing = rowByStudent.get(entry.studentId);
+      if (existing) {
+        await this.rowModel
+          .updateOne(
+            { _id: existing._id },
+            {
+              notes: [...existing.notes.filter((n) => !isSameSubject(n)), note],
+            },
+          )
+          .exec();
+      } else {
+        await this.rowModel.create({
+          sessionId,
+          rawIdentity: {
+            nameRaw: `${entry.lastname} ${entry.firstname}`.trim(),
+            matriculeRaw: entry.matricule ?? '',
+            sexeRaw: entry.gender ?? '',
+          },
+          studentId: entry.studentId,
+          matchStatus: ImportRowMatchStatus.MATCHED,
+          matchCandidates: [],
+          notes: [note],
+        });
+      }
+    }
+
+    if (session.status === BulletinSessionStatus.DRAFT) {
+      session.status = BulletinSessionStatus.IMPORTED;
+      session.importedAt = new Date();
+      session.sourceFileName = "Saisie dans l'application";
+    }
+    if (!session.meta?.anneeScolaire || !session.meta?.chefEtablissement) {
+      const year = await this.schoolYearModel
+        .findById(session.schoolYearId)
+        .lean()
+        .exec();
+      session.meta = {
+        ...session.meta,
+        anneeScolaire: session.meta?.anneeScolaire || year?.label,
+        chefEtablissement:
+          session.meta?.chefEtablissement ||
+          (await this.settingsService.getChefEtablissementNom()) ||
+          undefined,
+      };
+    }
+    await session.save();
+    await this.recomputeSessionStatus(sessionId);
+
+    return { subjectLabel, studentCount: roster.length };
+  }
+
+  // Modele Excel d'import pre-rempli pour une session : exactement le format
+  // que parseBulletinWorkbook() attend (une seule ligne d'en-tete : 5
+  // colonnes d'identite, puis par matiere un bloc nom + I1/I2/Devoir/Compo/
+  // Coef/Prof, puis les 5 colonnes d'informations de la classe). Eleves
+  // inscrits, matieres, coefficients et enseignants viennent de la
+  // configuration (ecran Matieres) : il ne reste qu'a saisir les notes.
+  async buildImportTemplate(
+    sessionId: string,
+  ): Promise<{ buffer: Buffer; fileName: string }> {
+    const session = await this.getSession(sessionId);
+    const level = session.levelId as unknown as {
+      _id: Types.ObjectId;
+      label: string;
+    };
+    const year = session.schoolYearId as unknown as {
+      _id: Types.ObjectId;
+      label: string;
+    };
+
+    const [classSubjects, enrollments, chefEtablissementNom, savedRows] =
+      await Promise.all([
+        this.listClassSubjects(String(year._id), String(level._id)),
+        this.enrollmentModel
+          .find({
+            schoolYearId: year._id,
+            levelId: level._id,
+            status: EnrollmentStatus.ACTIVE,
+          })
+          .populate('studentId')
+          .lean()
+          .exec(),
+        this.settingsService.getChefEtablissementNom(),
+        this.rowModel.find({ sessionId }).lean().exec(),
+      ]);
+    if (classSubjects.length === 0) {
+      throw new BadRequestException(
+        `Aucune matière n'est configurée pour ${level.label} : ajoutez les matières et leurs coefficients dans « Matières » avant de télécharger le modèle.`,
+      );
+    }
+
+    const subjects = classSubjects.map((cs) => {
+      const subject = cs.subjectId as unknown as {
+        _id: Types.ObjectId;
+        label: string;
+      };
+      return {
+        subjectId: String(subject._id),
+        label: subject.label,
+        coefficient: cs.coefficient,
+        teacherName: cs.teacherName ?? '',
+      };
+    });
+    const students = enrollments
+      .map((enrollment) => {
+        const student = enrollment.studentId as unknown as {
+          _id?: Types.ObjectId;
+          lastname?: string;
+          firstname?: string;
+          matricule?: string;
+          gender?: string;
+        } | null;
+        const snapshot = (enrollment.studentSnapshot ?? {}) as {
+          lastname?: string;
+          firstname?: string;
+        };
+        const lastname = student?.lastname ?? snapshot.lastname ?? '';
+        const firstname = student?.firstname ?? snapshot.firstname ?? '';
+        return {
+          studentId: student?._id ? String(student._id) : '',
+          name: `${lastname} ${firstname}`.trim(),
+          matricule: student?.matricule ?? '',
+          gender: student?.gender ?? '',
+          nr: enrollment.type === EnrollmentType.REPEAT ? 'R' : 'N',
+        };
+      })
+      .filter((student) => student.name !== '')
+      .sort((a, b) =>
+        a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' }),
+      );
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Notes', {
+      views: [{ state: 'frozen', xSplit: 2, ySplit: 1 }],
+    });
+
+    const NOTE_LABELS = ['I1', 'I2', 'Devoir', 'Compo'];
+    const header = ['N°', 'Nom et prénoms', 'Matricule', 'Sexe', 'N/R'];
+    for (const subject of subjects) {
+      header.push(subject.label, ...NOTE_LABELS, 'Coef', 'Prof');
+    }
+    const metaStart = header.length + 1;
+    header.push(
+      'Classe',
+      'Titulaire',
+      "Chef d'établissement",
+      'Année scolaire',
+      'Date du conseil',
+      ...DISCIPLINE_HEADERS,
+    );
+    sheet.addRow(header);
+
+    // Ce que l'application connait deja pour la session : une ligne par
+    // eleve inscrit dans la classe, avec ses notes et sa discipline deja
+    // enregistrees. Uniquement les eleves de la classe, comme l'ecran de
+    // saisie : les lignes d'un import precedent jamais rattachees a un eleve
+    // restent dans "Revoir les correspondances" (les reprendre ici melangeait
+    // de faux eleves sans matricule a la vraie liste de la classe).
+    const rowByStudent = new Map(
+      savedRows
+        .filter((row) => row.studentId)
+        .map((row) => [String(row.studentId), row]),
+    );
+    const entries = students.map((student) => ({
+      ...student,
+      saved: rowByStudent.get(student.studentId),
+    }));
+    const savedNote = (
+      saved: (typeof savedRows)[number] | undefined,
+      subjectId: string,
+      label: string,
+    ) =>
+      saved?.notes.find(
+        (note) =>
+          String(note.subjectId) === subjectId ||
+          normalizeLabel(note.subjectNameRaw) === normalizeLabel(label),
+      );
+
+    entries.forEach((entry, index) => {
+      const values: (string | number | Date | null)[] = [
+        index + 1,
+        entry.name,
+        entry.matricule,
+        entry.gender,
+        entry.nr,
+      ];
+      for (const subject of subjects) {
+        const note = savedNote(entry.saved, subject.subjectId, subject.label);
+        values.push(
+          '',
+          note?.i1 ?? null,
+          note?.i2 ?? null,
+          note?.devoir ?? null,
+          note?.compo ?? null,
+          subject.coefficient,
+          subject.teacherName,
+        );
+      }
+      // Informations de la classe : lues par l'import sur la premiere ligne
+      // d'eleve uniquement (vides sur les suivantes).
+      values.push(
+        ...(index === 0
+          ? [
+              level.label,
+              session.meta?.titulaire ?? '',
+              session.meta?.chefEtablissement || chefEtablissementNom,
+              year.label,
+              session.meta?.dateDuConseil
+                ? middayUtc(new Date(session.meta.dateDuConseil))
+                : null,
+            ]
+          : ['', '', '', '', null]),
+        entry.saved?.retards ?? null,
+        entry.saved?.absences ?? null,
+        entry.saved?.exclusion ?? '',
+        entry.saved?.decisionConseil ?? '',
+      );
+      sheet.addRow(values);
+    });
+    const entryCount = entries.length;
+
+    // Mise en forme : en-tete lisible, un bloc de couleur par matiere,
+    // colonnes de notes limitees a 0-20 avec message d'erreur explicite.
+    const BLOCK_FILLS = ['FFE8F3EF', 'FFF3EFE8'];
+    const border: Partial<ExcelJS.Borders> = {
+      top: { style: 'thin', color: { argb: 'FFB8BEC6' } },
+      bottom: { style: 'thin', color: { argb: 'FFB8BEC6' } },
+      left: { style: 'thin', color: { argb: 'FFB8BEC6' } },
+      right: { style: 'thin', color: { argb: 'FFB8BEC6' } },
+    };
+    const headerRow = sheet.getRow(1);
+    headerRow.height = 30;
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true };
+      cell.alignment = {
+        vertical: 'middle',
+        horizontal: 'center',
+        wrapText: true,
+      };
+      cell.border = border;
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFDDE3EA' },
+      };
+    });
+    [6, 32, 16, 7, 6].forEach((width, i) => {
+      sheet.getColumn(i + 1).width = width;
+    });
+
+    const lastRow = entryCount + 1;
+    subjects.forEach((subject, s) => {
+      const start = 6 + s * 7;
+      const fill: ExcelJS.Fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: BLOCK_FILLS[s % BLOCK_FILLS.length] },
+      };
+      sheet.getColumn(start).width = Math.min(
+        28,
+        Math.max(14, subject.label.length + 2),
+      );
+      [1, 2, 3, 4].forEach((offset) => {
+        sheet.getColumn(start + offset).width = 8;
+      });
+      sheet.getColumn(start + 5).width = 6;
+      sheet.getColumn(start + 6).width = 18;
+      for (let col = start; col < start + 7; col += 1) {
+        headerRow.getCell(col).fill = fill;
+      }
+      for (let row = 2; row <= lastRow; row += 1) {
+        sheet.getCell(row, start).fill = fill;
+        for (let offset = 1; offset <= 4; offset += 1) {
+          const cell = sheet.getCell(row, start + offset);
+          cell.border = border;
+          cell.alignment = { horizontal: 'center' };
+          cell.dataValidation = {
+            type: 'decimal',
+            operator: 'between',
+            allowBlank: true,
+            formulae: [0, 20],
+            showErrorMessage: true,
+            errorTitle: 'Note invalide',
+            error:
+              'Saisissez une note entre 0 et 20 (laisser vide si absente).',
+          };
+        }
+      }
+    });
+    for (let col = metaStart; col < metaStart + 5; col += 1) {
+      sheet.getColumn(col).width = 18;
+    }
+    // Discipline (pre-remplie si deja saisie) : retards / absences entiers >= 0.
+    const disciplineStart = metaStart + 5;
+    [10, 10, 18, 24].forEach((width, offset) => {
+      sheet.getColumn(disciplineStart + offset).width = width;
+    });
+    for (let row = 2; row <= lastRow; row += 1) {
+      for (const offset of [0, 1]) {
+        sheet.getCell(row, disciplineStart + offset).dataValidation = {
+          type: 'whole',
+          operator: 'greaterThanOrEqual',
+          allowBlank: true,
+          formulae: [0],
+          showErrorMessage: true,
+          errorTitle: 'Valeur invalide',
+          error: 'Saisissez un nombre entier (0 ou plus).',
+        };
+      }
+    }
+    sheet.getCell(2, metaStart + 4).numFmt = 'dd/mm/yyyy';
+
+    // Feuille "Exemple" entierement remplie (eleves fictifs) pour montrer
+    // le resultat attendu. Volontairement separee de "Notes" : des notes
+    // d'exemple melangees aux vrais eleves finiraient sur de vrais
+    // bulletins si on oubliait de les effacer. L'import ne lit que la
+    // premiere feuille ("Notes"), celle-ci n'est donc jamais importee.
+    const example = workbook.addWorksheet('Exemple', {
+      properties: { tabColor: { argb: 'FFDB6C3F' } },
+      views: [{ state: 'frozen', xSplit: 2, ySplit: 2 }],
+    });
+    const banner = example.getCell(1, 1);
+    banner.value =
+      'EXEMPLE (élèves fictifs) — cette feuille n’est pas importée. Saisissez vos notes dans la feuille « Notes ».';
+    banner.font = { bold: true, color: { argb: 'FF9A3412' } };
+    example.addRow(header);
+    const exampleStudents = [
+      { name: 'KOUASSI Aya', matricule: 'EX-0001', gender: 'F', nr: 'N' },
+      { name: 'MENSAH Kodjo', matricule: 'EX-0002', gender: 'M', nr: 'N' },
+      { name: 'DIALLO Fatou', matricule: 'EX-0003', gender: 'F', nr: 'R' },
+      { name: 'TRAORE Ibrahim', matricule: 'EX-0004', gender: 'M', nr: 'N' },
+    ];
+    // Notes plausibles et reproductibles (pas de hasard) ; une case vide
+    // montre qu'une note absente est simplement ignoree.
+    const sampleNote = (
+      studentIndex: number,
+      subjectIndex: number,
+      k: number,
+    ) =>
+      8 + ((studentIndex * 5 + subjectIndex * 3 + k * 4) % 12) + (k % 2) * 0.5;
+    exampleStudents.forEach((student, i) => {
+      const values: (string | number | Date | null)[] = [
+        i + 1,
+        student.name,
+        student.matricule,
+        student.gender,
+        student.nr,
+      ];
+      subjects.forEach((subject, s) => {
+        const notes = [0, 1, 2, 3].map((k) =>
+          i === 2 && s === 0 && k === 1 ? null : sampleNote(i, s, k),
+        );
+        values.push('', ...notes, subject.coefficient, subject.teacherName);
+      });
+      if (i === 0) {
+        values.push(
+          level.label,
+          'M. le Titulaire',
+          chefEtablissementNom || "M. le Chef d'établissement",
+          year.label,
+          new Date(),
+        );
+      }
+      example.addRow(values);
+    });
+    const exampleHeader = example.getRow(2);
+    exampleHeader.height = 30;
+    exampleHeader.eachCell((cell, col) => {
+      cell.font = { bold: true };
+      cell.alignment = {
+        vertical: 'middle',
+        horizontal: 'center',
+        wrapText: true,
+      };
+      cell.border = border;
+      cell.fill = headerRow.getCell(col).fill;
+    });
+    for (let col = 1; col <= header.length; col += 1) {
+      example.getColumn(col).width = sheet.getColumn(col).width;
+    }
+    example.getCell(3, metaStart + 4).numFmt = 'dd/mm/yyyy';
+
+    // Detail du calcul pour le premier eleve et la premiere matiere.
+    if (subjects.length > 0) {
+      const notes = [0, 1, 2, 3].map((k) => sampleNote(0, 0, k));
+      const round2 = (value: number) => Math.round(value * 100) / 100;
+      const moyClasse = round2((notes[0] + notes[1] + notes[2]) / 3);
+      const moyPeriode = round2((moyClasse + notes[3]) / 2);
+      const explanationRow = exampleStudents.length + 4;
+      [
+        `Calcul pour KOUASSI Aya en ${subjects[0].label} :`,
+        `• Moyenne de classe = (I1 ${notes[0]} + I2 ${notes[1]} + Devoir ${notes[2]}) ÷ 3 = ${moyClasse}`,
+        `• Moyenne de la période = (moyenne de classe ${moyClasse} + Compo ${notes[3]}) ÷ 2 = ${moyPeriode}`,
+        `• Note pondérée = ${moyPeriode} × coefficient ${subjects[0].coefficient} = ${round2(moyPeriode * subjects[0].coefficient)}`,
+        'DIALLO Fatou n’a pas de note I2 : la moyenne de classe est alors calculée sur I1 et Devoir uniquement.',
+      ].forEach((line, i) => {
+        const cell = example.getCell(explanationRow + i, 2);
+        cell.value = line;
+        if (i === 0) {
+          cell.font = { bold: true };
+        }
+      });
+    }
+
+    // Mode d'emploi en derniere feuille : l'import ne lit que la premiere.
+    const help = workbook.addWorksheet("Mode d'emploi");
+    help.getColumn(1).width = 110;
+    [
+      `Modèle d'import des bulletins — ${level.label} — ${PERIODE_LABELS[session.periode]} (${year.label})`,
+      '',
+      'Un exemple entièrement rempli (élèves fictifs) figure dans la feuille « Exemple ». Les notes peuvent aussi être saisies directement dans l’application (bouton « Saisir les notes » de la session).',
+      '',
+      '1. Saisissez les notes (de 0 à 20) dans les colonnes I1, I2, Devoir et Compo de chaque matière, feuille « Notes ». Les notes déjà enregistrées dans l’application (saisies à l’écran ou importées) sont déjà remplies : complétez seulement les cases vides.',
+      '2. Laissez une case vide si la note n’existe pas : elle est simplement ignorée dans le calcul.',
+      '3. Ne modifiez pas la ligne d’en-tête ni l’ordre des colonnes : l’import s’appuie dessus.',
+      '4. Les colonnes Coef et Prof sont indicatives : les coefficients utilisés sont ceux de l’écran « Matières ».',
+      '5. Renseignez si besoin le titulaire et la date du conseil sur la première ligne d’élève, ainsi que les retards, absences, exclusions et décisions du conseil de chaque élève (colonnes de droite, déjà remplies si connues).',
+      '6. Enregistrez puis importez ce fichier depuis la session de bulletins, bouton « Importer », en mode « Fusionner » (proposé par défaut) pour compléter sans rien effacer.',
+      '',
+      'Calculs effectués à la validation : moyenne de classe = moyenne(I1, I2, Devoir) ; moyenne de la période = moyenne(moyenne de classe, Compo) ; note pondérée = moyenne de la période × coefficient.',
+    ].forEach((line, i) => {
+      const cell = help.getCell(i + 1, 1);
+      cell.value = line;
+      cell.alignment = { wrapText: true, vertical: 'top' };
+      if (i === 0) {
+        cell.font = { bold: true, size: 13 };
+      }
+    });
+
+    const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+    const safe = (value: string) =>
+      value
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-zA-Z0-9_-]+/g, '_');
+    return {
+      buffer,
+      fileName: `modele-notes-${safe(level.label)}-${safe(PERIODE_LABELS[session.periode])}.xlsx`,
+    };
   }
 
   async listClassSubjects(schoolYearId: string, levelId: string) {
@@ -941,6 +1664,66 @@ export class BulletinsService {
       .exec();
   }
 
+  // Number of classes using each subject in a school year, to show on the
+  // catalog how widely a matiere is configured.
+  async countClassSubjectsBySubject(
+    schoolYearId: string,
+  ): Promise<Record<string, number>> {
+    const classSubjects = await this.classSubjectModel
+      .find({ schoolYearId })
+      .select('subjectId')
+      .lean()
+      .exec();
+    const counts: Record<string, number> = {};
+    for (const cs of classSubjects) {
+      const key = String(cs.subjectId);
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    return counts;
+  }
+
+  // Removing a matiere from a class is only allowed while no notes reference
+  // it in that class's sessions: otherwise the bulletins already entered
+  // would silently lose a subject. Changing the coefficient stays possible.
+  async removeClassSubject(classSubjectId: string) {
+    const classSubject = await this.classSubjectModel
+      .findById(classSubjectId)
+      .lean()
+      .exec();
+    if (!classSubject) {
+      throw new NotFoundException('Matière de classe introuvable');
+    }
+    const sessionIds = await this.sessionModel
+      .find({
+        schoolYearId: classSubject.schoolYearId,
+        levelId: classSubject.levelId,
+      })
+      .distinct('_id')
+      .exec();
+    const used =
+      sessionIds.length > 0
+        ? await this.rowModel
+            .exists({
+              sessionId: { $in: sessionIds },
+              // Notes are plain objects: the id may be a string or an ObjectId.
+              'notes.subjectId': {
+                $in: [
+                  String(classSubject.subjectId),
+                  new Types.ObjectId(String(classSubject.subjectId)),
+                ],
+              },
+            })
+            .exec()
+        : null;
+    if (used) {
+      throw new BadRequestException(
+        'Des notes ont déjà été saisies pour cette matière dans cette classe : elle ne peut plus être retirée. Vous pouvez toujours modifier son coefficient.',
+      );
+    }
+    await this.classSubjectModel.deleteOne({ _id: classSubjectId }).exec();
+    return classSubject;
+  }
+
   async validateSession(sessionId: string, actorId: string) {
     return runWithMongoTransactionFallback(
       this.connection,
@@ -953,7 +1736,7 @@ export class BulletinsService {
           throw new NotFoundException('Session introuvable');
         }
         if (session.status === BulletinSessionStatus.VALIDATED) {
-          throw new BadRequestException('Cette session est deja validee');
+          throw new BadRequestException('Cette session est déjà validée');
         }
 
         const roster = await this.enrollmentModel
@@ -992,7 +1775,7 @@ export class BulletinsService {
         );
         if (hasUnapprovedSubject) {
           throw new BadRequestException(
-            'Des matieres ne sont pas encore approuvees',
+            'Des matières ne sont pas encore approuvées',
           );
         }
         const matchedStudentIds = new Set(rows.map((r) => String(r.studentId)));
@@ -1000,8 +1783,40 @@ export class BulletinsService {
           (id) => !matchedStudentIds.has(id),
         );
         if (missing.length > 0) {
+          // Nommer les eleves concernes et dire quoi faire, plutot qu'un
+          // simple nombre : un eleve inscrit sans aucune note serait sinon
+          // oublie du bulletin et du classement.
+          const snapshotName = (id: string) => {
+            const snapshot = enrollmentByStudentId.get(id)?.studentSnapshot as
+              | { lastname?: string; firstname?: string }
+              | undefined;
+            return snapshot?.lastname
+              ? `${snapshot.lastname} ${snapshot.firstname ?? ''}`.trim()
+              : null;
+          };
+          const withoutSnapshot = missing.filter((id) => !snapshotName(id));
+          const fetched = withoutSnapshot.length
+            ? await this.studentModel
+                .find({ _id: { $in: withoutSnapshot } })
+                .session(dbSession ?? null)
+                .lean()
+                .exec()
+            : [];
+          const fetchedName = new Map(
+            fetched.map((s) => [
+              String(s._id),
+              `${s.lastname} ${s.firstname ?? ''}`.trim(),
+            ]),
+          );
+          const names = missing.map(
+            (id) => snapshotName(id) ?? fetchedName.get(id) ?? 'élève inconnu',
+          );
+          const shown = names.slice(0, 10).join(', ');
+          const more =
+            names.length > 10 ? ` (et ${names.length - 10} autre(s))` : '';
           throw new BadRequestException(
-            `${missing.length} eleve(s) de la classe n'ont pas de ligne dans le fichier importe`,
+            `${missing.length} élève(s) inscrit(s) dans la classe n'ont aucune note : ${shown}${more}. ` +
+              'Saisissez leurs notes avec « Saisir les notes », ou téléchargez le modèle Excel (ils y figurent) et réimportez-le en mode « Fusionner ».',
           );
         }
 
@@ -1031,7 +1846,7 @@ export class BulletinsService {
           }
           if (!hasAnyGrade) {
             validationErrors.push(
-              `${row.rawIdentity.nameRaw} : aucune note renseignee pour cette periode`,
+              `${row.rawIdentity.nameRaw} : aucune note renseignée pour cette période`,
             );
           }
         }
@@ -1405,13 +2220,13 @@ export class BulletinsService {
     }
     if (session.status !== BulletinSessionStatus.VALIDATED) {
       throw new BadRequestException(
-        'Le bulletin ne peut etre genere qu apres validation de la session',
+        'Le bulletin ne peut être généré qu’après validation de la session',
       );
     }
 
     const student = await this.studentModel.findById(studentId).lean().exec();
     if (!student) {
-      throw new NotFoundException('Eleve introuvable');
+      throw new NotFoundException('Élève introuvable');
     }
 
     const schoolYearId = String(session.schoolYearId);
@@ -1431,7 +2246,7 @@ export class BulletinsService {
       .exec();
     if (!result) {
       throw new NotFoundException(
-        'Bulletin non trouve pour cet eleve sur cette periode',
+        'Bulletin non trouvé pour cet élève sur cette période',
       );
     }
 
@@ -1548,9 +2363,9 @@ export class BulletinsService {
   }
 
   private readonly SUBJECT_CATEGORY_LABELS: Record<SubjectCategory, string> = {
-    [SubjectCategory.LITTERAIRE]: 'Matieres litteraires',
-    [SubjectCategory.SCIENTIFIQUE]: 'Matieres scientifiques',
-    [SubjectCategory.AUTRE]: 'Autres matieres',
+    [SubjectCategory.LITTERAIRE]: 'Matières littéraires',
+    [SubjectCategory.SCIENTIFIQUE]: 'Matières scientifiques',
+    [SubjectCategory.AUTRE]: 'Autres matières',
   };
 
   // Short column label for the bottom summary box ("Moy. Trim1", "Moy. Sem1"
@@ -1763,7 +2578,7 @@ export class BulletinsService {
       .font('Helvetica-Bold')
       .fontSize(21)
       .text(
-        (data.schoolName || "Nom de l'ecole").toUpperCase(),
+        (data.schoolName || "Nom de l'école").toUpperCase(),
         centerX,
         topY,
         { width: centerColW, align: 'center' },
@@ -1862,7 +2677,7 @@ export class BulletinsService {
     this.drawMixedText(
       doc,
       [
-        { text: 'Annee scolaire : ', font: 'Helvetica' },
+        { text: 'Année scolaire : ', font: 'Helvetica' },
         { text: data.schoolYearLabel, font: 'Helvetica-Bold' },
         { text: '      Classe : ', font: 'Helvetica' },
         { text: data.levelLabel, font: 'Helvetica-Bold' },
@@ -1881,7 +2696,7 @@ export class BulletinsService {
     this.drawMixedText(
       doc,
       [
-        { text: 'Nom & Prenoms : ', font: 'Helvetica' },
+        { text: 'Nom & Prénoms : ', font: 'Helvetica' },
         {
           text: `${data.student.lastname} ${data.student.firstname}`,
           font: 'Helvetica-Bold',
@@ -2274,7 +3089,7 @@ export class BulletinsService {
     doc
       .font('Helvetica-Bold')
       .fontSize(8)
-      .text('Appreciation generale :', col4X, rowY(0), { width: col4W });
+      .text('Appréciation générale :', col4X, rowY(0), { width: col4W });
     doc
       .font('Helvetica-BoldOblique')
       .fontSize(9)
@@ -2290,7 +3105,7 @@ export class BulletinsService {
         rowY(0),
         { width: col5W, align: 'right' },
       );
-    doc.text("Le Chef d'Etablissement", col5X, rowY(1), {
+    doc.text("Le Chef d'Établissement", col5X, rowY(1), {
       width: col5W,
       align: 'right',
     });
@@ -2303,7 +3118,7 @@ export class BulletinsService {
     doc
       .font('Helvetica-Bold')
       .fontSize(9)
-      .text(`Decision du conseil des profs : ${data.decisionConseil ?? ''}`, {
+      .text(`Décision du conseil des profs : ${data.decisionConseil ?? ''}`, {
         width: usableWidth,
       });
     // Gap before the signature footer - also doubles as blank space to
@@ -2363,7 +3178,7 @@ export class BulletinsService {
       .lean()
       .exec();
     if (rows.length === 0) {
-      throw new BadRequestException('Aucun eleve rapproche dans cette session');
+      throw new BadRequestException('Aucun élève rapproché dans cette session');
     }
     return this.renderBulletinsForRows(sessionId, rows);
   }
@@ -2376,7 +3191,7 @@ export class BulletinsService {
     studentIds: string[],
   ): Promise<Buffer> {
     if (studentIds.length === 0) {
-      throw new BadRequestException('Aucun eleve selectionne');
+      throw new BadRequestException('Aucun élève sélectionné');
     }
     const rows = await this.rowModel
       .find({
@@ -2388,7 +3203,7 @@ export class BulletinsService {
       .lean()
       .exec();
     if (rows.length === 0) {
-      throw new BadRequestException('Aucun eleve rapproche dans cette session');
+      throw new BadRequestException('Aucun élève rapproché dans cette session');
     }
     return this.renderBulletinsForRows(sessionId, rows);
   }

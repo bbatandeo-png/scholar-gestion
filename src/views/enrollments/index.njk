@@ -18,19 +18,19 @@
     {% endif %}
 
     {% if not schoolYearContext.isHistorical %}<div class="panel">
-      <h2 id="enrollFormTitle">Creer une inscription</h2>
+      <h2 id="enrollFormTitle">Créer une inscription</h2>
       <p id="alreadyEnrolledNotice" class="notice notice-info" hidden></p>
       <form method="post" action="/enrollments" class="stack" id="enrollForm">
         <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
         <div class="form-grid">
-          <label>Eleve
+          <label>Élève
             <div class="autocomplete-wrap">
               <input
                 type="text"
                 id="studentSearchInput"
                 autocomplete="off"
                 required
-                placeholder="Rechercher un eleve (nom, prenom, matricule)..."
+                placeholder="Rechercher un élève (nom, prénom, matricule)..."
                 role="combobox"
                 aria-expanded="false"
                 aria-autocomplete="list"
@@ -42,7 +42,7 @@
             <p id="studentClassInfo" class="student-class-info" hidden></p>
             <input type="hidden" name="studentId" id="studentIdSelect" />
           </label>
-          <label>Annee
+          <label>Année
             <input value="{{ selectedYear.label }}" disabled />
             <input type="hidden" name="schoolYearId" value="{{ selectedYear._id }}" />
           </label>
@@ -72,7 +72,7 @@
           <h3 id="paymentSectionTitle">Paiement a l'inscription <span class="muted">(optionnel)</span></h3>
           <p id="feeHint" class="muted">Choisissez un niveau pour voir le montant de l'inscription.</p>
           <div class="form-grid">
-            <label>Montant paye maintenant
+            <label>Montant payé maintenant
               <input type="number" name="paymentAmount" id="paymentAmount" min="0" placeholder="0" />
             </label>
             <label>Mode de paiement
@@ -82,10 +82,10 @@
                 {% endfor %}
               </select>
             </label>
-            <label>Reference<input name="paymentReference" /></label>
+            <label>Référence<input name="paymentReference" /></label>
           </div>
         {% endif %}
-        <button type="submit" class="btn-lg btn-icon icon-save" id="enrollSubmit">Creer l inscription</button>
+        <button type="submit" class="btn-lg btn-icon icon-save" id="enrollSubmit">Créer l'inscription</button>
       </form>
       {% set dialogId = 'enrollPaymentConfirmDialog' %}
       {% include "partials/payment-confirm-dialog.njk" %}
@@ -95,14 +95,14 @@
     <div class="panel status-panel">
       <div class="panel-heading">
         <div>
-          <h2>Situation de l eleve</h2>
+          <h2>Situation de l'élève</h2>
           <p class="muted">Aperçu instantané pour décider de l inscription ou du règlement à prévoir.</p>
         </div>
         <span id="studentFinancialBadge" class="badge badge-neutral">En attente</span>
       </div>
 
       <div id="studentFinancialStatus" class="status-empty stack">
-        <p class="muted">Selectionne un eleve pour voir son etat financier.</p>
+        <p class="muted">Sélectionnez un élève pour voir son état financier.</p>
       </div>
     </div>
 
@@ -110,20 +110,21 @@
       <div class="panel-heading">
         <div>
           <h2>Liste des inscriptions</h2>
-          <p class="muted">{{ pagination.total }} inscription(s) • page {{ pagination.page }} / {{ pagination.totalPages }}</p>
+          <p class="muted" id="enrollments-summary" aria-live="polite">{{ pagination.total }} inscription(s) • page {{ pagination.page }} / {{ pagination.totalPages }}</p>
         </div>
         <a class="button secondary btn-icon icon-export" href="/enrollments/export">Exporter Excel</a>
       </div>
-      <form method="get" action="/enrollments" class="table-filter" role="search">
+      <form method="get" action="/enrollments" class="table-filter" role="search" data-live-search="#enrollments-summary, #enrollments-results">
         <input type="hidden" name="pageSize" value="{{ pagination.pageSize }}" />
-        <input type="search" name="q" value="{{ searchQuery }}" placeholder="Rechercher : nom, prénom, matricule, niveau…" aria-label="Rechercher dans les inscriptions" />
+        <input type="search" name="q" value="{{ searchQuery }}" placeholder="Rechercher : nom, prénom, matricule, niveau…" aria-label="Rechercher dans les inscriptions" autocomplete="off" />
         <button type="submit" class="btn-sm btn-icon icon-search">Rechercher</button>
         {% if searchQuery %}<a class="button secondary btn-sm" href="/enrollments">Effacer</a>{% endif %}
       </form>
+      <div id="enrollments-results">
       {% if searchQuery %}<p class="muted">{{ pagination.total }} résultat(s) pour « {{ searchQuery }} ».</p>{% endif %}
       <div class="table-shell">
         <table class="table-report" data-no-filter>
-          <thead><tr><th>N°</th><th>Eleve</th><th>Date d'enregistrement</th><th>Annee</th><th>Niveau</th><th>Statut</th><th></th></tr></thead>
+          <thead><tr><th>N°</th><th>Élève</th><th>Date d'enregistrement</th><th>Année</th><th>Niveau</th><th>Statut</th><th></th></tr></thead>
           <tbody>
             {% for item in enrollments %}
               <tr>
@@ -151,7 +152,7 @@
           <input type="hidden" name="pageSize" value="{{ pagination.pageSize }}" />
           <input type="hidden" name="q" value="{{ searchQuery }}" />
           <input type="hidden" name="page" value="{{ pagination.prevPage }}" />
-          <button type="submit" class="secondary btn-sm btn-icon icon-prev" {% if not pagination.hasPrev %}disabled{% endif %}>Precedent</button>
+          <button type="submit" class="secondary btn-sm btn-icon icon-prev" {% if not pagination.hasPrev %}disabled{% endif %}>Précédent</button>
         </form>
         <span class="muted">Page {{ pagination.page }} sur {{ pagination.totalPages }}</span>
         <form method="get" action="/enrollments" class="inline-form">
@@ -160,6 +161,7 @@
           <input type="hidden" name="page" value="{{ pagination.nextPage }}" />
           <button type="submit" class="secondary btn-sm btn-icon icon-next" {% if not pagination.hasNext %}disabled{% endif %}>Suivant</button>
         </form>
+      </div>
       </div>
     </div>
   </section>
@@ -217,7 +219,7 @@
         activeIndex = -1;
 
         if (!items.length) {
-          searchStatus.textContent = 'Aucun eleve trouve.';
+          searchStatus.textContent = 'Aucun élève trouvé.';
           closeResults();
           return;
         }
@@ -234,7 +236,7 @@
           searchResults.appendChild(option);
         });
 
-        searchStatus.textContent = `${items.length} resultat${items.length > 1 ? 's' : ''}.`;
+        searchStatus.textContent = `${items.length} résultat${items.length > 1 ? 's' : ''}.`;
         searchResults.hidden = false;
         searchInput.setAttribute('aria-expanded', 'true');
       };
@@ -268,7 +270,7 @@
         } catch (error) {
           if (error.name !== 'AbortError') {
             searchStatus.classList.remove('is-loading');
-            searchStatus.textContent = 'Impossible de rechercher les eleves.';
+            searchStatus.textContent = 'Impossible de rechercher les élèves.';
             closeResults();
           }
         }
@@ -277,7 +279,7 @@
       searchInput.addEventListener('input', () => {
         select.value = '';
         searchInput.setCustomValidity('');
-        renderEmpty('Selectionne un eleve pour voir son etat financier.');
+        renderEmpty('Sélectionnez un élève pour voir son état financier.');
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(searchStudents, 400);
       });
@@ -335,10 +337,10 @@
         if (!classInfo) return;
         classInfo.replaceChildren();
         const parts = [];
-        if (info && info.declared) parts.push(['Classe de l eleve : ', info.declared]);
+        if (info && info.declared) parts.push(['Classe de l’élève : ', info.declared]);
         if (info && info.last) {
           parts.push([
-            'Derniere inscription : ',
+            'Dernière inscription : ',
             info.last.label + (info.last.schoolYear ? ' (' + info.last.schoolYear + ')' : ''),
           ]);
         }
@@ -383,9 +385,9 @@
         if (payOnly) {
           submitButton.textContent = 'Enregistrer le paiement';
         } else if (Number(paymentAmountInput?.value || 0) > 0) {
-          submitButton.textContent = "Creer l'inscription et enregistrer le paiement";
+          submitButton.textContent = "Créer l'inscription et enregistrer le paiement";
         } else {
-          submitButton.textContent = "Creer l'inscription";
+          submitButton.textContent = "Créer l'inscription";
         }
       };
       paymentAmountInput?.addEventListener('input', updateSubmitLabel);
@@ -409,7 +411,7 @@
         if (notice) {
           notice.hidden = false;
           notice.textContent =
-            'Cet eleve est deja inscrit cette annee' +
+            'Cet élève est déjà inscrit cette année' +
             (levelLabel ? ' en ' + levelLabel : '') +
             '. Ce paiement sera ajoute a sa facture existante.';
         }
@@ -424,7 +426,7 @@
         payOnly = false;
         if (typeField) typeField.hidden = false;
         if (discountField) discountField.hidden = false;
-        if (formTitle) formTitle.textContent = 'Creer une inscription';
+        if (formTitle) formTitle.textContent = 'Créer une inscription';
         if (paymentSectionTitle) paymentSectionTitle.innerHTML = "Paiement a l'inscription <span class=\"muted\">(optionnel)</span>";
         if (paymentAmountInput) {
           paymentAmountInput.required = false;
@@ -463,13 +465,13 @@
         container.innerHTML = `
           <div class="status-hero ${payload.isSettled ? 'is-settled' : 'needs-payment'}">
             <div>
-              <p class="eyebrow">Etat financier</p>
+              <p class="eyebrow">État financier</p>
               <h3>${settlementLabel}</h3>
               <p class="muted">${payload.isSettled ? 'Aucun solde à régulariser.' : 'Le dossier comporte encore des montants à solder.'}</p>
             </div>
             <div class="status-amount">
               <span>Total à solder</span>
-              <strong>${totalDue}</strong>
+              <strong>${formatMoney(totalDue)}</strong>
             </div>
           </div>
 
@@ -488,18 +490,18 @@
             </article>
             <article class="status-metric">
               <span>Reste facture</span>
-              <strong>${Number(currentInvoice.balanceDue ?? 0)}</strong>
+              <strong>${formatMoney(Number(currentInvoice.balanceDue ?? 0))}</strong>
             </article>
           </div>
 
           <div class="status-breakdown">
             <div>
-              <span>Impayes reportes</span>
-              <strong>${openArrearsAmount}</strong>
+              <span>Impayés reportés</span>
+              <strong>${formatMoney(openArrearsAmount)}</strong>
             </div>
             <div>
               <span>Factures restantes</span>
-              <strong>${outstandingInvoicesAmount}</strong>
+              <strong>${formatMoney(outstandingInvoicesAmount)}</strong>
             </div>
             <div>
               <span>Dossiers ouverts</span>
@@ -526,7 +528,7 @@
       const loadStatus = async () => {
         const studentId = select.value;
         if (!studentId) {
-          renderEmpty('Selectionne un eleve pour voir son etat financier.');
+          renderEmpty('Sélectionnez un élève pour voir son état financier.');
           return;
         }
 
@@ -549,7 +551,7 @@
           renderClassInfo(payload.studentClass);
           renderStatus(payload);
         } catch (error) {
-          renderEmpty('Situation indisponible pour cet eleve.');
+          renderEmpty('Situation indisponible pour cet élève.');
         }
       };
 
@@ -572,7 +574,7 @@
       form.addEventListener('submit', (event) => {
         if (!select.value) {
           event.preventDefault();
-          searchInput.setCustomValidity('Selectionnez un eleve dans les resultats.');
+          searchInput.setCustomValidity('Sélectionnez un élève dans les résultats.');
           searchInput.reportValidity();
           return;
         }
@@ -582,7 +584,7 @@
         }
         event.preventDefault();
         if (typeof form.reportValidity === 'function' && !form.reportValidity()) return;
-        confirmDialog.querySelector('.js-confirm-amount').textContent = paymentAmountInput.value;
+        confirmDialog.querySelector('.js-confirm-amount').textContent = formatMoney(paymentAmountInput.value);
         const methodSelect = document.getElementById('paymentMethodSelect');
         confirmDialog.querySelector('.js-confirm-method').textContent =
           methodSelect?.options[methodSelect.selectedIndex]?.text || '';
@@ -614,8 +616,8 @@
         }
         const total = Math.max(fee.registrationFee + fee.tuitionFee - Number(discount?.value || 0), 0);
         hint.textContent =
-          "Inscription : " + fee.registrationFee + " - Ecolage : " + fee.tuitionFee +
-          " - Total a payer : " + total + " (hors impayes reportes)";
+          'Inscription : ' + formatMoney(fee.registrationFee) + ' — Écolage : ' + formatMoney(fee.tuitionFee) +
+          ' — Total à payer : ' + formatMoney(total) + ' (hors impayés reportés)';
       };
       level.addEventListener('change', refresh);
       discount?.addEventListener('input', refresh);

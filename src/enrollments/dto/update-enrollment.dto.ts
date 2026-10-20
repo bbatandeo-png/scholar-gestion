@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsEnum, IsMongoId, IsOptional } from 'class-validator';
+import { IsEnum, IsMongoId, IsOptional, IsString } from 'class-validator';
 import { EnrollmentType } from '../../common/enums/domain.enums';
 
 // A blank <select> (e.g. the "Choisir un niveau" placeholder) arrives as ''
@@ -33,4 +33,11 @@ export class UpdateEnrollmentDto {
   @Transform(emptyToUndefined)
   @IsMongoId()
   previousEnrollmentId?: string;
+
+  // Obligatoire pour changer la classe d'un eleve ayant deja paye (voir
+  // EnrollmentsService.updateEnrollment).
+  @IsOptional()
+  @Transform(emptyToUndefined)
+  @IsString()
+  levelChangeReason?: string;
 }

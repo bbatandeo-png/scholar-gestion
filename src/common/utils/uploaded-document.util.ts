@@ -34,7 +34,7 @@ export function saveUploadedDocument(
   file: UploadedDocumentFile | undefined,
 ): string {
   if (!file?.buffer) {
-    throw new BadRequestException('Aucun fichier recu');
+    throw new BadRequestException('Aucun fichier reçu');
   }
   const ext = path.extname(file.originalname).toLowerCase();
   if (!ALLOWED_DOCUMENT_EXTENSIONS.includes(ext)) {

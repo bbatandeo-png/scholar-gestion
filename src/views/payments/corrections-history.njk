@@ -4,7 +4,7 @@
     <div class="panel-heading">
       <div>
         <h2>Historique des modifications de paiement</h2>
-        <p class="muted">Année {{ selectedYear.label }} : chaque ligne correspond a une correction du montant paye d'une facture (modification manuelle ou alignement automatique du registre), jamais a un paiement ordinaire.</p>
+        <p class="muted">Année {{ selectedYear.label }} : chaque ligne correspond à une correction du montant payé d'une facture (modification manuelle ou alignement automatique du registre), jamais a un paiement ordinaire.</p>
       </div>
     </div>
 
@@ -15,11 +15,11 @@
             <tr>
               <th>N°</th>
               <th>Date</th>
-              <th>Eleve</th>
+              <th>Élève</th>
               <th>Matricule</th>
               <th>Niveau</th>
               <th>Avant</th>
-              <th>Apres</th>
+              <th>Après</th>
               <th>Ecart</th>
               <th>Motif</th>
               <th>Auteur</th>
@@ -34,8 +34,8 @@
                 <td>{{ row.studentName }}</td>
                 <td>{{ row.matricule }}</td>
                 <td>{{ row.levelLabel }}</td>
-                <td>{{ row.paidBefore }}</td>
-                <td>{{ row.paidAfter }}</td>
+                <td>{{ row.paidBefore | money }}</td>
+                <td>{{ row.paidAfter | money }}</td>
                 <td><strong>{{ row.delta }}</strong></td>
                 <td>{{ row.reason }}</td>
                 <td>{{ row.actorName }}</td>
@@ -49,7 +49,7 @@
       <div class="pagination-row">
         <form method="get" action="/payments/corrections" class="inline-form">
           <input type="hidden" name="page" value="{{ page - 1 }}" />
-          <button type="submit" class="secondary btn-sm btn-icon icon-prev" {% if page <= 1 %}disabled{% endif %}>Precedent</button>
+          <button type="submit" class="secondary btn-sm btn-icon icon-prev" {% if page <= 1 %}disabled{% endif %}>Précédent</button>
         </form>
         <span class="muted">Page {{ page }} sur {{ totalPages }} • {{ total }} modification(s)</span>
         <form method="get" action="/payments/corrections" class="inline-form">
@@ -58,7 +58,7 @@
         </form>
       </div>
     {% else %}
-      <div class="notice notice-info">Aucune modification de paiement enregistree pour cette annee.</div>
+      <div class="notice notice-info">Aucune modification de paiement enregistrée pour cette année.</div>
     {% endif %}
   </section>
 {% endblock %}

@@ -2,34 +2,20 @@
 {% import "partials/legend.njk" as legend %}
 {% block content %}
 <div class="panel">
+  {# La fiche de notes vierge et les statistiques ont leurs entrees dans le
+     menu (Gestion pedagogique) : ici, de simples raccourcis. #}
   <div class="panel-heading">
-    <div>
-      <h3>Fiche de notes vierge</h3>
-      <p class="muted">Une feuille par classe, à photocopier pour chaque matière : l'effectif est déjà rempli, le professeur y écrit la matière, le coefficient et les notes à la main.</p>
+    <p class="muted">Une session par classe et par période : saisissez ou importez les notes, puis validez-les pour produire les bulletins.</p>
+    <div class="panel-heading-actions">
+      <a class="button ghost btn-sm" href="/reports/grade-sheet">Fiche de notes vierge</a>
+      <a class="button ghost btn-sm" href="/reports/exam-statistics">Statistiques</a>
+      {% if currentUser and currentUser.role in ['super_admin', 'direction', 'secretariat'] %}<a class="button" href="/bulletins/new">+ Nouvelle session</a>{% endif %}
     </div>
-    <a class="button secondary" href="/reports/grade-sheet">Générer une fiche</a>
-  </div>
-</div>
-
-<div class="panel">
-  <div class="panel-heading">
-    <div>
-      <h3>Statistiques de fin de période</h3>
-      <p class="muted">Répartition des moyennes par matière et effectifs inscrits/présents/admis par sexe, pour l'inspection - par classe ou toutes classes confondues.</p>
-    </div>
-    <a class="button secondary" href="/reports/exam-statistics">Voir les statistiques</a>
-  </div>
-</div>
-
-<div class="panel">
-  <div class="panel-heading">
-    <div><h3>Sessions de bulletins</h3><p class="muted">Créez une session, importez les notes puis validez-les après contrôle.</p></div>
-    <a class="button" href="/bulletins/new">Nouvelle session</a>
   </div>
   <div class="table-shell">
     <table class="table-report">
       <thead>
-        <tr><th>N°</th><th>Classe</th><th>Annee scolaire</th><th>Periode</th><th>Statut</th><th></th></tr>
+        <tr><th>N°</th><th>Classe</th><th>Année scolaire</th><th>Période</th><th>Statut</th><th><span class="sr-only">Actions</span></th></tr>
       </thead>
       <tbody>
         {% for item in sessions %}
@@ -43,13 +29,13 @@
               <div class="table-actions">
                 <a class="button btn-sm" href="/bulletins/{{ item._id }}">Ouvrir</a>
                 {% if item.status != 'draft' %}
-                  <a class="button btn-sm secondary" href="/bulletins/{{ item._id }}/donnees">Donnees</a>
+                  <a class="button btn-sm secondary" href="/bulletins/{{ item._id }}/donnees">Données</a>
                 {% endif %}
               </div>
             </td>
           </tr>
         {% else %}
-          <tr><td colspan="6">Aucune session de bulletins.</td></tr>
+          <tr><td colspan="6">Aucune session de bulletins. Créez la première avec « + Nouvelle session ».</td></tr>
         {% endfor %}
       </tbody>
     </table>

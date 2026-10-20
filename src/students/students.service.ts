@@ -653,7 +653,7 @@ export class StudentsService {
       | (Student & { _id: unknown })
       | null;
     if (!student) {
-      throw new NotFoundException('Eleve introuvable');
+      throw new NotFoundException('Élève introuvable');
     }
 
     return student;
@@ -738,7 +738,7 @@ export class StudentsService {
     });
 
     if (duplicate) {
-      throw new ConflictException('Un dossier eleve existe deja');
+      throw new ConflictException('Un dossier élève existe déjà');
     }
 
     const normalizedGender = dto.gender?.trim().toUpperCase();
@@ -785,7 +785,7 @@ export class StudentsService {
         .findByIdAndUpdate(id, updatePayload, { new: true, session })
         .exec();
       if (!student) {
-        throw new NotFoundException('Eleve introuvable');
+        throw new NotFoundException('Élève introuvable');
       }
 
       // Enrollments keep a denormalized copy of the student's identity (the

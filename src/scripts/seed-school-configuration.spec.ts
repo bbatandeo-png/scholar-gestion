@@ -15,6 +15,8 @@ import {
 import { EcoleModulesService } from '../ecole-modules/ecole-modules.service';
 import { ExpenseCategory } from '../expenses/schemas/expense-category.schema';
 import { Level } from '../levels/schemas/level.schema';
+import { LevelsService } from '../levels/levels.service';
+import { SchoolYearLevel } from '../levels/schemas/school-year-level.schema';
 import { SchoolYear } from '../school-years/schemas/school-year.schema';
 import { SettingsService } from '../settings/settings.service';
 import {
@@ -81,6 +83,9 @@ describe('seedSchoolConfiguration', () => {
         SCHOOL_LEVELS.map((_, index) => index + 1),
       );
       expect(levels.find((l) => l.code === 'CP1')?.cycle).toBe(
+        LevelCycle.PRIMAIRE,
+      );
+      expect(levels.find((l) => l.code === '6EME')?.cycle).toBe(
         LevelCycle.COLLEGE,
       );
       expect(levels.find((l) => l.code === 'TERMINALE')?.cycle).toBe(
@@ -165,7 +170,7 @@ describe('seedSchoolConfiguration', () => {
       expect(String(levels[levels.length - 1]._id)).toBe(String(customLevelId));
       const cp1 = levels.find((l) => l.code === 'CP1')!;
       expect(cp1.label).toBe('Cours preparatoire 1');
-      expect(cp1.cycle).toBe(LevelCycle.COLLEGE);
+      expect(cp1.cycle).toBe(LevelCycle.PRIMAIRE);
 
       const cp1Fees = await feeScheduleModel
         .findOne({ schoolYearId: yearId, levelId: cp1._id })
@@ -201,5 +206,43 @@ describe('seedSchoolConfiguration', () => {
         ),
       ).toBe(true);
     }
+  }, 60000);
+
+  it('relance : ne reactive pas un niveau desactive et corrige un primaire range en College', async () => {
+    const ecoleId = new Types.ObjectId().toHexString();
+    await seedSchoolConfiguration(app, { ecoleId });
+
+    const schoolYearLevelModel: Model<SchoolYearLevel> = app.get(
+      getModelToken(SchoolYearLevel.name),
+    );
+    const levelsService = app.get(LevelsService);
+    await runWithTenant({ ecoleId }, async () => {
+      const year = await schoolYearModel
+        .findOne({ status: SchoolYearStatus.OPEN })
+        .lean();
+      const terminale = await levelModel.findOne({ code: 'TERMINALE' }).lean();
+      await levelsService.setEnabledForSchoolYear(
+        String(year!._id),
+        String(terminale!._id),
+        false,
+      );
+      // Etat laisse par l'ancienne version du seeder (avant le cycle Primaire).
+      await levelModel.updateOne(
+        { code: 'CM2' },
+        { $set: { cycle: LevelCycle.COLLEGE } },
+      );
+    });
+
+    await seedSchoolConfiguration(app, { ecoleId });
+
+    await runWithTenant({ ecoleId }, async () => {
+      const terminale = await levelModel.findOne({ code: 'TERMINALE' }).lean();
+      const link = await schoolYearLevelModel
+        .findOne({ levelId: terminale!._id })
+        .lean();
+      expect(link?.isEnabled).toBe(false);
+      const cm2 = await levelModel.findOne({ code: 'CM2' }).lean();
+      expect(cm2?.cycle).toBe(LevelCycle.PRIMAIRE);
+    });
   }, 60000);
 });

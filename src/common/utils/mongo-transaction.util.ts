@@ -31,7 +31,7 @@ export async function runWithMongoTransactionFallback<T>(
     if (isTransactionUnsupportedError(error)) {
       if (options.allowFallback === false) {
         throw new Error(
-          'Cette operation exige MongoDB en mode replica set pour garantir une transaction atomique',
+          'Cette opération exige MongoDB en mode replica set pour garantir une transaction atomique',
         );
       }
       return work();

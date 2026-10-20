@@ -2,20 +2,30 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import { ValidationPipe } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
+import * as fs from 'fs';
 import * as path from 'path';
 import * as nunjucks from 'nunjucks';
 import request from 'supertest';
 import ExcelJS from 'exceljs';
 import { AppModule } from '../src/app.module';
 import { ENUM_META } from '../src/common/view-helpers/enum-meta';
+import {
+  formatAmount,
+  formatMoney,
+} from '../src/common/view-helpers/format-money';
+import { formatDay } from '../src/common/view-helpers/format-day';
 import { BillingService } from '../src/billing/billing.service';
 import { SettingsService } from '../src/settings/settings.service';
 import { DashboardService } from '../src/dashboard/dashboard.service';
 import { PaymentsService } from '../src/payments/payments.service';
 import {
+  BulletinImportMode,
   EnrollmentType,
+  LevelCycle,
   PaymentMethod,
+  Periode,
+  DisciplineRecordType,
   SchoolYearStatus,
 } from '../src/common/enums/domain.enums';
 import { EnrollmentsService } from '../src/enrollments/enrollments.service';
@@ -28,6 +38,7 @@ import { TeacherAssignment } from '../src/teachers/schemas/teacher-assignment.sc
 import { Payment } from '../src/payments/schemas/payment.schema';
 import { SchoolYear } from '../src/school-years/schemas/school-year.schema';
 import { Student } from '../src/students/schemas/student.schema';
+import { DisciplineRecord } from '../src/discipline/schemas/discipline-record.schema';
 import { startMongoReplSet } from './mongo-replset';
 import { PromotionsService } from '../src/promotions/promotions.service';
 import { SchoolYearsService } from '../src/school-years/school-years.service';
@@ -48,6 +59,9 @@ import { EcoleModule as EcoleModuleModel } from '../src/ecole-modules/schemas/ec
 import { AuditLog } from '../src/audit/schemas/audit-log.schema';
 import { StockItem } from '../src/stock/schemas/stock-item.schema';
 import { Ecole } from '../src/ecoles/schemas/ecole.schema';
+import { ExpenseCategory } from '../src/expenses/schemas/expense-category.schema';
+import { BulletinsService } from '../src/bulletins/bulletins.service';
+import { parseBulletinWorkbook } from '../src/bulletins/bulletins-import.util';
 import {
   ALL_MODULE_CODES,
   seedSchoolConfiguration,
@@ -88,6 +102,18 @@ describe('Scolar Gestion workflows (e2e)', () => {
 
     app = moduleFixture.createNestApplication<NestExpressApplication>();
     applyTenantMiddleware(app);
+    // Comme main.ts : les vues connaissent l'utilisateur connecte (les
+    // boutons reserves a certains roles en dependent).
+    app.use(
+      (
+        req: { session?: { user?: unknown } },
+        res: { locals: Record<string, unknown> },
+        next: () => void,
+      ) => {
+        res.locals.currentUser = req.session?.user;
+        next();
+      },
+    );
 
     // Unlike main.ts's real bootstrap, Test.createTestingModule() never
     // configures the nunjucks view engine - every @Render(...) route used
@@ -129,6 +155,11 @@ describe('Scolar Gestion workflows (e2e)', () => {
         : date.toISOString().slice(0, 10);
     });
     nunjucksEnv.addGlobal('ENUM_META', ENUM_META);
+    nunjucksEnv.addFilter('money', (value: unknown) => formatMoney(value));
+    nunjucksEnv.addFilter('amount', (value: unknown) => formatAmount(value));
+    nunjucksEnv.addFilter('formatDay', (value: unknown) => formatDay(value));
+    nunjucksEnv.addGlobal('currentYear', () => new Date().getFullYear());
+    nunjucksEnv.addGlobal('copyrightHolder', 'Scolar-Gestion');
 
     // Test.createTestingModule() never runs main.ts's own bootstrap, so
     // without this every DTO's class-validator decorators (required fields,
@@ -373,7 +404,7 @@ describe('Scolar Gestion workflows (e2e)', () => {
           type: EnrollmentType.INITIAL,
           applyOpenArrears: 'false',
         }),
-      ).rejects.toThrow('Double inscription active interdite pour cette annee');
+      ).rejects.toThrow('Double inscription active interdite pour cette année');
     }));
 
   it("GET /enrollments/:id preselectionne le bon eleve, la bonne annee et le bon niveau dans le formulaire d'edition", () =>
@@ -468,7 +499,7 @@ describe('Scolar Gestion workflows (e2e)', () => {
       expect(createPage.text).toContain('<select name="type" required>');
       expect(createPage.text).toContain('id="studentSearchInput"');
       expect(createPage.text).toMatch(
-        /autocomplete="off"\s+required\s+placeholder="Rechercher un eleve/,
+        /autocomplete="off"\s+required\s+placeholder="Rechercher un élève/,
       );
     }));
 
@@ -2956,7 +2987,7 @@ describe('Scolar Gestion workflows (e2e)', () => {
           .get(`/teachers/${teacherId}`)
           .set('x-test-role', 'direction');
         expect(afterRenewal.text).toContain('CDI');
-        expect(afterRenewal.text).toContain('Expire');
+        expect(afterRenewal.text).toContain('Expiré');
 
         const tracking = await request(app.getHttpServer())
           .post(`/teachers/${teacherId}/tracking`)
@@ -3449,6 +3480,1704 @@ describe('Scolar Gestion workflows (e2e)', () => {
       expect(replay.levelsCreated).toBe(0);
       expect(replay.classSubjectsCreated).toBe(0);
       expect(replay.modulesActivated).toEqual([]);
+      // Deux passages complets du seed (~200 documents chacun) : au-dela des
+      // 5 s par defaut de Jest sur une machine chargee.
+    }, 30000);
+  });
+
+  describe('navigation accessible (regles UI/UX)', () => {
+    // Le middleware qui expose currentUser/currentPath/flash aux vues vit
+    // dans main.ts (absent ici) - le gabarit commun est donc rendu
+    // directement avec l'environnement nunjucks configure en beforeAll.
+    const renderLayout = (context: Record<string, unknown>) =>
+      nunjucks.renderString('{% extends "layout.njk" %}', {
+        title: 'Niveaux',
+        currentUser: {
+          id: TEST_DEFAULT_USER_ID,
+          name: 'Awa Koné',
+          role: 'super_admin',
+          ecoleId: TEST_DEFAULT_ECOLE_ID,
+        },
+        currentPath: '/settings/levels',
+        activeModules: {
+          finance: true,
+          bulletins: true,
+          discipline: true,
+          stock: true,
+          enseignants: true,
+        },
+        ...context,
+      });
+    const navOf = (html: string) =>
+      html.slice(html.indexOf('<nav'), html.indexOf('</nav>'));
+
+    it('rend un lien d evitement, un h1 de page unique, des icones SVG decoratives et un role lisible', () => {
+      const html = renderLayout({});
+
+      expect(html).toContain('href="#main-content"');
+      expect(html).toContain('id="main-content"');
+      expect(html.match(/<h1[\s>]/g)).toHaveLength(1);
+      expect(html).toMatch(/<h1>\s*Niveaux\s*<\/h1>/);
+      expect(html).toContain('aria-label="Navigation principale"');
+      expect(html).toContain('<svg class="icon" aria-hidden="true"');
+      // Plus aucun caractere Unicode utilise comme icone de menu.
+      for (const glyph of ['☰', '◈', '⚿']) {
+        expect(html).not.toContain(glyph);
+      }
+      expect(html).toContain('Awa Koné');
+      expect(html).toContain('Super administrateur');
+      expect(html).toContain('Déconnexion');
+      expect(html).toContain('s’ouvre dans un nouvel onglet');
+    });
+
+    it.each([
+      ['/reports/registration-paid', 'Inscriptions payées'],
+      ['/reports/grade-sheet', 'Fiche de notes vierge'],
+      ['/teachers/new', 'Nouvel enseignant'],
+      ['/settings/levels', 'Niveaux'],
+    ])(
+      'n allume qu un seul lien de menu sur %s (%s)',
+      (currentPath, expectedLabel) => {
+        const nav = navOf(renderLayout({ currentPath }));
+        const active = nav.match(
+          /class="(?:nav-link )?is-active"[^>]*>([^<]*)/g,
+        );
+        expect(active).toHaveLength(1);
+        expect(active![0]).toContain(expectedLabel);
+      },
+    );
+
+    it('annonce les messages : erreur en alerte, succes en statut, tous refermables', () => {
+      const error = renderLayout({
+        flash: { type: 'error', message: 'Montant invalide' },
+      });
+      expect(error).toMatch(/class="flash error" role="alert"/);
+      expect(error).toContain('aria-label="Fermer le message"');
+
+      const success = renderLayout({
+        flash: { type: 'success', message: 'Niveau cree' },
+      });
+      expect(success).toMatch(/class="flash success" role="status"/);
+    });
+
+    it('la page de connexion est compatible avec les gestionnaires de mots de passe', async () => {
+      const login = await request(app.getHttpServer()).get('/login');
+      expect(login.status).toBe(200);
+      expect(login.text).toContain('autocomplete="username"');
+      expect(login.text).toContain('autocomplete="current-password"');
+    });
+  });
+
+  describe('design system (boutons, actions destructives, pied de page)', () => {
+    it('affiche le copyright de l editeur avec l annee courante, dans l application et sur la connexion', async () => {
+      const year = new Date().getFullYear();
+      const expected = `© ${year} Scolar-Gestion. Tous droits réservés.`;
+
+      const login = await request(app.getHttpServer()).get('/login');
+      expect(login.text).toContain(expected);
+
+      const page = nunjucks.renderString('{% extends "layout.njk" %}', {
+        title: 'Tableau de bord',
+        currentPath: '/dashboard',
+      });
+      expect(page).toContain('<footer class="app-footer">');
+      expect(page).toContain(expected);
+    });
+
+    it('demande confirmation et marque comme destructive la cloture de l annee ouverte', () =>
+      runWithTenant({ ecoleId: TEST_DEFAULT_ECOLE_ID }, async () => {
+        const year = await schoolYearModel.create({
+          label: `DS-CLOTURE-${Date.now()}`,
+          startDate: new Date('2098-09-01'),
+          endDate: new Date('2099-06-30'),
+          status: SchoolYearStatus.OPEN,
+        });
+
+        const page = await request(app.getHttpServer())
+          .get('/settings/school-years')
+          .set('x-test-role', 'super_admin');
+        expect(page.status).toBe(200);
+        expect(page.text).toMatch(
+          /onsubmit="return confirm\('Clôturer cette année scolaire \?[^"]*"/,
+        );
+        expect(page.text).toContain(
+          '<button type="submit" class="button btn-sm danger">Clôturer</button>',
+        );
+
+        await schoolYearModel.deleteOne({ _id: year._id });
+      }));
+
+    it('n utilise plus de pseudo-libelles textuels comme icones de bouton et centralise les jetons', () => {
+      const css = fs.readFileSync(
+        path.join(__dirname, '..', 'public', 'styles.css'),
+        'utf8',
+      );
+      for (const pseudo of ["'XLS'", "'OK'", "'SR'", "'GO'", "'IN'"]) {
+        expect(css).not.toContain(`content: ${pseudo}`);
+      }
+      for (const token of [
+        '--control-h:',
+        '--control-border:',
+        '--space-4:',
+        '--z-dialog:',
+        '--duration-fast:',
+        '--focus-ring:',
+      ]) {
+        expect(css).toContain(token);
+      }
+    });
+  });
+
+  // public/live-search.js remplace, pendant la frappe, les zones listees dans
+  // data-live-search par celles de la page renvoyee pour la meme requete
+  // GET : chaque zone doit donc exister dans la page, et le serveur doit y
+  // renvoyer les resultats filtres.
+  describe('recherche instantanee pendant la saisie', () => {
+    let liveYearId: unknown;
+    beforeEach(() =>
+      runWithTenant({ ecoleId: TEST_DEFAULT_ECOLE_ID }, async () => {
+        const year = await schoolYearModel.create({
+          label: `LIVE-SEARCH-${Date.now()}`,
+          startDate: new Date('2100-09-01'),
+          endDate: new Date('2101-06-30'),
+          status: SchoolYearStatus.OPEN,
+        });
+        liveYearId = year._id;
+      }),
+    );
+    afterEach(() =>
+      runWithTenant({ ecoleId: TEST_DEFAULT_ECOLE_ID }, () =>
+        schoolYearModel.deleteOne({ _id: liveYearId }),
+      ),
+    );
+
+    it.each([
+      '/enrollments',
+      '/students',
+      '/students/search',
+      '/users',
+      '/stock',
+      '/teachers',
+    ])(
+      'branche la recherche instantanee sur %s et chaque zone ciblee existe',
+      async (route) => {
+        const page = await request(app.getHttpServer())
+          .get(route)
+          .set('x-test-role', 'super_admin');
+        expect(page.status).toBe(200);
+        expect(page.text).toContain('src="/live-search.js"');
+
+        const match = page.text.match(/data-live-search="([^"]+)"/);
+        expect(match).not.toBeNull();
+        const ids = match![1].split(',').map((s) => s.trim().replace('#', ''));
+        expect(ids.length).toBeGreaterThan(0);
+        for (const id of ids) {
+          expect(page.text.split(`id="${id}"`)).toHaveLength(2);
+        }
+      },
+    );
+
+    it('renvoie dans la zone de resultats uniquement les lignes correspondant au texte en cours de saisie', () =>
+      runWithTenant({ ecoleId: TEST_DEFAULT_ECOLE_ID }, async () => {
+        const stockItemModel: Model<StockItem> = app.get(
+          getModelToken(StockItem.name),
+        );
+        const unique = `Craie${Date.now()}`;
+        const item = await stockItemModel.create({
+          name: `${unique} blanche`,
+          category: 'pedagogique',
+          unit: 'boite',
+          quantity: 12,
+        });
+
+        const resultsOf = (html: string) =>
+          html.slice(html.indexOf('id="stock-results"'));
+
+        // Saisie partielle (debut du mot), comme pendant la frappe.
+        const partial = await request(app.getHttpServer())
+          .get(`/stock?q=${encodeURIComponent(unique.slice(0, 8))}`)
+          .set('x-test-role', 'super_admin');
+        expect(partial.status).toBe(200);
+        expect(resultsOf(partial.text)).toContain(`${unique} blanche`);
+
+        const none = await request(app.getHttpServer())
+          .get('/stock?q=aucun-article-ne-porte-ce-nom')
+          .set('x-test-role', 'super_admin');
+        expect(none.status).toBe(200);
+        expect(resultsOf(none.text)).not.toContain(unique);
+
+        await stockItemModel.deleteOne({ _id: item._id });
+      }));
+  });
+
+  describe('bulletins : modele Excel d import pre-rempli', () => {
+    it('propose le modele sur la session et le fichier telecharge est directement lisible par l import', async () => {
+      const ecoleModel = app.get<Model<Ecole>>(getModelToken(Ecole.name));
+      const ecole = await ecoleModel.create({
+        nom: `Ecole Modele ${Date.now()}`,
+        statutCompte: 'actif',
+        dateInscription: new Date(),
+      });
+      const ecoleId = String(ecole._id);
+      // Niveaux, matieres et coefficients de l'annee ouverte + module
+      // Bulletins actif, comme sur une installation de demonstration.
+      await seedSchoolConfiguration(app, {
+        ecoleId,
+        actorId: TEST_DEFAULT_USER_ID,
+        activateAllModules: true,
+      });
+
+      const bulletinsService = app.get(BulletinsService);
+      const { session, expectedSubjects } = await runWithTenant(
+        { ecoleId },
+        async () => {
+          const year = await schoolYearModel
+            .findOne({ status: SchoolYearStatus.OPEN })
+            .lean();
+          const level = await levelModel.findOne({ code: '6EME' }).lean();
+          const created = await bulletinsService.createSession(
+            {
+              schoolYearId: String(year!._id),
+              levelId: String(level!._id),
+              periode: Periode.TRIMESTRE_1,
+            },
+            TEST_DEFAULT_USER_ID,
+          );
+          const classSubjects = await bulletinsService.listClassSubjects(
+            String(year!._id),
+            String(level!._id),
+          );
+          return { session: created, expectedSubjects: classSubjects.length };
+        },
+      );
+
+      const page = await request(app.getHttpServer())
+        .get(`/bulletins/${String(session._id)}`)
+        .set('x-test-role', 'secretariat')
+        .set('x-test-ecole-id', ecoleId);
+      expect(page.status).toBe(200);
+      expect(page.text).toContain(`/bulletins/${String(session._id)}/template`);
+      expect(page.text).toContain('Télécharger le modèle Excel');
+
+      const download = await request(app.getHttpServer())
+        .get(`/bulletins/${String(session._id)}/template`)
+        .set('x-test-role', 'secretariat')
+        .set('x-test-ecole-id', ecoleId)
+        .buffer(true)
+        .parse((res, callback) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (chunk: Buffer) => chunks.push(chunk));
+          res.on('end', () => callback(null, Buffer.concat(chunks)));
+        });
+      expect(download.status).toBe(200);
+      expect(download.headers['content-type']).toContain('spreadsheetml');
+      expect(download.headers['content-disposition']).toContain(
+        'modele-notes-6eme-1er_Trimestre.xlsx',
+      );
+
+      // Accepte par le meme analyseur que l'import (leve une erreur sinon).
+      expect(() =>
+        parseBulletinWorkbook(download.body as Buffer),
+      ).not.toThrow();
+
+      // Un bloc I1/I2/Devoir/Compo/Coef/Prof par matiere configuree en 6eme.
+      const workbook = new ExcelJS.Workbook();
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- supertest types res.body as `any`
+      await workbook.xlsx.load(download.body);
+      const header = workbook.getWorksheet('Notes')!.getRow(1)
+        .values as unknown[];
+      expect(expectedSubjects).toBeGreaterThan(0);
+      expect(header.filter((cell) => cell === 'Compo')).toHaveLength(
+        expectedSubjects,
+      );
+    });
+
+    it('la fiche de notes vierge renvoie vers le modele de la session de bulletins', async () => {
+      const page = await request(app.getHttpServer())
+        .get('/reports/grade-sheet')
+        .set('x-test-role', 'secretariat');
+      expect(page.status).toBe(200);
+      expect(page.text).toContain('modèle Excel');
+    });
+
+    it('saisie des notes dans l application : grille par matiere, enregistrement puis relecture', async () => {
+      const ecoleModel = app.get<Model<Ecole>>(getModelToken(Ecole.name));
+      const ecole = await ecoleModel.create({
+        nom: `Ecole Saisie ${Date.now()}`,
+        statutCompte: 'actif',
+        dateInscription: new Date(),
+      });
+      const ecoleId = String(ecole._id);
+      await seedSchoolConfiguration(app, {
+        ecoleId,
+        actorId: TEST_DEFAULT_USER_ID,
+        activateAllModules: true,
+      });
+
+      const bulletinsService = app.get(BulletinsService);
+      const { sessionId, studentId, firstSubjectId } = await runWithTenant(
+        { ecoleId },
+        async () => {
+          const year = await schoolYearModel
+            .findOne({ status: SchoolYearStatus.OPEN })
+            .lean();
+          const level = await levelModel.findOne({ code: '5EME' }).lean();
+          const student = await studentModel.create({
+            matricule: `SAISIE-${Date.now()}`,
+            lastname: 'AMEGAN',
+            firstname: 'Yao',
+            gender: 'M',
+            birthDate: new Date('2013-03-03'),
+            birthPlace: 'Lome',
+            district: 'Be',
+            status: 'active',
+          });
+          await enrollmentModel.create({
+            studentId: student._id,
+            schoolYearId: year!._id,
+            levelId: level!._id,
+            type: EnrollmentType.INITIAL,
+            status: 'active',
+          });
+          const session = await bulletinsService.createSession(
+            {
+              schoolYearId: String(year!._id),
+              levelId: String(level!._id),
+              periode: Periode.TRIMESTRE_1,
+            },
+            TEST_DEFAULT_USER_ID,
+          );
+          const entry = await bulletinsService.getGradeEntry(
+            String(session._id),
+          );
+          return {
+            sessionId: String(session._id),
+            studentId: String(student._id),
+            firstSubjectId: entry.selected.subjectId,
+          };
+        },
+      );
+
+      const sessionPage = await request(app.getHttpServer())
+        .get(`/bulletins/${sessionId}`)
+        .set('x-test-role', 'secretariat')
+        .set('x-test-ecole-id', ecoleId);
+      expect(sessionPage.text).toContain(`/bulletins/${sessionId}/saisie`);
+
+      const grid = await request(app.getHttpServer())
+        .get(`/bulletins/${sessionId}/saisie`)
+        .set('x-test-role', 'secretariat')
+        .set('x-test-ecole-id', ecoleId);
+      expect(grid.status).toBe(200);
+      expect(grid.text).toContain('AMEGAN Yao');
+      expect(grid.text).toContain(`name="notes[${studentId}][i1]"`);
+      expect(grid.text).toContain('Enregistrer et passer à');
+
+      const save = await request(app.getHttpServer())
+        .post(`/bulletins/${sessionId}/saisie`)
+        .set('x-test-role', 'secretariat')
+        .set('x-test-ecole-id', ecoleId)
+        .type('form')
+        .send(
+          `subjectId=${firstSubjectId}` +
+            `&notes[${studentId}][i1]=${encodeURIComponent('12,5')}` +
+            `&notes[${studentId}][i2]=` +
+            `&notes[${studentId}][devoir]=14` +
+            `&notes[${studentId}][compo]=15`,
+        );
+      expect(save.status).toBe(302);
+      expect(save.headers.location).toBe(
+        `/bulletins/${sessionId}/saisie?subjectId=${firstSubjectId}`,
+      );
+
+      const reread = await runWithTenant({ ecoleId }, () =>
+        bulletinsService.getGradeEntry(sessionId, firstSubjectId),
+      );
+      expect(reread.students[0]).toMatchObject({
+        i1: 12.5,
+        i2: null,
+        devoir: 14,
+        compo: 15,
+      });
+
+      const invalid = await request(app.getHttpServer())
+        .post(`/bulletins/${sessionId}/saisie`)
+        .set('x-test-role', 'secretariat')
+        .set('x-test-ecole-id', ecoleId)
+        .type('form')
+        .send(`subjectId=${firstSubjectId}&notes[${studentId}][compo]=42`);
+      expect(invalid.status).toBe(302);
+      const unchanged = await runWithTenant({ ecoleId }, () =>
+        bulletinsService.getGradeEntry(sessionId, firstSubjectId),
+      );
+      expect(unchanged.students[0].compo).toBe(15);
+    }, 30000);
+  });
+
+  describe('parametres : niveaux (cycle Primaire, activation par annee)', () => {
+    it('affiche les cycles Primaire / College / Lycee et active ou desactive un niveau pour l annee', async () => {
+      const ecoleModel = app.get<Model<Ecole>>(getModelToken(Ecole.name));
+      const ecole = await ecoleModel.create({
+        nom: `Ecole Niveaux ${Date.now()}`,
+        statutCompte: 'actif',
+        dateInscription: new Date(),
+      });
+      const ecoleId = String(ecole._id);
+      await seedSchoolConfiguration(app, {
+        ecoleId,
+        actorId: TEST_DEFAULT_USER_ID,
+        activateAllModules: true,
+      });
+      const as = (req: request.Test) =>
+        req.set('x-test-role', 'direction').set('x-test-ecole-id', ecoleId);
+
+      const page = await as(
+        request(app.getHttpServer()).get('/settings/levels'),
+      );
+      expect(page.status).toBe(200);
+      expect(page.text).toContain('Primaire (trimestres)');
+      expect(page.text).toContain('Collège (trimestres)');
+      expect(page.text).toContain('Lycée (semestres)');
+      // Niveaux regroupes par cycle, dans l'ordre de la scolarite.
+      const sectionOf = (html: string, code: string) => {
+        const at = html.indexOf(`<td>${code}</td>`);
+        const headings = [...html.matchAll(/<h3 id="cycle-\d+">([^<]+)/g)];
+        return headings
+          .filter((h) => (h.index ?? 0) < at)
+          .pop()?.[1]
+          .trim();
+      };
+      expect(sectionOf(page.text, 'CP1')).toBe('Primaire');
+      expect(sectionOf(page.text, '6EME')).toBe('Collège');
+      expect(sectionOf(page.text, 'TERMINALE')).toBe('Lycée');
+      expect(page.text).toContain('+ Ajouter un niveau');
+      expect(page.text).toContain('6 niveau(x) · 6 actif(s)');
+
+      const terminale = await runWithTenant({ ecoleId }, () =>
+        levelModel.findOne({ code: 'TERMINALE' }).lean(),
+      );
+      const disable = await as(
+        request(app.getHttpServer()).post(
+          `/settings/levels/${String(terminale!._id)}/enabled`,
+        ),
+      )
+        .type('form')
+        .send({ enabled: 'false' });
+      expect(disable.status).toBe(302);
+
+      const afterDisable = await as(
+        request(app.getHttpServer()).get('/settings/levels'),
+      );
+      expect(afterDisable.text).toMatch(
+        /<td>TERMINALE<\/td>[\s\S]*?aria-checked="false"[\s\S]*?>Inactif</,
+      );
+      expect(afterDisable.text).toContain('3 niveau(x) · 2 actif(s)');
+      // Le niveau desactive n'est plus propose ailleurs (ex. grille des frais).
+      const fees = await as(request(app.getHttpServer()).get('/settings/fees'));
+      expect(fees.status).toBe(200);
+      expect(fees.text).not.toContain(
+        '<option value="' + String(terminale!._id),
+      );
+
+      await as(
+        request(app.getHttpServer()).post(
+          `/settings/levels/${String(terminale!._id)}/enabled`,
+        ),
+      )
+        .type('form')
+        .send({ enabled: 'true' });
+      const afterEnable = await as(
+        request(app.getHttpServer()).get('/settings/levels'),
+      );
+      expect(afterEnable.text).toMatch(
+        /<td>TERMINALE<\/td>[\s\S]*?aria-checked="true"[\s\S]*?>Actif</,
+      );
+
+      // Lien direct de modification : meme page, fenetre deja ouverte.
+      const editPage = await as(
+        request(app.getHttpServer()).get(
+          `/settings/levels/${String(terminale!._id)}/edit`,
+        ),
+      );
+      expect(editPage.status).toBe(200);
+      expect(editPage.text).toMatch(/id="levelEditDialog"[^>]*\bopen\b/);
+      expect(editPage.text).toContain(
+        `action="/settings/levels/${String(terminale!._id)}"`,
+      );
+
+      // Un niveau du primaire accepte une session de bulletins par trimestre.
+      const bulletinsService = app.get(BulletinsService);
+      const session = await runWithTenant({ ecoleId }, async () => {
+        const year = await schoolYearModel
+          .findOne({ status: SchoolYearStatus.OPEN })
+          .lean();
+        const cm2 = await levelModel.findOne({ code: 'CM2' }).lean();
+        expect(cm2!.cycle).toBe(LevelCycle.PRIMAIRE);
+        return bulletinsService.createSession(
+          {
+            schoolYearId: String(year!._id),
+            levelId: String(cm2!._id),
+            periode: Periode.TRIMESTRE_2,
+          },
+          TEST_DEFAULT_USER_ID,
+        );
+      });
+      expect(session.periode).toBe(Periode.TRIMESTRE_2);
+    }, 30000);
+  });
+
+  describe('utilisateurs : page en une colonne, actions dans des fenetres', () => {
+    it('liste les comptes avec libelles lisibles, et cree / modifie / change le mot de passe via les fenetres', async () => {
+      const email = `secretaire.${Date.now()}@ecole.test`;
+      const as = (req: request.Test) => req.set('x-test-role', 'super_admin');
+
+      const created = await as(request(app.getHttpServer()).post('/users'))
+        .type('form')
+        .send({
+          name: 'Afi Mensah',
+          email,
+          password: 'MotDePasse123',
+          role: 'secretariat',
+          status: 'active',
+        });
+      expect(created.status).toBe(302);
+
+      const page = await as(
+        request(app.getHttpServer()).get(
+          `/users?q=${encodeURIComponent(email)}`,
+        ),
+      );
+      expect(page.status).toBe(200);
+      // Une seule colonne : plus de mise en page en deux colonnes.
+      expect(page.text).not.toContain('two-columns');
+      expect(page.text).toContain('+ Créer un utilisateur');
+      for (const id of [
+        'userCreateDialog',
+        'userAccessDialog',
+        'userPasswordDialog',
+      ]) {
+        expect(page.text).toContain(`id="${id}"`);
+      }
+      expect(page.text).toContain('Afi Mensah');
+      expect(page.text).toContain(email);
+      // Libelles de roles lisibles (plus de codes bruts comme super_admin).
+      expect(page.text).toContain(
+        'Rôles et accès : que peut faire chaque rôle ?',
+      );
+      expect(page.text).toContain(
+        '<td><strong>Super administrateur</strong></td>',
+      );
+      expect(page.text).not.toContain('<td>super_admin</td>');
+      // Listes de roles remplies : filtre, fenetre de creation, fenetre d'acces.
+      expect(
+        page.text.match(/<option value="secretariat"/g)?.length,
+      ).toBeGreaterThanOrEqual(3);
+
+      const userId =
+        /data-user-action="access"\s+data-id="([a-f0-9]{24})"/.exec(
+          page.text,
+        )?.[1];
+      expect(userId).toBeDefined();
+
+      const access = await as(
+        request(app.getHttpServer()).post(`/users/${userId}/access`),
+      )
+        .type('form')
+        .send({ role: 'comptabilite', status: 'disabled' });
+      expect(access.status).toBe(302);
+      const afterAccess = await as(
+        request(app.getHttpServer()).get(
+          `/users?q=${encodeURIComponent(email)}`,
+        ),
+      );
+      expect(afterAccess.text).toMatch(
+        new RegExp(
+          `data-id="${userId}"[^>]*data-role="comptabilite"[^>]*data-status="disabled"`,
+        ),
+      );
+
+      const password = await as(
+        request(app.getHttpServer()).post(`/users/${userId}/password`),
+      )
+        .type('form')
+        .send({ password: 'NouveauMotDePasse456' });
+      expect(password.status).toBe(302);
+    });
+  });
+
+  describe('uniformisation : une colonne et une recherche sur chaque page', () => {
+    const renderAs = (role: string) =>
+      nunjucks.renderString('{% extends "layout.njk" %}', {
+        title: 'Tableau de bord',
+        currentUser: { id: TEST_DEFAULT_USER_ID, name: 'Test', role },
+        currentPath: '/dashboard',
+        activeModules: {},
+      });
+
+    it('propose la recherche d eleve dans l en-tete de toutes les pages pour les roles qui ont acces aux eleves', () => {
+      for (const role of [
+        'super_admin',
+        'direction',
+        'secretariat',
+        'auditeur',
+      ]) {
+        const html = renderAs(role);
+        expect(html).toContain('class="global-search" role="search"');
+        expect(html).toMatch(
+          /<form action="\/students" method="get" class="global-search"/,
+        );
+        expect(html).toContain('name="q"');
+        // Un seul element : le champ (loupe integree), pas de bouton a cote.
+        const form = /<form[^>]*class="global-search"[\s\S]*?<\/form>/.exec(
+          html,
+        )?.[0];
+        expect(form).toBeDefined();
+        expect(form).not.toContain('<button');
+        // Masquee sur les pages qui ont deja leur propre recherche.
+        expect(html).toContain('globalSearch.hidden = true');
+      }
+      // La comptabilite n'a pas acces a la liste des eleves.
+      expect(renderAs('comptabilite')).not.toContain('class="global-search"');
+    });
+
+    it('met toute l application sur une colonne et active la recherche des listes des la premiere ligne', () => {
+      const css = fs.readFileSync(
+        path.join(__dirname, '..', 'public', 'styles.css'),
+        'utf8',
+      );
+      expect(css).toMatch(
+        /\.grid\.cols-2 \{\s*grid-template-columns: minmax\(0, 1fr\);/,
+      );
+      expect(css).toMatch(
+        /\.enrollment-layout \{\s*display: grid;\s*grid-template-columns: minmax\(0, 1fr\);/,
+      );
+      const filterScript = fs.readFileSync(
+        path.join(__dirname, '..', 'public', 'table-filter.js'),
+        'utf8',
+      );
+      expect(filterScript).not.toContain('MIN_ROWS');
+      expect(filterScript).toContain('data-filter-group');
+    });
+
+    it('page Niveaux : une seule recherche pour tous les cycles', async () => {
+      const ecoleModel = app.get<Model<Ecole>>(getModelToken(Ecole.name));
+      const ecole = await ecoleModel.create({
+        nom: `Ecole Recherche ${Date.now()}`,
+        statutCompte: 'actif',
+        dateInscription: new Date(),
+      });
+      const ecoleId = String(ecole._id);
+      await seedSchoolConfiguration(app, {
+        ecoleId,
+        actorId: TEST_DEFAULT_USER_ID,
+        activateAllModules: true,
+      });
+
+      const page = await request(app.getHttpServer())
+        .get('/settings/levels')
+        .set('x-test-role', 'direction')
+        .set('x-test-ecole-id', ecoleId);
+      expect(page.status).toBe(200);
+      expect(page.text).toContain('data-filter-anchor');
+      expect(page.text.match(/data-filter-group="levels"/g)).toHaveLength(3);
+      expect(page.text).not.toMatch(/level-table" data-no-filter/);
+    });
+  });
+
+  describe('montants formates (FCFA)', () => {
+    it('affiche les frais avec separateur de milliers et devise, et garde les champs de saisie en nombres bruts', async () => {
+      const ecoleModel = app.get<Model<Ecole>>(getModelToken(Ecole.name));
+      const ecole = await ecoleModel.create({
+        nom: `Ecole Montants ${Date.now()}`,
+        statutCompte: 'actif',
+        dateInscription: new Date(),
+      });
+      const ecoleId = String(ecole._id);
+      await seedSchoolConfiguration(app, {
+        ecoleId,
+        actorId: TEST_DEFAULT_USER_ID,
+        activateAllModules: true,
+      });
+
+      const fees = await request(app.getHttpServer())
+        .get('/settings/fees')
+        .set('x-test-role', 'direction')
+        .set('x-test-ecole-id', ecoleId);
+      expect(fees.status).toBe(200);
+      // Terminale (seeder) : 185 000 d'ecolage, 20 000 d'inscription.
+      expect(fees.text).toContain('185 000 FCFA');
+      expect(fees.text).toContain('20 000 FCFA');
+      expect(fees.text).not.toMatch(/<td>185000<\/td>/);
+
+      const feeId = /href="\/settings\/fees\/([a-f0-9]{24})\/edit"/.exec(
+        fees.text,
+      )?.[1];
+      const edit = await request(app.getHttpServer())
+        .get(`/settings/fees/${feeId}/edit`)
+        .set('x-test-role', 'direction')
+        .set('x-test-ecole-id', ecoleId);
+      expect(edit.status).toBe(200);
+      expect(edit.text).toMatch(/name="tuitionFee" value="\d+"/);
+    });
+
+    it('rend le formateur disponible cote navigateur avant les scripts des pages', () => {
+      const html = nunjucks.renderString('{% extends "layout.njk" %}', {
+        title: 'Inscriptions',
+      });
+      const formatterAt = html.indexOf('window.formatMoney = ');
+      expect(formatterAt).toBeGreaterThan(-1);
+      expect(formatterAt).toBeLessThan(html.indexOf('</head>'));
+    });
+  });
+
+  describe('fiche de notes vierge : formulaire en 3 etapes', () => {
+    it('presente classe, colonnes (compteurs + apercu) et telechargement, avec les memes champs pour les exports', async () => {
+      const page = await request(app.getHttpServer())
+        .get('/reports/grade-sheet')
+        .set('x-test-role', 'secretariat');
+      expect(page.status).toBe(200);
+      for (const step of ['Classe', 'Colonnes de la fiche', 'Télécharger']) {
+        expect(page.text).toContain(step);
+      }
+      for (const name of [
+        'levelId',
+        'noteCount',
+        'interroCount',
+        'devoirCount',
+      ]) {
+        expect(page.text).toContain(`name="${name}"`);
+      }
+      expect(page.text.match(/data-step="-1"/g)).toHaveLength(3);
+      expect(page.text).toContain('data-column-preview');
+      expect(page.text).toContain('Télécharger le PDF');
+      expect(page.text).toContain('formaction="/reports/grade-sheet/docx"');
+      expect(page.text).toContain('formaction="/reports/grade-sheet/excel"');
+      // Plus de largeurs codees en dur dans la page.
+      expect(page.text).not.toContain('style="width:64px;"');
+    });
+  });
+
+  describe('statistiques de fin de periode : en-tete et filtres', () => {
+    it('n affiche le titre qu une fois, guide l utilisateur avant le choix de la periode et garde le bouton a sa taille', async () => {
+      // La page porte sur l'annee ouverte - le beforeEach global les ferme.
+      const year = await runWithTenant({ ecoleId: TEST_DEFAULT_ECOLE_ID }, () =>
+        schoolYearModel.create({
+          label: `STATS-UI-${Date.now()}`,
+          startDate: new Date('2102-09-01'),
+          endDate: new Date('2103-06-30'),
+          status: SchoolYearStatus.OPEN,
+        }),
+      );
+      const page = await request(app.getHttpServer())
+        .get('/reports/exam-statistics')
+        .set('x-test-role', 'direction');
+      // L'Excel telecharge porte la legende G / F / T.
+      const excel = await request(app.getHttpServer())
+        .get('/reports/exam-statistics/excel?periode=trimestre_1&levelId=')
+        .set('x-test-role', 'direction')
+        .buffer(true)
+        .parse((res, callback) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (chunk: Buffer) => chunks.push(chunk));
+          res.on('end', () => callback(null, Buffer.concat(chunks)));
+        });
+      await runWithTenant({ ecoleId: TEST_DEFAULT_ECOLE_ID }, () =>
+        schoolYearModel.deleteOne({ _id: year._id }),
+      );
+      expect(excel.status).toBe(200);
+      const workbook = new ExcelJS.Workbook();
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- supertest types res.body as `any`
+      await workbook.xlsx.load(excel.body);
+      const texts: string[] = [];
+      workbook.worksheets[0].eachRow((row) =>
+        row.eachCell((cell) => texts.push(cell.text)),
+      );
+      expect(texts.join(' ')).toContain('G = Garçons, F = Filles, T = Total');
+
+      // Telechargements disponibles des la barre de filtres, sans afficher.
+      expect(page.text).toContain('formaction="/reports/exam-statistics/pdf"');
+      expect(page.text).toContain(
+        'formaction="/reports/exam-statistics/excel"',
+      );
+      expect(page.status).toBe(200);
+      expect(page.text.match(/Statistiques de fin de période/g)).toHaveLength(
+        2, // <title> et le titre de page (h1), plus de second titre dans le bloc.
+      );
+      expect(page.text).not.toContain(
+        '<h2>Statistiques de fin de période</h2>',
+      );
+      expect(page.text).toContain('class="filter-bar" role="search"');
+      expect(page.text).toContain(
+        'Choisissez une période pour afficher les statistiques.',
+      );
+    });
+  });
+
+  describe('pages allegees : journal de discipline et stocks', () => {
+    it('journal de discipline : une seule barre (recherche texte + filtres instantanes)', async () => {
+      const page = await request(app.getHttpServer())
+        .get('/discipline')
+        .set('x-test-role', 'direction');
+      expect(page.status).toBe(200);
+      expect(page.text).toContain(
+        'class="filter-bar" role="search" data-live-search="#discipline-results"',
+      );
+      expect(page.text).toContain('data-table-filter="#disciplineTable"');
+      // Le tableau n'a pas de seconde barre de recherche automatique.
+      expect(page.text).toMatch(/id="disciplineTable" data-no-filter/);
+      expect(page.text).toContain('id="discipline-results"');
+      expect(page.text).toContain('+ Ajouter une entrée');
+      expect(page.text).not.toContain('<h2>Journal de discipline</h2>');
+    });
+
+    it('stocks : juste la liste et un bouton qui ouvre la fenetre d ajout', async () => {
+      const page = await request(app.getHttpServer())
+        .get('/stock')
+        .set('x-test-role', 'direction');
+      expect(page.status).toBe(200);
+      expect(page.text).not.toContain('<h2>Nouvel article</h2>');
+      expect(page.text).not.toContain('grid cols-2');
+      expect(page.text).toContain('data-open-dialog="stockCreateDialog"');
+      expect(page.text).toMatch(
+        /<dialog id="stockCreateDialog"[\s\S]*?action="\/stock"[\s\S]*?name="name"/,
+      );
+    });
+  });
+
+  describe('parametres : page Frais (deux colonnes, sections repliables)', () => {
+    it('garde parametres a gauche et grille a droite, resume chaque reglage et totalise la grille', async () => {
+      const ecoleModel = app.get<Model<Ecole>>(getModelToken(Ecole.name));
+      const ecole = await ecoleModel.create({
+        nom: `Ecole Frais ${Date.now()}`,
+        statutCompte: 'actif',
+        dateInscription: new Date(),
+      });
+      const ecoleId = String(ecole._id);
+      await seedSchoolConfiguration(app, {
+        ecoleId,
+        actorId: TEST_DEFAULT_USER_ID,
+        activateAllModules: true,
+      });
+
+      const page = await request(app.getHttpServer())
+        .get('/settings/fees')
+        .set('x-test-role', 'direction')
+        .set('x-test-ecole-id', ecoleId);
+      expect(page.status).toBe(200);
+      expect(page.text).toContain('grid cols-2 keep-columns fees-page');
+      expect(
+        page.text.match(/<details class="settings-section"/g),
+      ).toHaveLength(9);
+      // Valeurs actuelles lisibles, plus de codes bruts comme libelles.
+      expect(page.text).toContain('Impayés reportés d’abord');
+      expect(page.text).not.toContain('>arrears_first<');
+      expect(page.text).toContain('Écolage + frais d’inscription');
+      // Formulaires inchanges (memes routes).
+      for (const action of [
+        '/settings/fees',
+        '/settings/fees/import',
+        '/settings/school-name',
+        '/settings/chef-etablissement',
+        '/settings/receipt-mode',
+        '/settings/payment-allocation',
+        '/settings/matricule-rule',
+        '/settings/import-paid-students',
+        '/settings/fees/expense-categories',
+      ]) {
+        expect(page.text).toContain(`action="${action}"`);
+      }
+      // Terminale (seeder) : 20 000 + 185 000 = 205 000.
+      expect(page.text).toContain('<strong>205 000 FCFA</strong>');
+    });
+  });
+
+  describe('depenses : formulaire en haut, liste avec total et recherche unique', () => {
+    it('totalise les depenses affichees, formate montants et dates, et filtre par recherche', () =>
+      runWithTenant({ ecoleId: TEST_DEFAULT_ECOLE_ID }, async () => {
+        const year = await schoolYearModel.create({
+          label: `DEP-UI-${Date.now()}`,
+          startDate: new Date('2104-09-01'),
+          endDate: new Date('2105-06-30'),
+          status: SchoolYearStatus.OPEN,
+        });
+        const as = (req: request.Test) =>
+          req.set('x-test-role', 'comptabilite');
+        const unique = Date.now();
+
+        const categoryModel: Model<ExpenseCategory> = app.get(
+          getModelToken(ExpenseCategory.name),
+        );
+        const category = await categoryModel.create({
+          name: `Fournitures ${unique}`,
+        });
+        const categoryId = String(category._id);
+
+        for (const [label, amount] of [
+          [`Craies ${unique}`, '12500'],
+          [`Cahiers ${unique}`, '30000'],
+        ]) {
+          const created = await as(
+            request(app.getHttpServer()).post('/expenses'),
+          )
+            .type('form')
+            .send({
+              expenseDate: '2104-10-07',
+              label,
+              amount,
+              beneficiary: 'Librairie du Centre',
+              categoryId,
+            });
+          expect(created.status).toBe(302);
+        }
+
+        const page = await as(
+          request(app.getHttpServer()).get(
+            `/expenses?categoryId=${categoryId}`,
+          ),
+        );
+        expect(page.status).toBe(200);
+        // Une seule barre de recherche (instantanee), pas de doublon automatique.
+        expect(page.text).toContain(
+          'class="filter-bar" role="search" data-live-search="#expenses-results"',
+        );
+        expect(page.text).toMatch(
+          /id="expenses-results"[\s\S]*?data-no-filter/,
+        );
+        expect(page.text).toContain('2 dépense(s)');
+        expect(page.text).toContain('Total : <strong>42 500 FCFA</strong>');
+        expect(page.text).toContain('<strong>12 500 FCFA</strong>');
+        expect(page.text).toContain('<td>07/10/2104</td>');
+
+        const searched = await as(
+          request(app.getHttpServer()).get(
+            `/expenses?categoryId=${categoryId}&query=${encodeURIComponent(`Craies ${unique}`)}`,
+          ),
+        );
+        expect(searched.text).toContain(
+          '1 dépense(s) correspondant à la recherche',
+        );
+        expect(searched.text).toContain('Total : <strong>12 500 FCFA</strong>');
+
+        await schoolYearModel.deleteOne({ _id: year._id });
+      }));
+  });
+
+  describe('fiche eleve : enregistrement sans date de naissance', () => {
+    it('accepte la modification d un eleve dont la date de naissance est laissee vide', () =>
+      runWithTenant({ ecoleId: TEST_DEFAULT_ECOLE_ID }, async () => {
+        const student = await studentModel.create({
+          matricule: `SANS-DATE-${Date.now()}`,
+          lastname: 'BAT',
+          firstname: 'Baour',
+          gender: 'M',
+          status: 'active',
+        });
+
+        const response = await request(app.getHttpServer())
+          .put(`/students/${String(student._id)}`)
+          .set('x-test-role', 'secretariat')
+          .type('form')
+          .send({
+            lastname: 'BAT',
+            firstname: 'Baour Junior',
+            gender: 'M',
+            birthDate: '',
+            birthPlace: '',
+            district: '',
+          });
+        // Avant : 400 "birthDate must be a valid ISO 8601 date string".
+        expect(response.status).not.toBe(400);
+        expect(response.text).not.toContain('ISO 8601');
+
+        const updated = await studentModel.findById(student._id).lean();
+        expect(updated?.firstname).toBe('Baour Junior');
+        expect(updated?.birthDate).toBeUndefined();
+
+        await studentModel.deleteOne({ _id: student._id });
+      }));
+  });
+
+  describe('bulletins : modele et saisie pre-remplis avec ce que l application connait', () => {
+    it('apres une saisie a l ecran, le modele telecharge contient la note et la session propose la fusion', async () => {
+      const ecoleModel = app.get<Model<Ecole>>(getModelToken(Ecole.name));
+      const ecole = await ecoleModel.create({
+        nom: `Ecole Prefill ${Date.now()}`,
+        statutCompte: 'actif',
+        dateInscription: new Date(),
+      });
+      const ecoleId = String(ecole._id);
+      await seedSchoolConfiguration(app, {
+        ecoleId,
+        actorId: TEST_DEFAULT_USER_ID,
+        activateAllModules: true,
+      });
+      const bulletinsService = app.get(BulletinsService);
+
+      const { sessionId, studentId, subjectId } = await runWithTenant(
+        { ecoleId },
+        async () => {
+          const year = await schoolYearModel
+            .findOne({ status: SchoolYearStatus.OPEN })
+            .lean();
+          const level = await levelModel.findOne({ code: 'CM1' }).lean();
+          const student = await studentModel.create({
+            matricule: `PRE-${Date.now()}`,
+            lastname: 'AGBO',
+            firstname: 'Kafui',
+            gender: 'F',
+            status: 'active',
+          });
+          await enrollmentModel.create({
+            studentId: student._id,
+            schoolYearId: year!._id,
+            levelId: level!._id,
+            type: EnrollmentType.INITIAL,
+            status: 'active',
+          });
+          const session = await bulletinsService.createSession(
+            {
+              schoolYearId: String(year!._id),
+              levelId: String(level!._id),
+              periode: Periode.TRIMESTRE_1,
+            },
+            TEST_DEFAULT_USER_ID,
+          );
+          const entry = await bulletinsService.getGradeEntry(
+            String(session._id),
+          );
+          await bulletinsService.saveGradeEntry(
+            String(session._id),
+            entry.selected.subjectId,
+            {
+              [String(student._id)]: { i1: 13, i2: 15, devoir: 14, compo: 16 },
+            },
+          );
+          return {
+            sessionId: String(session._id),
+            studentId: String(student._id),
+            subjectId: entry.selected.subjectId,
+          };
+        },
+      );
+      const as = (req: request.Test) =>
+        req.set('x-test-role', 'secretariat').set('x-test-ecole-id', ecoleId);
+
+      // Session deja alimentee : "Fusionner" propose par defaut.
+      const sessionPage = await as(
+        request(app.getHttpServer()).get(`/bulletins/${sessionId}`),
+      );
+      expect(sessionPage.text).toMatch(/value="fusionner"[^>]*selected/);
+
+      // Le modele telecharge reprend la note saisie a l'ecran.
+      const download = await as(
+        request(app.getHttpServer()).get(`/bulletins/${sessionId}/template`),
+      )
+        .buffer(true)
+        .parse((res, callback) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (chunk: Buffer) => chunks.push(chunk));
+          res.on('end', () => callback(null, Buffer.concat(chunks)));
+        });
+      expect(download.status).toBe(200);
+      const parsed = parseBulletinWorkbook(download.body as Buffer);
+      const row = parsed.rows.find((r) => r.nameRaw === 'AGBO Kafui')!;
+      expect(row.notes[0]).toMatchObject({
+        i1: 13,
+        i2: 15,
+        devoir: 14,
+        compo: 16,
+      });
+
+      // Et la saisie a l'ecran reaffiche ces memes notes.
+      const reread = await runWithTenant({ ecoleId }, () =>
+        bulletinsService.getGradeEntry(sessionId, subjectId),
+      );
+      expect(
+        reread.students.find((s) => s.studentId === studentId),
+      ).toMatchObject({
+        i1: 13,
+        compo: 16,
+      });
+    }, 30000);
+  });
+
+  describe('changement de classe apres paiement', () => {
+    it('refuse au secretariat, accepte pour la direction avec motif, recalcule la facture en gardant le paiement', async () => {
+      const ecoleModel = app.get<Model<Ecole>>(getModelToken(Ecole.name));
+      const ecole = await ecoleModel.create({
+        nom: `Ecole Classe ${Date.now()}`,
+        statutCompte: 'actif',
+        dateInscription: new Date(),
+      });
+      const ecoleId = String(ecole._id);
+      await seedSchoolConfiguration(app, {
+        ecoleId,
+        actorId: TEST_DEFAULT_USER_ID,
+        activateAllModules: true,
+      });
+
+      // Eleve inscrit en 6eme (seeder : 15 000 + 120 000) avec 50 000 payes.
+      const { enrollmentId, level4eId } = await runWithTenant(
+        { ecoleId },
+        async () => {
+          const year = await schoolYearModel
+            .findOne({ status: SchoolYearStatus.OPEN })
+            .lean();
+          const level6e = await levelModel.findOne({ code: '6EME' }).lean();
+          const level4e = await levelModel.findOne({ code: '4EME' }).lean();
+          const student = await studentModel.create({
+            matricule: `CLS-${Date.now()}`,
+            lastname: 'ADJOVI',
+            firstname: 'Komi',
+            gender: 'M',
+            status: 'active',
+          });
+          const enrollment = await enrollmentsService.createEnrollment({
+            studentId: String(student._id),
+            schoolYearId: String(year!._id),
+            levelId: String(level6e!._id),
+            type: EnrollmentType.INITIAL,
+            applyOpenArrears: 'false',
+          });
+          // Paiement reel (meme service que le guichet).
+          await paymentsService.createPayment({
+            invoiceId: enrollment.invoiceId,
+            amount: 50000,
+            method: PaymentMethod.CASH,
+          });
+          return {
+            enrollmentId: String(enrollment.enrollmentId),
+            level4eId: String(level4e!._id),
+          };
+        },
+      );
+      const invoiceOf = () =>
+        runWithTenant({ ecoleId }, () =>
+          invoiceModel.findOne({ enrollmentId }).lean(),
+        );
+      expect((await invoiceOf())?.paidAmount).toBe(50000);
+
+      const asRole = (role: string) => (req: request.Test) =>
+        req.set('x-test-role', role).set('x-test-ecole-id', ecoleId);
+
+      // Secretariat : refuse, rien ne change.
+      await asRole('secretariat')(
+        request(app.getHttpServer()).put(`/enrollments/${enrollmentId}`),
+      )
+        .type('form')
+        .send({ levelId: level4eId, levelChangeReason: 'Erreur' });
+      const afterRefusal = await runWithTenant({ ecoleId }, () =>
+        enrollmentModel.findById(enrollmentId).lean(),
+      );
+      expect(String(afterRefusal?.levelId)).not.toBe(level4eId);
+
+      // Direction sans motif : refuse.
+      await asRole('direction')(
+        request(app.getHttpServer()).put(`/enrollments/${enrollmentId}`),
+      )
+        .type('form')
+        .send({ levelId: level4eId });
+      expect(
+        String(
+          (
+            await runWithTenant({ ecoleId }, () =>
+              enrollmentModel.findById(enrollmentId).lean(),
+            )
+          )?.levelId,
+        ),
+      ).not.toBe(level4eId);
+
+      // Direction avec motif : accepte, facture 4eme (15 000 + 130 000), paiement garde.
+      await asRole('direction')(
+        request(app.getHttpServer()).put(`/enrollments/${enrollmentId}`),
+      )
+        .type('form')
+        .send({
+          levelId: level4eId,
+          levelChangeReason: "Erreur de classe a l'inscription",
+        });
+      const changed = await runWithTenant({ ecoleId }, () =>
+        enrollmentModel.findById(enrollmentId).lean(),
+      );
+      expect(String(changed?.levelId)).toBe(level4eId);
+      expect(changed?.levelSnapshot?.label).toBe('4ème');
+      const invoice = await invoiceOf();
+      expect(invoice?.tuitionFee).toBe(130000);
+      expect(invoice?.paidAmount).toBe(50000);
+      expect(invoice?.balanceDue).toBe(95000);
+
+      const trace = await runWithTenant({ ecoleId }, () =>
+        auditLogModel
+          .findOne({
+            action: 'enrollment_level_changed',
+            entityId: enrollmentId,
+          })
+          .lean(),
+      );
+      expect(trace).toBeTruthy();
+    }, 30000);
+  });
+
+  describe('bulletins : revue d import, matieres a approuver pre-remplies', () => {
+    it('reprend le coefficient du fichier et approuve toutes les matieres en une fois', async () => {
+      const ecoleModel = app.get<Model<Ecole>>(getModelToken(Ecole.name));
+      const ecole = await ecoleModel.create({
+        nom: `Ecole Revue ${Date.now()}`,
+        statutCompte: 'actif',
+        dateInscription: new Date(),
+      });
+      const ecoleId = String(ecole._id);
+      await seedSchoolConfiguration(app, {
+        ecoleId,
+        actorId: TEST_DEFAULT_USER_ID,
+        activateAllModules: true,
+      });
+      const bulletinsService = app.get(BulletinsService);
+
+      const { sessionId, levelId, yearId } = await runWithTenant(
+        { ecoleId },
+        async () => {
+          const year = await schoolYearModel
+            .findOne({ status: SchoolYearStatus.OPEN })
+            .lean();
+          const level = await levelModel.findOne({ code: 'CM2' }).lean();
+          const session = await bulletinsService.createSession(
+            {
+              schoolYearId: String(year!._id),
+              levelId: String(level!._id),
+              periode: Periode.TRIMESTRE_1,
+              studentMatchingMode: 'auto_create',
+            } as never,
+            TEST_DEFAULT_USER_ID,
+          );
+          return {
+            sessionId: String(session._id),
+            levelId: String(level!._id),
+            yearId: String(year!._id),
+          };
+        },
+      );
+
+      // Fichier : Calcul (configure en CM2) + Musique (non configuree, coef 2).
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet('Notes');
+      sheet.addRow([
+        'N°',
+        'Nom et prénoms',
+        'Matricule',
+        'Sexe',
+        'N/R',
+        'Calcul',
+        'I1',
+        'I2',
+        'Devoir',
+        'Compo',
+        'Coef',
+        'Prof',
+        'Musique',
+        'I1',
+        'I2',
+        'Devoir',
+        'Compo',
+        'Coef',
+        'Prof',
+        'Classe',
+        'Titulaire',
+        "Chef d'établissement",
+        'Année scolaire',
+        'Date du conseil',
+      ]);
+      sheet.addRow([
+        1,
+        'KOFFI Elom',
+        `REV-${Date.now()}`,
+        'M',
+        'N',
+        '',
+        12,
+        13,
+        14,
+        15,
+        1,
+        'M. Aklesso',
+        '',
+        16,
+        15,
+        17,
+        14,
+        2,
+        'Mme Sika',
+        'CM2',
+        '',
+        '',
+        '2026-2027',
+        null,
+      ]);
+      const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+      await runWithTenant({ ecoleId }, () =>
+        bulletinsService.importFile(
+          sessionId,
+          buffer,
+          BulletinImportMode.PREMIER_IMPORT,
+          'revue.xlsx',
+        ),
+      );
+      const as = (req: request.Test) =>
+        req.set('x-test-role', 'secretariat').set('x-test-ecole-id', ecoleId);
+
+      const review = await as(
+        request(app.getHttpServer()).get(`/bulletins/${sessionId}/review`),
+      );
+      expect(review.status).toBe(200);
+      expect(review.text).toContain('Matières à approuver (1)');
+      expect(review.text).toMatch(
+        /name="subjects\[0\]\[coefficient\]" value="2"/,
+      );
+      expect(review.text).toContain('value="Mme Sika"');
+      expect(review.text).toContain('Matières configurées pour CM2');
+      expect(review.text).not.toContain('semble destiné à une autre classe');
+
+      const approve = await as(
+        request(app.getHttpServer()).post(
+          `/bulletins/${sessionId}/subjects/approve-all`,
+        ),
+      )
+        .type('form')
+        .send(
+          'subjects[0][subjectNameRaw]=Musique&subjects[0][label]=Musique' +
+            '&subjects[0][category]=autre&subjects[0][coefficient]=2' +
+            `&subjects[0][teacherName]=${encodeURIComponent('Mme Sika')}`,
+        );
+      expect(approve.status).toBe(302);
+
+      const after = await runWithTenant({ ecoleId }, async () => ({
+        pending: await bulletinsService.getUnapprovedSubjects(sessionId),
+        classSubjects: await bulletinsService.listClassSubjects(
+          yearId,
+          levelId,
+        ),
+      }));
+      expect(after.pending).toHaveLength(0);
+      const musique = after.classSubjects.find(
+        (cs) =>
+          (cs.subjectId as unknown as { label: string }).label === 'Musique',
+      );
+      expect(musique?.coefficient).toBe(2);
+      expect(musique?.teacherName).toBe('Mme Sika');
+    }, 30000);
+  });
+
+  describe('bulletins : page des sessions recentree', () => {
+    it('montre la liste des sessions avec de simples raccourcis vers la fiche de notes et les statistiques', async () => {
+      const ecoleModel = app.get<Model<Ecole>>(getModelToken(Ecole.name));
+      const ecole = await ecoleModel.create({
+        nom: `Ecole Sessions ${Date.now()}`,
+        statutCompte: 'actif',
+        dateInscription: new Date(),
+      });
+      const ecoleId = String(ecole._id);
+      await seedSchoolConfiguration(app, {
+        ecoleId,
+        actorId: TEST_DEFAULT_USER_ID,
+        activateAllModules: true,
+      });
+
+      const page = await request(app.getHttpServer())
+        .get('/bulletins')
+        .set('x-test-role', 'secretariat')
+        .set('x-test-ecole-id', ecoleId);
+      expect(page.status).toBe(200);
+      // Plus de grands encadres en doublon avec le menu...
+      expect(page.text).not.toContain('<h3>Fiche de notes vierge</h3>');
+      expect(page.text).not.toContain(
+        '<h3>Statistiques de fin de période</h3>',
+      );
+      // ...mais des raccourcis discrets et l'action principale.
+      expect(page.text).toContain('href="/reports/grade-sheet"');
+      expect(page.text).toContain('href="/reports/exam-statistics"');
+      expect(page.text).toContain('+ Nouvelle session');
+    });
+  });
+
+  describe('bulletins : page matieres et coefficients', () => {
+    it('ouvre directement sur l annee ouverte et une classe, et permet modifier puis retirer une matiere', async () => {
+      const ecoleModel = app.get<Model<Ecole>>(getModelToken(Ecole.name));
+      const ecole = await ecoleModel.create({
+        nom: `Ecole Matieres ${Date.now()}`,
+        statutCompte: 'actif',
+        dateInscription: new Date(),
+      });
+      const ecoleId = String(ecole._id);
+      await seedSchoolConfiguration(app, {
+        ecoleId,
+        actorId: TEST_DEFAULT_USER_ID,
+        activateAllModules: true,
+      });
+
+      // Sans aucun filtre : annee ouverte et premiere classe active choisies.
+      const page = await request(app.getHttpServer())
+        .get('/bulletins/matieres')
+        .set('x-test-role', 'direction')
+        .set('x-test-ecole-id', ecoleId);
+      expect(page.status).toBe(200);
+      expect(page.text).toContain('Catalogue des matières');
+      // Creation dans une fenetre : la colonne ne montre que la liste.
+      expect(page.text).toContain('data-open-dialog="subjectCreateDialog"');
+      expect(page.text).toContain('Littéraire');
+      expect(page.text).toContain('total des coefficients');
+      expect(page.text).toContain('(ouverte)');
+      expect(page.text).toContain('<optgroup label="Lycée">');
+      expect(page.text).toContain('data-edit-class-subject');
+
+      const { schoolYearId, levelId, philoId, physiqueId } =
+        await runWithTenant({ ecoleId }, async () => {
+          const levelModel = app.get<Model<Level>>(getModelToken(Level.name));
+          const subjectModel = app.get<Model<Subject>>(
+            getModelToken(Subject.name),
+          );
+          const schoolYearModel = app.get<Model<SchoolYear>>(
+            getModelToken(SchoolYear.name),
+          );
+          return {
+            levelId: String(
+              (await levelModel.findOne({ code: 'TERMINALE' }).lean())!._id,
+            ),
+            schoolYearId: String(
+              (await schoolYearModel
+                .findOne({ status: SchoolYearStatus.OPEN })
+                .lean())!._id,
+            ),
+            philoId: String(
+              (await subjectModel.findOne({ label: 'Philosophie' }).lean())!
+                ._id,
+            ),
+            physiqueId: String(
+              (await subjectModel.findOne({ label: /^Physique/ }).lean())!._id,
+            ),
+          };
+        });
+      const url = `/bulletins/matieres?schoolYearId=${schoolYearId}&levelId=${levelId}`;
+
+      // Modifier : nouveau coefficient (demi-points acceptes) et professeur.
+      const saved = await request(app.getHttpServer())
+        .post('/bulletins/matieres/class-subject')
+        .set('x-test-role', 'direction')
+        .set('x-test-ecole-id', ecoleId)
+        .type('form')
+        .send({
+          schoolYearId,
+          levelId,
+          subjectId: philoId,
+          coefficient: '4.5',
+          teacherName: 'M. Agbeko',
+        });
+      expect(saved.status).toBe(302);
+      expect(saved.headers.location).toBe(url);
+
+      const terminale = await request(app.getHttpServer())
+        .get(url)
+        .set('x-test-role', 'direction')
+        .set('x-test-ecole-id', ecoleId);
+      expect(terminale.text).toContain('M. Agbeko');
+      expect(terminale.text).toContain('data-coefficient="4.5"');
+      // La liste d'ajout ne propose pas les matieres deja dans la classe.
+      const addForm = terminale.text.split('Ajouter une matière à')[1] ?? '';
+      expect(addForm).not.toContain(`value="${philoId}"`);
+
+      // Retirer une matiere sans notes.
+      const classSubjectId = /class-subject\/([a-f0-9]{24})\/delete/.exec(
+        terminale.text.split(physiqueId)[1] ?? '',
+      )?.[1];
+      expect(classSubjectId).toBeDefined();
+      const removed = await request(app.getHttpServer())
+        .post(`/bulletins/matieres/class-subject/${classSubjectId}/delete`)
+        .set('x-test-role', 'direction')
+        .set('x-test-ecole-id', ecoleId)
+        .type('form')
+        .send({ schoolYearId, levelId });
+      expect(removed.status).toBe(302);
+      expect(removed.headers.location).toBe(url);
+      const after = await request(app.getHttpServer())
+        .get(url)
+        .set('x-test-role', 'direction')
+        .set('x-test-ecole-id', ecoleId);
+      expect(after.text).not.toContain(`/class-subject/${classSubjectId}/`);
+      // ...et elle redevient proposable a l'ajout.
+      expect(after.text.split('Ajouter une matière à')[1]).toContain(
+        `value="${physiqueId}"`,
+      );
+    }, 30000);
+  });
+
+  describe('journal de discipline : export PDF', () => {
+    it('propose le PDF avec les filtres affiches et renvoie toutes les entrees en PDF', async () => {
+      const recordModel = app.get<Model<DisciplineRecord>>(
+        getModelToken(DisciplineRecord.name),
+      );
+      const schoolYearId = new Types.ObjectId().toHexString();
+      await runWithTenant({ ecoleId: TEST_DEFAULT_ECOLE_ID }, () =>
+        recordModel.create({
+          studentId: new Types.ObjectId().toHexString(),
+          schoolYearId,
+          type: DisciplineRecordType.SANCTION,
+          date: new Date('2026-10-06'),
+          motif: 'Bagarre dans la cour',
+        }),
+      );
+
+      const page = await request(app.getHttpServer())
+        .get(`/discipline?schoolYearId=${schoolYearId}&type=sanction`)
+        .set('x-test-role', 'direction');
+      expect(page.status).toBe(200);
+      // Le bouton est en haut de page, a cote de « + Ajouter une entree »,
+      // et non sous la liste ; son lien reprend les filtres affiches.
+      const heading = page.text.split('id="discipline-results"')[0] ?? '';
+      expect(heading).toMatch(
+        /id="disciplinePdfLink" href="\/discipline\/pdf\?studentId=&amp;levelId=&amp;schoolYearId=[a-f0-9]{24}&amp;type=sanction"[^>]*>Télécharger en PDF<\/a>\s*<a class="button" href="\/discipline\/new/,
+      );
+      expect(page.text.split('id="discipline-results"')[1]).not.toContain(
+        'Télécharger en PDF',
+      );
+
+      const pdf = await request(app.getHttpServer())
+        .get(`/discipline/pdf?schoolYearId=${schoolYearId}&type=sanction`)
+        .set('x-test-role', 'auditeur')
+        .buffer(true)
+        .parse((res, done) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (chunk: Buffer) => chunks.push(chunk));
+          res.on('end', () => done(null, Buffer.concat(chunks)));
+        });
+      expect(pdf.status).toBe(200);
+      expect(pdf.headers['content-type']).toBe('application/pdf');
+      expect(pdf.headers['content-disposition']).toContain(
+        'journal-discipline.pdf',
+      );
+      expect((pdf.body as Buffer).subarray(0, 4).toString()).toBe('%PDF');
+    });
+  });
+
+  describe('menu Facturation masque et passage annuel en francais', () => {
+    const userContext = {
+      currentUser: {
+        id: TEST_DEFAULT_USER_ID,
+        name: 'Awa Koné',
+        role: 'super_admin',
+        ecoleId: TEST_DEFAULT_ECOLE_ID,
+      },
+      activeModules: {
+        finance: true,
+        bulletins: true,
+        discipline: true,
+        stock: true,
+        enseignants: true,
+      },
+    };
+
+    it('ne montre plus Facturation dans le menu', () => {
+      const html = nunjucks.renderString('{% extends "layout.njk" %}', {
+        title: 'Dépenses',
+        currentPath: '/expenses',
+        ...userContext,
+      });
+      const nav = html.slice(html.indexOf('<nav'), html.indexOf('</nav>'));
+      expect(nav).toContain('href="/expenses"');
+      expect(nav).not.toContain('href="/facturation"');
+    });
+
+    it('propose les decisions en francais avec une legende', () => {
+      const html = nunjucks.renderString(
+        '{% include "promotions/prepare.njk" %}',
+        {
+          title: 'Preparation promotion',
+          currentPath: '/promotions/prepare',
+          ...userContext,
+          schoolYears: [],
+          levels: [{ _id: 'lvl-1', label: '5ème' }],
+          candidates: [
+            {
+              _id: 'enr-1',
+              studentId: { _id: 'stu-1', lastname: 'ADJO', firstname: 'Koffi' },
+              levelId: { label: '6ème' },
+              importedDecision: 'repeated',
+            },
+          ],
+        },
+      );
+      for (const label of [
+        'Admis',
+        'Redouble',
+        'Transféré',
+        'Quitte l’école',
+        'Archivé',
+      ]) {
+        expect(html).toContain(label);
+      }
+      expect(html).toMatch(
+        /<option value="repeated"[^>]*selected[^>]*>Redouble<\/option>/,
+      );
+      expect(html).not.toMatch(/>promoted<\/option>/);
+      expect(html).toContain('Légende des décisions');
+      expect(html).toContain('Valider les décisions');
+    });
+  });
+
+  describe('application entierement en francais', () => {
+    it('ne propose plus la page technique Eleves par niveau', async () => {
+      const page = await request(app.getHttpServer())
+        .get('/reports/students-by-level')
+        .set('x-test-role', 'direction');
+      expect(page.status).toBe(404);
+      const html = nunjucks.renderString('{% extends "layout.njk" %}', {
+        title: 'Tableau de bord',
+        currentPath: '/dashboard',
+        currentUser: {
+          id: TEST_DEFAULT_USER_ID,
+          name: 'Awa Koné',
+          role: 'direction',
+          ecoleId: TEST_DEFAULT_ECOLE_ID,
+        },
+        activeModules: { finance: true },
+      });
+      expect(html).not.toContain('/reports/students-by-level');
+    });
+
+    it('affiche statuts et legendes en francais accentue', () => {
+      const labels = Object.values(ENUM_META).flatMap((group) =>
+        Object.values(group).map((meta) => meta.label),
+      );
+      for (const expected of [
+        'Clôturée',
+        'Payée',
+        'Impayée',
+        'Soldé',
+        'Annulé',
+        'Désactivé',
+        'Validée',
+        'À vérifier',
+        'Rapproché',
+        'Père',
+        'Mère',
+        'Espèces',
+        'Secrétariat',
+        'Comptabilité',
+        'Expiré',
+        'Résilié',
+      ]) {
+        expect(labels).toContain(expected);
+      }
+      // Plus aucun mot courant sans accent ni code anglais comme libelle.
+      for (const label of labels) {
+        expect(label).not.toMatch(
+          /\b(Cloturee|Payee|Impayee|Annule|Desactive|Validee|Pere|Mere|Especes|Secretariat|Comptabilite|Expire|Resilie|promoted|repeated|pending|paid|draft)\b/,
+        );
+      }
+      const legend = nunjucks.renderString(
+        '{% import "partials/legend.njk" as legend %}{{ legend.render(["invoiceStatus"]) }}',
+        {},
+      );
+      expect(legend).toContain('Légende des statuts');
+      expect(legend).toContain('Partiellement payée');
     });
   });
 });

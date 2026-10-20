@@ -59,7 +59,7 @@ export class AuthController {
         role: user.role,
         ecoleId: user.ecoleId ? String(user.ecoleId) : null,
       };
-      setFlash(req, 'success', 'Connexion reussie');
+      setFlash(req, 'success', 'Connexion réussie');
       const landingPage =
         user.role === Role.PLATFORM_ADMIN ? '/platform/ecoles' : '/dashboard';
       return res.redirect(landingPage);

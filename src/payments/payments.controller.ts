@@ -55,7 +55,7 @@ export class PaymentsController {
     );
     await this.schoolYearsService.assertWritable(invoice);
     const result = await this.paymentsService.createPayment(dto, user?.id);
-    setFlash(req, 'success', 'Paiement enregistre');
+    setFlash(req, 'success', 'Paiement enregistré');
     return res.redirect(`/receipts/${result.payment._id.toString()}`);
   }
 
@@ -123,7 +123,7 @@ export class PaymentsController {
     const receiptYear = await this.paymentsService.findReceiptYear(id);
     if (String(selected._id) !== receiptYear) {
       throw new ForbiddenException(
-        'Ce recu appartient a une autre annee scolaire',
+        'Ce reçu appartient à une autre année scolaire',
       );
     }
     const receiptMode = await this.settingsService.getReceiptMode(receiptYear);
@@ -144,7 +144,7 @@ export class PaymentsController {
       receiptMode,
     );
     return res.render('payments/receipt', {
-      title: 'Recu',
+      title: 'Reçu',
       receipt: {
         ...receipt,
         schoolName: schoolName || undefined,

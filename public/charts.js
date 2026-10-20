@@ -18,7 +18,7 @@
     container.textContent = '';
     const p = document.createElement('p');
     p.className = 'muted chart-empty';
-    p.textContent = message || 'Aucune donnee a afficher.';
+    p.textContent = message || 'Aucune donnée à afficher.';
     container.appendChild(p);
   }
 

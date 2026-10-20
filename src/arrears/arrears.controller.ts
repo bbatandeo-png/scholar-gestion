@@ -55,7 +55,7 @@ export class ArrearsController {
     );
 
     return {
-      title: 'Impayes reportes',
+      title: 'Impayés reportés',
       arrears: result.items,
       pagination: {
         page: result.page,
@@ -119,7 +119,7 @@ export class ArrearsController {
       entityId: dto.sourceEnrollmentId,
       details: result,
     });
-    setFlash(req, 'success', 'Impayes reportes');
+    setFlash(req, 'success', 'Impayés reportés');
     return res.redirect('/arrears');
   }
 }

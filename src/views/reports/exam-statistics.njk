@@ -1,28 +1,12 @@
 {% extends "layout.njk" %}
 {% block content %}
   <section class="panel">
+    {# Pas de second titre : le titre de la page est deja dans l'en-tete. #}
     <div class="panel-heading">
-      <div>
-        <h2>Statistiques de fin de période</h2>
-        <p class="muted">Répartition des moyennes par matière et effectifs inscrits/présents/admis par sexe - pour l'inspection. Toujours l'année scolaire ouverte (<strong>{{ activeYear.label }}</strong>).</p>
-      </div>
-      {% if report %}
-        <div class="toolbar">
-          <a class="button secondary btn-icon icon-export" href="/reports/exam-statistics/pdf?periode={{ periode }}{% if levelId %}&levelId={{ levelId }}{% endif %}">PDF</a>
-          <a class="button secondary btn-icon icon-export" href="/reports/exam-statistics/excel?periode={{ periode }}{% if levelId %}&levelId={{ levelId }}{% endif %}">Excel</a>
-          <a class="button secondary btn-icon icon-export" href="/reports/exam-statistics/docx?periode={{ periode }}{% if levelId %}&levelId={{ levelId }}{% endif %}">Word</a>
-        </div>
-      {% endif %}
+      <p class="muted">Répartition des moyennes par matière et effectifs inscrits, présents et admis par sexe, pour l'inspection. Année scolaire ouverte : <strong>{{ activeYear.label }}</strong>.</p>
     </div>
-    <form method="get" action="/reports/exam-statistics" class="toolbar-grid">
-      <label>Classe
-        <select name="levelId">
-          <option value="">Toutes les classes</option>
-          {% for level in levels %}
-            <option value="{{ level._id }}" {% if levelId == level._id %}selected{% endif %}>{{ level.label }}</option>
-          {% endfor %}
-        </select>
-      </label>
+
+    <form method="get" action="/reports/exam-statistics" class="filter-bar" role="search">
       <label>Période
         <select name="periode" required>
           <option value="">Choisir une période</option>
@@ -31,14 +15,33 @@
           {% endfor %}
         </select>
       </label>
-      <button type="submit" class="btn-icon icon-search">Afficher</button>
+      <label>Classe
+        <select name="levelId">
+          <option value="">Toutes les classes</option>
+          {% for level in levels %}
+            <option value="{{ level._id }}" {% if levelId == level._id %}selected{% endif %}>{{ level.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button type="submit" class="button btn-icon icon-search">Afficher</button>
+      <span class="filter-bar-separator" aria-hidden="true"></span>
+      <button type="submit" formaction="/reports/exam-statistics/pdf" formtarget="_blank" class="button secondary btn-icon icon-export">Télécharger en PDF</button>
+      <button type="submit" formaction="/reports/exam-statistics/excel" class="button secondary btn-icon icon-export">Télécharger en Excel</button>
+      <button type="submit" formaction="/reports/exam-statistics/docx" class="button ghost btn-icon icon-export">Word</button>
     </form>
+
+    {% if not report %}
+      <div class="empty-state">
+        <strong>Choisissez une période pour afficher les statistiques.</strong>
+        <span>Laissez « Toutes les classes » pour une vue d'ensemble de l'établissement, ou choisissez une classe précise. Vous pouvez aussi télécharger directement le PDF ou le fichier Excel.</span>
+      </div>
+    {% endif %}
 
     {% if report %}
       <h3 class="top-gap">Répartition des moyennes par matière</h3>
       <p class="muted">Classe : <strong>{{ report.levelName }}</strong> — Période : <strong>{{ report.periodeLabel }}</strong></p>
       <div class="table-shell">
-        <table class="table-report">
+        <table class="table-report stats-table">
           <thead>
             <tr>
               <th>Matières</th>
@@ -78,7 +81,7 @@
 
       <h3 class="top-gap">Statistiques générales</h3>
       <div class="table-shell">
-        <table class="table-report">
+        <table class="table-report stats-table" data-no-filter>
           <thead>
             <tr>
               <th colspan="3">Inscrits</th>
@@ -87,10 +90,9 @@
               <th colspan="3">Pourcentage de réussite</th>
             </tr>
             <tr>
-              <th>G</th><th>F</th><th>T</th>
-              <th>G</th><th>F</th><th>T</th>
-              <th>G</th><th>F</th><th>T</th>
-              <th>G</th><th>F</th><th>T</th>
+              {% for group in range(4) %}
+                <th>Garçons</th><th>Filles</th><th>Total</th>
+              {% endfor %}
             </tr>
           </thead>
           <tbody>
@@ -111,6 +113,7 @@
           </tbody>
         </table>
       </div>
+      <p class="field-hint top-gap">{{ legend }}</p>
     {% endif %}
   </section>
 {% endblock %}

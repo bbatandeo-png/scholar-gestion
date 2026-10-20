@@ -1,42 +1,42 @@
 ﻿{% extends "layout.njk" %}
 {% block content %}
   <section class="panel">
-    <h2>Preparation du passage annuel</h2>
+    <h2>Préparation du passage annuel</h2>
     {% if openSchoolYear %}
       <div class="notice notice-info">
-        L’année {{ openSchoolYear.label }} est actuellement ouverte. Si c’est l’année cible ci-dessous, vous pouvez preparer/promouvoir directement dedans. Si vous visez une autre année, clôturez d’abord {{ openSchoolYear.label }} dans les paramètres.
+        L’année {{ openSchoolYear.label }} est actuellement ouverte. Si c’est l’année cible ci-dessous, vous pouvez préparer/promouvoir directement dedans. Si vous visez une autre année, clôturez d’abord {{ openSchoolYear.label }} dans les paramètres.
       </div>
     {% endif %}
     <form method="post" action="/promotions/prepare" class="stack">
       <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
       <div class="form-grid">
-        <label>Annee source
+        <label>Année source
           <select name="sourceSchoolYearId">
             {% for year in schoolYears %}<option value="{{ year._id }}">{{ year.label }}</option>{% endfor %}
           </select>
         </label>
-        <label>Annee cible
+        <label>Année cible
           <select name="targetSchoolYearId">
             {% for year in schoolYears %}<option value="{{ year._id }}">{{ year.label }}</option>{% endfor %}
           </select>
         </label>
       </div>
-      <button type="submit" class="btn-icon icon-search">Preparer la liste</button>
+      <button type="submit" class="btn-icon icon-search">Préparer la liste</button>
     </form>
 
     <hr />
 
-    <h3>Importer un fichier Excel des eleves admis</h3>
-    <p>Colonnes attendues: matricule, decision, niveau_cible</p>
+    <h3>Importer un fichier Excel des élèves admis</h3>
+    <p>Colonnes attendues : <strong>matricule</strong>, <strong>décision</strong>, <strong>niveau_cible</strong>. Valeurs possibles pour <em>décision</em> : Admis, Redouble, Transféré, Quitte l’école, Archivé.</p>
     <form method="post" action="/promotions/prepare-import?_csrf={{ csrfToken }}" enctype="multipart/form-data" class="stack">
       <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
       <div class="form-grid">
-        <label>Annee source
+        <label>Année source
           <select name="sourceSchoolYearId">
             {% for year in schoolYears %}<option value="{{ year._id }}">{{ year.label }}</option>{% endfor %}
           </select>
         </label>
-        <label>Annee cible
+        <label>Année cible
           <select name="targetSchoolYearId">
             {% for year in schoolYears %}<option value="{{ year._id }}">{{ year.label }}</option>{% endfor %}
           </select>
@@ -45,7 +45,7 @@
       <label>Fichier Excel (.xlsx)
         <input type="file" name="file" accept=".xlsx,.xls" required />
       </label>
-      <button type="submit" class="secondary btn-icon icon-import">Importer et preparer</button>
+      <button type="submit" class="secondary btn-icon icon-import">Importer et préparer</button>
     </form>
   </section>
 {% endblock %}

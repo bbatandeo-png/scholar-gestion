@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuditModule } from '../audit/audit.module';
+import { EcolesModule } from '../ecoles/ecoles.module';
 import { EcoleModulesModule } from '../ecole-modules/ecole-modules.module';
 import { LevelsModule } from '../levels/levels.module';
 import { SchoolYearsModule } from '../school-years/school-years.module';
@@ -19,6 +20,7 @@ import {
     ]),
     AuditModule,
     EcoleModulesModule,
+    EcolesModule,
     LevelsModule,
     SchoolYearsModule,
     StudentsModule,

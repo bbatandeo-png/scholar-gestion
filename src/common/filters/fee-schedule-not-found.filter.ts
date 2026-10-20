@@ -21,7 +21,7 @@ export class FeeScheduleNotFoundFilter implements ExceptionFilter {
         req.session.flash = {
           type: 'error',
           message:
-            "Parametrage des frais introuvable pour cette classe. Veuillez configurer les frais de scolarite avant de faire l'inscription. Allez a Frais dans les parametrages.",
+            "Paramétrage des frais introuvable pour cette classe. Veuillez configurer les frais de scolarité avant de faire l'inscription. Allez à Frais dans les paramétrages.",
         };
       }
       return res.redirect('/enrollments');

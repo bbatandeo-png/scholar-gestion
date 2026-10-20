@@ -87,6 +87,7 @@ export enum AuditAction {
   STUDENT_UPDATED = 'student_updated',
   ENROLLMENT_CREATED = 'enrollment_created',
   REENROLLMENT_CREATED = 'reenrollment_created',
+  ENROLLMENT_LEVEL_CHANGED = 'enrollment_level_changed',
   PAYMENT_CREATED = 'payment_created',
   PAYMENT_CORRECTED = 'payment_corrected',
   DISCOUNT_APPLIED = 'discount_applied',
@@ -162,9 +163,12 @@ export enum FactureStatut {
   EN_RETARD = 'en_retard',
 }
 
+// Valeurs numeriques stockees en base : ne jamais renumeroter (PRIMAIRE
+// ajoute en 3 apres coup, les niveaux existants gardent 1 et 2).
 export enum LevelCycle {
   COLLEGE = 1,
   LYCEE = 2,
+  PRIMAIRE = 3,
 }
 
 export enum Periode {

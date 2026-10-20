@@ -34,7 +34,12 @@ export class UpdateStudentDto {
   @IsIn(['M', 'F'])
   gender?: string;
 
+  // Un champ date laisse vide envoie '' : sans cette transformation,
+  // l'enregistrement d'un eleve sans date de naissance echouait avec
+  // "birthDate must be a valid ISO 8601 date string" (meme correctif que
+  // CreateStudentDto).
   @IsOptional()
+  @Transform(emptyToUndefined)
   @IsDateString()
   birthDate?: string;
 

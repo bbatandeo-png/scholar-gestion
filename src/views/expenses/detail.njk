@@ -15,7 +15,7 @@
       <div><strong>Numéro:</strong> {{ expense.orderNumber }}</div>
       <div><strong>Date:</strong> {{ expense.expenseDate | formatDate }}</div>
       <div><strong>Libellé:</strong> {{ expense.label }}</div>
-      <div><strong>Montant:</strong> {{ expense.amount }}</div>
+      <div><strong>Montant:</strong> {{ expense.amount | money }}</div>
       <div><strong>Bénéficiaire:</strong> {{ expense.beneficiary }}</div>
       <div><strong>Catégorie:</strong> {{ expense.categoryId.name if expense.categoryId else '' }}</div>
       <div><strong>Dernière modification:</strong>

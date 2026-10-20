@@ -10,6 +10,6 @@ import { NotFoundException } from '@nestjs/common';
 // normal 404 response for all of those unrelated routes.
 export class FeeScheduleNotFoundException extends NotFoundException {
   constructor() {
-    super('Parametrage des frais introuvable');
+    super('Paramétrage des frais introuvable');
   }
 }

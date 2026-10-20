@@ -30,7 +30,7 @@ export class Payment {
     required: true,
     validate: {
       validator: (value: number) => Number.isFinite(value) && value !== 0,
-      message: 'Le montant ne peut pas etre nul',
+      message: 'Le montant ne peut pas être nul',
     },
   })
   amount: number;

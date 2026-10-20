@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing';
 import { getModelToken, MongooseModule } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { startMongoReplSet } from '../../test/mongo-replset';
 import { runWithTenant } from '../common/tenant/tenant-context';
 import {
@@ -40,6 +41,7 @@ import {
   StudentSchema,
 } from '../students/schemas/student.schema';
 import { StudentsModule } from '../students/students.module';
+import { SettingsModule } from '../settings/settings.module';
 import { EcolesModule } from '../ecoles/ecoles.module';
 import { BulletinsService } from './bulletins.service';
 import {
@@ -99,6 +101,7 @@ describe('BulletinsService', () => {
   let levelModel: Model<LevelDocument>;
   let noteModel: Model<NoteDocument>;
   let bulletinResultModel: Model<BulletinResultDocument>;
+  let moduleRefModel: <T>(name: string) => Model<T>;
 
   beforeAll(async () => {
     repl = await startMongoReplSet();
@@ -120,11 +123,14 @@ describe('BulletinsService', () => {
         ]),
         StudentsModule,
         EcolesModule,
+        SettingsModule,
       ],
       providers: [BulletinsService, AuditService],
     }).compile();
 
     service = moduleRef.get(BulletinsService);
+    moduleRefModel = <T>(name: string) =>
+      moduleRef.get<Model<T>>(getModelToken(name));
     studentModel = moduleRef.get(getModelToken(Student.name));
     enrollmentModel = moduleRef.get(getModelToken(Enrollment.name));
     levelModel = moduleRef.get(getModelToken(Level.name));
@@ -467,7 +473,7 @@ describe('BulletinsService', () => {
       runWithTenant({ ecoleId }, () =>
         service.validateSession(String(session._id), createdBy),
       ),
-    ).rejects.toThrow('deja validee');
+    ).rejects.toThrow('déjà validée');
   });
 
   it('mode ECRASER: remplace les notes existantes sans perdre les lignes deja rapprochees (regression)', async () => {
@@ -766,9 +772,7 @@ describe('BulletinsService', () => {
     // Real client data file, deliberately not committed to the repo (PII).
     // Skip gracefully when it isn't present locally instead of failing CI.
     if (!fs.existsSync(realFilePath)) {
-      console.warn(
-        `Test ignore : fichier reel absent (${realFilePath})`,
-      );
+      console.warn(`Test ignore : fichier reel absent (${realFilePath})`);
       return;
     }
     const buffer = fs.readFileSync(realFilePath);
@@ -1635,7 +1639,7 @@ describe('BulletinsService', () => {
           'v1.xlsx',
         ),
       ),
-    ).rejects.toThrow('deja utilise');
+    ).rejects.toThrow('déjà utilisé');
 
     const students = await runWithTenant({ ecoleId }, () =>
       studentModel.find({}).lean().exec(),
@@ -1724,9 +1728,7 @@ describe('BulletinsService', () => {
     // Real client data file, deliberately not committed to the repo (PII).
     // Skip gracefully when it isn't present locally instead of failing CI.
     if (!fs.existsSync(realFilePath)) {
-      console.warn(
-        `Test ignore : fichier reel absent (${realFilePath})`,
-      );
+      console.warn(`Test ignore : fichier reel absent (${realFilePath})`);
       return;
     }
     const buffer = fs.readFileSync(realFilePath);
@@ -1850,7 +1852,7 @@ describe('BulletinsService', () => {
           category: SubjectCategory.LITTERAIRE,
         }),
       ),
-    ).rejects.toThrow('existe deja');
+    ).rejects.toThrow('existe déjà');
 
     const subjects = await runWithTenant({ ecoleId }, () =>
       service.listSubjects(),
@@ -2083,5 +2085,728 @@ describe('BulletinsService', () => {
     expect(subjectsAsB.map((s) => String(s._id)).sort()).toEqual(
       [String(subjectB._id), String(duplicateInB._id)].sort(),
     );
+  });
+
+  // Aller-retour complet : le modele telecharge, rempli comme le ferait la
+  // secretaire, doit etre accepte tel quel par l'import - eleves rapproches,
+  // matieres reconnues, session directement prete a valider.
+  it('modele d import pre-rempli : genere, rempli puis reimporte sans aucune correction', async () => {
+    const ecoleId = new Types.ObjectId().toHexString();
+    const createdBy = new Types.ObjectId().toHexString();
+    const schoolYearModel = moduleRefModel<SchoolYear>(SchoolYear.name);
+    const subjectModel = moduleRefModel<Subject>(Subject.name);
+    const classSubjectModel = moduleRefModel<ClassSubject>(ClassSubject.name);
+
+    const { schoolYearId, levelId } = await runWithTenant(
+      { ecoleId },
+      async () => {
+        const year = await schoolYearModel.create({
+          label: '2031-2032',
+          startDate: new Date('2031-09-01'),
+          endDate: new Date('2032-06-30'),
+          status: 'open',
+        });
+        const level = await levelModel.create({
+          code: '4EME-TPL',
+          label: '4ème',
+          sortOrder: 1,
+          cycle: LevelCycle.COLLEGE,
+        });
+        return {
+          schoolYearId: String(year._id),
+          levelId: String(level._id),
+        };
+      },
+    );
+    await seedRoster(ecoleId, levelId, schoolYearId);
+
+    await runWithTenant({ ecoleId }, async () => {
+      const maths = await subjectModel.create({
+        label: 'Mathématiques',
+        labelNormalized: 'MATHEMATIQUES',
+        category: SubjectCategory.SCIENTIFIQUE,
+      });
+      const francais = await subjectModel.create({
+        label: 'Français',
+        labelNormalized: 'FRANCAIS',
+        category: SubjectCategory.LITTERAIRE,
+      });
+      await classSubjectModel.create([
+        {
+          schoolYearId,
+          levelId,
+          subjectId: maths._id,
+          coefficient: 3,
+          teacherName: 'M. Koffi',
+          displayOrder: 1,
+        },
+        {
+          schoolYearId,
+          levelId,
+          subjectId: francais._id,
+          coefficient: 2,
+          displayOrder: 2,
+        },
+      ]);
+    });
+
+    const session = await runWithTenant({ ecoleId }, () =>
+      service.createSession(
+        { schoolYearId, levelId, periode: Periode.TRIMESTRE_1 },
+        createdBy,
+      ),
+    );
+
+    const { buffer, fileName } = await runWithTenant({ ecoleId }, () =>
+      service.buildImportTemplate(String(session._id)),
+    );
+    expect(fileName).toBe('modele-notes-4eme-1er_Trimestre.xlsx');
+
+    // Le modele brut est deja lisible par l'import.
+    const parsed = parseBulletinWorkbook(buffer);
+    expect(parsed.rows.map((r) => r.nameRaw)).toEqual([
+      'ADOKPE Gildas',
+      'AFANOU Kepler',
+      'ZANDOH Komlan',
+    ]);
+    expect(parsed.rows[0].matriculeRaw).toBe('MAT-001');
+    expect(parsed.rows[0].notes.map((n) => n.subjectNameRaw)).toEqual([
+      'Mathématiques',
+      'Français',
+    ]);
+    expect(parsed.rows[0].notes[0]).toMatchObject({
+      coef: 3,
+      profRaw: 'M. Koffi',
+      i1: null,
+      compo: null,
+    });
+    expect(parsed.meta.classe).toBe('4ème');
+    expect(parsed.meta.anneeScolaire).toBe('2031-2032');
+
+    // Saisie des notes dans le fichier, comme dans Excel.
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer as unknown as ExcelJS.Buffer);
+    const sheet = workbook.getWorksheet('Notes')!;
+    // Mathematiques : bloc en colonne 6 (nom), I1..Compo en 7..10.
+    [12, 14, 13, 15].forEach((note, i) => {
+      sheet.getCell(2, 7 + i).value = note;
+    });
+    const filled = Buffer.from(await workbook.xlsx.writeBuffer());
+
+    await runWithTenant({ ecoleId }, () =>
+      service.importFile(
+        String(session._id),
+        filled,
+        BulletinImportMode.PREMIER_IMPORT,
+        fileName,
+      ),
+    );
+
+    const rows = await runWithTenant({ ecoleId }, () =>
+      service.listRows(String(session._id)),
+    );
+    expect(rows).toHaveLength(3);
+    expect(
+      rows.every((r) => r.matchStatus === ImportRowMatchStatus.MATCHED),
+    ).toBe(true);
+    const adokpe = rows.find((r) => r.rawIdentity.nameRaw === 'ADOKPE Gildas')!;
+    expect(adokpe.notes[0]).toMatchObject({
+      subjectNameRaw: 'Mathématiques',
+      i1: 12,
+      i2: 14,
+      devoir: 13,
+      compo: 15,
+    });
+
+    const unapproved = await runWithTenant({ ecoleId }, () =>
+      service.getUnapprovedSubjects(String(session._id)),
+    );
+    expect(unapproved).toHaveLength(0);
+    const after = await runWithTenant({ ecoleId }, () =>
+      service.getSession(String(session._id)),
+    );
+    expect(after.status).toBe(BulletinSessionStatus.READY);
+  });
+
+  it('modele d import : refuse clairement une classe sans matiere configuree', async () => {
+    const ecoleId = new Types.ObjectId().toHexString();
+    const schoolYearModel = moduleRefModel<SchoolYear>(SchoolYear.name);
+    const { schoolYearId, levelId } = await runWithTenant(
+      { ecoleId },
+      async () => {
+        const year = await schoolYearModel.create({
+          label: '2032-2033',
+          startDate: new Date('2032-09-01'),
+          endDate: new Date('2033-06-30'),
+          status: 'open',
+        });
+        const level = await levelModel.create({
+          code: '3EME-TPL',
+          label: '3ème',
+          sortOrder: 1,
+          cycle: LevelCycle.COLLEGE,
+        });
+        return {
+          schoolYearId: String(year._id),
+          levelId: String(level._id),
+        };
+      },
+    );
+    const session = await runWithTenant({ ecoleId }, () =>
+      service.createSession(
+        { schoolYearId, levelId, periode: Periode.TRIMESTRE_1 },
+        new Types.ObjectId().toHexString(),
+      ),
+    );
+
+    await expect(
+      runWithTenant({ ecoleId }, () =>
+        service.buildImportTemplate(String(session._id)),
+      ),
+    ).rejects.toThrow('Aucune matière');
+  });
+
+  // Classe de 3 eleves (seedRoster) avec Mathematiques (coef 3) et
+  // Francais (coef 2) configurees, et une session T1 en brouillon.
+  async function setupClassSession(ecoleId: string, code: string) {
+    const schoolYearModel = moduleRefModel<SchoolYear>(SchoolYear.name);
+    const subjectModel = moduleRefModel<Subject>(Subject.name);
+    const classSubjectModel = moduleRefModel<ClassSubject>(ClassSubject.name);
+    const ids = await runWithTenant({ ecoleId }, async () => {
+      const year = await schoolYearModel.create({
+        label: `${code}-2040`,
+        startDate: new Date('2040-09-01'),
+        endDate: new Date('2041-06-30'),
+        status: 'open',
+      });
+      const level = await levelModel.create({
+        code,
+        label: code,
+        sortOrder: 1,
+        cycle: LevelCycle.COLLEGE,
+      });
+      const maths = await subjectModel.create({
+        label: 'Mathématiques',
+        labelNormalized: 'MATHEMATIQUES',
+        category: SubjectCategory.SCIENTIFIQUE,
+      });
+      const francais = await subjectModel.create({
+        label: 'Français',
+        labelNormalized: 'FRANCAIS',
+        category: SubjectCategory.LITTERAIRE,
+      });
+      await classSubjectModel.create([
+        {
+          schoolYearId: year._id,
+          levelId: level._id,
+          subjectId: maths._id,
+          coefficient: 3,
+          displayOrder: 1,
+        },
+        {
+          schoolYearId: year._id,
+          levelId: level._id,
+          subjectId: francais._id,
+          coefficient: 2,
+          displayOrder: 2,
+        },
+      ]);
+      return {
+        schoolYearId: String(year._id),
+        levelId: String(level._id),
+        mathsId: String(maths._id),
+        francaisId: String(francais._id),
+      };
+    });
+    const roster = await seedRoster(ecoleId, ids.levelId, ids.schoolYearId);
+    const session = await runWithTenant({ ecoleId }, () =>
+      service.createSession(
+        {
+          schoolYearId: ids.schoolYearId,
+          levelId: ids.levelId,
+          periode: Periode.TRIMESTRE_1,
+        },
+        new Types.ObjectId().toHexString(),
+      ),
+    );
+    return { ...ids, ...roster, sessionId: String(session._id) };
+  }
+
+  it('modele d import : feuille Exemple entierement remplie, feuille Notes laissee vide', async () => {
+    const ecoleId = new Types.ObjectId().toHexString();
+    const { sessionId } = await setupClassSession(ecoleId, 'EX-6EME');
+
+    const { buffer } = await runWithTenant({ ecoleId }, () =>
+      service.buildImportTemplate(sessionId),
+    );
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer as unknown as ExcelJS.Buffer);
+    expect(workbook.worksheets.map((w) => w.name)).toEqual([
+      'Notes',
+      'Exemple',
+      "Mode d'emploi",
+    ]);
+
+    // L'import lit "Notes" : vrais eleves, aucune note inventee.
+    const parsed = parseBulletinWorkbook(buffer);
+    expect(parsed.rows).toHaveLength(3);
+    for (const row of parsed.rows) {
+      for (const note of row.notes) {
+        expect([note.i1, note.i2, note.devoir, note.compo]).toEqual([
+          null,
+          null,
+          null,
+          null,
+        ]);
+      }
+    }
+
+    // "Exemple" : eleves fictifs, toutes les notes renseignees (sauf la
+    // case volontairement vide qui illustre une note absente).
+    const example = workbook.getWorksheet('Exemple')!;
+    expect(example.getCell(1, 1).text).toContain('EXEMPLE');
+    expect(example.getCell(3, 2).value).toBe('KOUASSI Aya');
+    const firstStudentNotes = [7, 8, 9, 10].map(
+      (col) => example.getCell(3, col).value,
+    );
+    firstStudentNotes.forEach((value) => {
+      expect(typeof value).toBe('number');
+      expect(value as number).toBeGreaterThanOrEqual(0);
+      expect(value as number).toBeLessThanOrEqual(20);
+    });
+    expect(example.getCell(5, 8).value).toBeNull(); // DIALLO Fatou, I2 absente
+  });
+
+  it('saisie dans l application : par matiere, notes controlees, session prete puis validable', async () => {
+    const ecoleId = new Types.ObjectId().toHexString();
+    const { sessionId, mathsId, francaisId, s1, s2, s3 } =
+      await setupClassSession(ecoleId, 'SAISIE-5E');
+
+    // Grille vierge : 3 eleves, 2 matieres, Mathematiques selectionnee.
+    const empty = await runWithTenant({ ecoleId }, () =>
+      service.getGradeEntry(sessionId),
+    );
+    expect(empty.selected?.subjectId).toBe(mathsId);
+    expect(empty.students.map((s) => s.name)).toEqual([
+      'ADOKPE Gildas',
+      'AFANOU Kepler',
+      'ZANDOH Komlan',
+    ]);
+    expect(empty.subjects.map((s) => s.filled)).toEqual([0, 0]);
+
+    // Une note hors bornes est refusee avec le nom de l'eleve, rien n'est ecrit.
+    await expect(
+      runWithTenant({ ecoleId }, () =>
+        service.saveGradeEntry(sessionId, mathsId, {
+          [String(s1._id)]: { i1: 25, i2: null, devoir: null, compo: null },
+        }),
+      ),
+    ).rejects.toThrow('ADOKPE Gildas — I1');
+
+    const notes = (i1: number, compo: number) => ({
+      i1,
+      i2: null,
+      devoir: i1,
+      compo,
+    });
+    const saved = await runWithTenant({ ecoleId }, () =>
+      service.saveGradeEntry(sessionId, mathsId, {
+        [String(s1._id)]: notes(12, 14),
+        [String(s2._id)]: notes(9, 11),
+        [String(s3._id)]: notes(15, 16),
+      }),
+    );
+    expect(saved).toEqual({ subjectLabel: 'Mathématiques', studentCount: 3 });
+
+    const afterMaths = await runWithTenant({ ecoleId }, () =>
+      service.getGradeEntry(sessionId, mathsId),
+    );
+    expect(afterMaths.students[0]).toMatchObject({
+      name: 'ADOKPE Gildas',
+      i1: 12,
+      i2: null,
+      devoir: 12,
+      compo: 14,
+    });
+    expect(afterMaths.subjects.map((s) => s.filled)).toEqual([3, 0]);
+
+    // Deuxieme matiere : la premiere n'est pas ecrasee.
+    await runWithTenant({ ecoleId }, () =>
+      service.saveGradeEntry(sessionId, francaisId, {
+        [String(s1._id)]: notes(10, 12),
+        [String(s2._id)]: notes(13, 13),
+        [String(s3._id)]: notes(8, 10),
+      }),
+    );
+    const rows = await runWithTenant({ ecoleId }, () =>
+      service.listRows(sessionId),
+    );
+    expect(rows).toHaveLength(3);
+    expect(
+      rows.every((r) => r.matchStatus === ImportRowMatchStatus.MATCHED),
+    ).toBe(true);
+    expect(rows.every((r) => r.notes.length === 2)).toBe(true);
+
+    const ready = await runWithTenant({ ecoleId }, () =>
+      service.getSession(sessionId),
+    );
+    expect(ready.status).toBe(BulletinSessionStatus.READY);
+    expect(ready.sourceFileName).toBe("Saisie dans l'application");
+
+    // Meme validation que pour un import Excel.
+    await runWithTenant({ ecoleId }, () =>
+      service.validateSession(sessionId, new Types.ObjectId().toHexString()),
+    );
+    const validated = await runWithTenant({ ecoleId }, () =>
+      service.getSession(sessionId),
+    );
+    expect(validated.status).toBe(BulletinSessionStatus.VALIDATED);
+    const results = await runWithTenant({ ecoleId }, () =>
+      bulletinResultModel
+        .find({
+          studentId: { $in: [s1._id, s2._id, s3._id] },
+          periode: Periode.TRIMESTRE_1,
+        })
+        .lean(),
+    );
+    expect(results).toHaveLength(3);
+    // ADOKPE : Maths (12+14)/2 = 13 x3 = 39 ; Francais (10+12)/2 = 11 x2 = 22
+    // -> moyenne generale 61 / 5 = 12.2.
+    const adokpe = results.find((r) => String(r.studentId) === String(s1._id));
+    expect(adokpe!.moyenneGenerale).toBeCloseTo(12.2, 2);
+
+    // Session validee : plus aucune modification possible.
+    await expect(
+      runWithTenant({ ecoleId }, () =>
+        service.saveGradeEntry(sessionId, mathsId, {
+          [String(s1._id)]: notes(20, 20),
+        }),
+      ),
+    ).rejects.toThrow('déjà validée');
+    const readOnly = await runWithTenant({ ecoleId }, () =>
+      service.getGradeEntry(sessionId),
+    );
+    expect(readOnly.readOnly).toBe(true);
+  });
+
+  it('modele d import : pre-remplit les notes, la discipline et les infos deja connues, et la reimportation en fusion ne perd rien', async () => {
+    const ecoleId = new Types.ObjectId().toHexString();
+    const { sessionId, mathsId, s1, s2, s3 } = await setupClassSession(
+      ecoleId,
+      'PREFILL-5E',
+    );
+    const sessionModel = moduleRefModel<BulletinSession>(BulletinSession.name);
+
+    // Ce que l'application connait deja : Maths saisies a l'ecran,
+    // discipline d'un eleve, titulaire et date du conseil de la session.
+    await runWithTenant({ ecoleId }, async () => {
+      await service.saveGradeEntry(sessionId, mathsId, {
+        [String(s1._id)]: { i1: 12, i2: null, devoir: 14, compo: 15 },
+        [String(s2._id)]: { i1: 9, i2: 10, devoir: 11, compo: 8 },
+        [String(s3._id)]: { i1: 16, i2: 17, devoir: 15, compo: 18 },
+      });
+      const rows = await service.listRows(sessionId);
+      const adokpe = rows.find(
+        (r) => String(r.studentId?._id) === String(s1._id),
+      )!;
+      await service.saveDiscipline(String(adokpe._id), {
+        retards: 2,
+        absences: 1,
+        exclusion: '',
+        decisionConseil: 'Passe en classe supérieure',
+      });
+      await sessionModel.updateOne(
+        { _id: sessionId },
+        {
+          $set: {
+            'meta.titulaire': 'M. Kossi',
+            'meta.dateDuConseil': new Date('2041-03-20T00:00:00.000Z'),
+          },
+        },
+      );
+    });
+
+    const { buffer } = await runWithTenant({ ecoleId }, () =>
+      service.buildImportTemplate(sessionId),
+    );
+    const parsed = parseBulletinWorkbook(buffer);
+    const adokpeRow = parsed.rows.find((r) => r.nameRaw === 'ADOKPE Gildas')!;
+    expect(
+      adokpeRow.notes.find((n) => n.subjectNameRaw === 'Mathématiques'),
+    ).toMatchObject({
+      i1: 12,
+      i2: null,
+      devoir: 14,
+      compo: 15,
+    });
+    // Matiere jamais saisie : cases vides, a completer.
+    expect(
+      adokpeRow.notes.find((n) => n.subjectNameRaw === 'Français'),
+    ).toMatchObject({
+      i1: null,
+      compo: null,
+    });
+    expect(adokpeRow.discipline).toEqual({
+      retards: 2,
+      absences: 1,
+      exclusion: '',
+      decisionConseil: 'Passe en classe supérieure',
+    });
+    expect(parsed.meta.titulaire).toBe('M. Kossi');
+    expect(parsed.meta.dateDuConseil?.toISOString().slice(0, 10)).toBe(
+      '2041-03-20',
+    );
+
+    // Le Francais est complete dans le fichier, puis reimporte en fusion.
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer as unknown as ExcelJS.Buffer);
+    const sheet = workbook.getWorksheet('Notes')!;
+    const headers = (sheet.getRow(1).values as unknown[]).map((v) =>
+      typeof v === 'string' ? v : '',
+    );
+    const francaisCol = headers.indexOf('Français');
+    const adokpeLine = (sheet.getColumn(2).values as unknown[]).indexOf(
+      'ADOKPE Gildas',
+    );
+    [11, 13, 12, 14].forEach((note, offset) => {
+      sheet.getCell(adokpeLine, francaisCol + 1 + offset).value = note;
+    });
+    const filled = Buffer.from(await workbook.xlsx.writeBuffer());
+
+    await runWithTenant({ ecoleId }, () =>
+      service.importFile(
+        sessionId,
+        filled,
+        BulletinImportMode.FUSIONNER,
+        'modele.xlsx',
+      ),
+    );
+
+    const rows = await runWithTenant({ ecoleId }, () =>
+      service.listRows(sessionId),
+    );
+    const adokpe = rows.find(
+      (r) => String(r.studentId?._id) === String(s1._id),
+    )!;
+    expect(
+      adokpe.notes.find((n) => n.subjectNameRaw === 'Mathématiques'),
+    ).toMatchObject({
+      i1: 12,
+      devoir: 14,
+      compo: 15,
+    });
+    expect(
+      adokpe.notes.find((n) => n.subjectNameRaw === 'Français'),
+    ).toMatchObject({
+      i1: 11,
+      i2: 13,
+      devoir: 12,
+      compo: 14,
+    });
+    expect(adokpe.retards).toBe(2);
+    expect(adokpe.decisionConseil).toBe('Passe en classe supérieure');
+    expect(rows).toHaveLength(3);
+  });
+
+  it('modele d import : seulement les eleves de la classe, jamais les lignes importees non rattachees', async () => {
+    const ecoleId = new Types.ObjectId().toHexString();
+    const { sessionId } = await setupClassSession(ecoleId, 'ROSTER-CM1');
+
+    // Un import precedent contenait un nom inconnu de la classe (ligne
+    // non rattachee, "a rapprocher").
+    const first = await runWithTenant({ ecoleId }, () =>
+      service.buildImportTemplate(sessionId),
+    );
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(first.buffer as unknown as ExcelJS.Buffer);
+    const sheet = workbook.getWorksheet('Notes')!;
+    sheet.addRow([4, 'INCONNU Personne Zzz', '', 'M', 'N']);
+    const withStranger = Buffer.from(await workbook.xlsx.writeBuffer());
+    await runWithTenant({ ecoleId }, () =>
+      service.importFile(
+        sessionId,
+        withStranger,
+        BulletinImportMode.PREMIER_IMPORT,
+        'ancien.xlsx',
+      ),
+    );
+    const rows = await runWithTenant({ ecoleId }, () =>
+      service.listRows(sessionId),
+    );
+    expect(
+      rows.some((r) => r.matchStatus === ImportRowMatchStatus.UNRESOLVED),
+    ).toBe(true);
+
+    const { buffer } = await runWithTenant({ ecoleId }, () =>
+      service.buildImportTemplate(sessionId),
+    );
+    expect(parseBulletinWorkbook(buffer).rows.map((r) => r.nameRaw)).toEqual([
+      'ADOKPE Gildas',
+      'AFANOU Kepler',
+      'ZANDOH Komlan',
+    ]);
+  });
+
+  it('matieres a approuver : coefficient et enseignant repris du fichier, nom et categorie repris du catalogue', async () => {
+    const ecoleId = new Types.ObjectId().toHexString();
+    const { sessionId } = await setupClassSession(ecoleId, 'APPROVE-CM2');
+    const subjectModel = moduleRefModel<Subject>(Subject.name);
+    // "Anglais" existe au catalogue (autre classe) mais pas pour cette classe.
+    await runWithTenant({ ecoleId }, () =>
+      subjectModel.create({
+        label: 'Anglais',
+        labelNormalized: 'ANGLAIS',
+        category: SubjectCategory.LITTERAIRE,
+      }),
+    );
+
+    // Fichier : Mathematiques (configuree) + ANGLAIS et Musique (non configurees).
+    const block = (name: string, coef: number, prof: string) => [
+      name,
+      12,
+      13,
+      14,
+      15,
+      coef,
+      prof,
+    ];
+    const header = [
+      ...IDENTITY_HEADERS,
+      ...['Mathématiques', 'ANGLAIS', 'Musique'].flatMap((name) => [
+        name,
+        ...SUBJECT_SUB_HEADERS,
+      ]),
+      ...TRAILING_HEADERS,
+    ];
+    const line = (n: number, name: string) => [
+      n,
+      name,
+      '',
+      'M',
+      'N',
+      ...block('', 3, 'M. Koffi'),
+      ...block('', 2, 'Mme Afi'),
+      ...block('', 1, 'M. Dodzi'),
+    ];
+    const buffer = buildWorkbookBuffer([
+      header,
+      line(1, 'ADOKPE Gildas'),
+      line(2, 'AFANOU Kepler'),
+    ]);
+    await runWithTenant({ ecoleId }, () =>
+      service.importFile(
+        sessionId,
+        buffer,
+        BulletinImportMode.PREMIER_IMPORT,
+        't.xlsx',
+      ),
+    );
+
+    const pending = await runWithTenant({ ecoleId }, () =>
+      service.getUnapprovedSubjects(sessionId),
+    );
+    const byName = new Map(pending.map((p) => [p.subjectNameRaw, p]));
+    expect([...byName.keys()].sort()).toEqual(['ANGLAIS', 'Musique']);
+    expect(byName.get('ANGLAIS')).toMatchObject({
+      coefficient: 2,
+      profRaw: 'Mme Afi',
+      label: 'Anglais',
+      category: SubjectCategory.LITTERAIRE,
+    });
+    expect(byName.get('Musique')).toMatchObject({
+      coefficient: 1,
+      profRaw: 'M. Dodzi',
+      label: 'Musique',
+      category: null,
+    });
+  });
+
+  it('validation : nomme les eleves inscrits sans aucune note et dit comment completer', async () => {
+    const ecoleId = new Types.ObjectId().toHexString();
+    const { sessionId, mathsId, s1, s2 } = await setupClassSession(
+      ecoleId,
+      'MANQUE-6E',
+    );
+    // Notes pour 2 eleves sur 3 : ZANDOH Komlan (inscrit) n'en a aucune.
+    await runWithTenant({ ecoleId }, () =>
+      service.saveGradeEntry(sessionId, mathsId, {
+        [String(s1._id)]: { i1: 12, i2: null, devoir: 13, compo: 14 },
+        [String(s2._id)]: { i1: 10, i2: null, devoir: 11, compo: 12 },
+      }),
+    );
+
+    // saveGradeEntry cree une ligne pour chaque eleve inscrit : on retire
+    // celle de l'eleve sans note pour reproduire un fichier importe sans lui.
+    const rowModel = moduleRefModel<BulletinImportRow>(BulletinImportRow.name);
+    await runWithTenant({ ecoleId }, async () => {
+      const rows = await service.listRows(sessionId);
+      const zandoh = rows.find(
+        (r) => r.rawIdentity.nameRaw === 'ZANDOH Komlan',
+      );
+      await rowModel.deleteOne({ _id: zandoh!._id });
+    });
+
+    await expect(
+      runWithTenant({ ecoleId }, () =>
+        service.validateSession(sessionId, new Types.ObjectId().toHexString()),
+      ),
+    ).rejects.toThrow(
+      /1 élève\(s\) inscrit\(s\) dans la classe n'ont aucune note : ZANDOH Komlan\. Saisissez leurs notes/,
+    );
+  });
+  it('matieres d une classe : compte par matiere, retrait refuse des que des notes existent', async () => {
+    const ecoleId = new Types.ObjectId().toHexString();
+    const { sessionId, schoolYearId, levelId, mathsId, s1 } =
+      await setupClassSession(ecoleId, 'RETRAIT-6E');
+    const classSubjectModel = moduleRefModel<ClassSubject>(ClassSubject.name);
+
+    const physique = await runWithTenant({ ecoleId }, () =>
+      service.createSubject({
+        label: 'Physique',
+        category: SubjectCategory.SCIENTIFIQUE,
+      }),
+    );
+    const physiqueClass = await runWithTenant({ ecoleId }, () =>
+      service.upsertClassSubject({
+        schoolYearId,
+        levelId,
+        subjectId: String(physique._id),
+        coefficient: 2,
+      }),
+    );
+
+    const counts = await runWithTenant({ ecoleId }, () =>
+      service.countClassSubjectsBySubject(schoolYearId),
+    );
+    expect(counts[mathsId]).toBe(1);
+    expect(counts[String(physique._id)]).toBe(1);
+
+    // Maths a des notes dans la session de la classe : retrait refuse.
+    await runWithTenant({ ecoleId }, () =>
+      service.saveGradeEntry(sessionId, mathsId, {
+        [String(s1._id)]: { i1: 12, i2: null, devoir: 13, compo: 14 },
+      }),
+    );
+    const mathsClass = await runWithTenant({ ecoleId }, () =>
+      classSubjectModel.findOne({ levelId, subjectId: mathsId }).lean(),
+    );
+    await expect(
+      runWithTenant({ ecoleId }, () =>
+        service.removeClassSubject(String(mathsClass!._id)),
+      ),
+    ).rejects.toThrow(/Des notes ont déjà été saisies/);
+
+    // Physique n'a aucune note : retiree.
+    await runWithTenant({ ecoleId }, () =>
+      service.removeClassSubject(String(physiqueClass._id)),
+    );
+    const remaining = await runWithTenant({ ecoleId }, () =>
+      service.listClassSubjects(schoolYearId, levelId),
+    );
+    const remainingIds = remaining.map((cs) =>
+      String((cs.subjectId as unknown as { _id: string })._id),
+    );
+    expect(remainingIds).toContain(mathsId);
+    expect(remainingIds).not.toContain(String(physique._id));
   });
 });

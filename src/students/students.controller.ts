@@ -88,7 +88,7 @@ export class StudentsController {
     );
 
     return {
-      title: 'Eleves',
+      title: 'Élèves',
       students: result.items,
       // For "Creer un eleve" / "Liste nominative" below: always the truly
       // selected year, never the (now UI-less, but still query-param
@@ -220,7 +220,7 @@ export class StudentsController {
     );
 
     return {
-      title: 'Recherche ancien eleve',
+      title: 'Recherche ancien élève',
       students: result.items,
       query: query.q ?? '',
       pagination: {
@@ -314,7 +314,7 @@ export class StudentsController {
         setFlash(
           req,
           'error',
-          "Le paiement a l'inscription est obligatoire pour cette ecole - indiquez un montant et un mode de paiement.",
+          "Le paiement à l'inscription est obligatoire pour cette école - indiquez un montant et un mode de paiement.",
         );
         return res.redirect('/students');
       }
@@ -336,10 +336,10 @@ export class StudentsController {
         req,
         'error',
         isDuplicateKey
-          ? 'Ce matricule est deja utilise - reessayez'
+          ? 'Ce matricule est déjà utilisé - réessayez'
           : error instanceof Error
             ? error.message
-            : 'Impossible de creer le dossier eleve',
+            : 'Impossible de créer le dossier élève',
       );
       return res.redirect('/students');
     }
@@ -365,7 +365,7 @@ export class StudentsController {
             setFlash(
               req,
               'error',
-              `Dossier eleve cree (matricule ${student.matricule}), mais le module FINANCE est desactive : ni l'inscription ni le paiement n'ont ete enregistres.`,
+              `Dossier élève créé (matricule ${student.matricule}), mais le module FINANCE est désactivé : ni l'inscription ni le paiement n'ont été enregistrés.`,
             );
             return res.redirect('/students');
           }
@@ -385,7 +385,7 @@ export class StudentsController {
           setFlash(
             req,
             'success',
-            `Dossier eleve cree avec le matricule ${student.matricule} et inscrit en ${openYear.label}. Responsables enregistres : ${student.guardiansCount}`,
+            `Dossier élève créé avec le matricule ${student.matricule} et inscrit en ${openYear.label}. Responsables enregistrés : ${student.guardiansCount}`,
           );
           return res.redirect('/students');
         }
@@ -403,7 +403,7 @@ export class StudentsController {
           setFlash(
             req,
             'success',
-            `Dossier eleve cree (matricule ${student.matricule}), inscrit en ${openYear.label} et paiement de ${paymentAmount} enregistre`,
+            `Dossier élève créé (matricule ${student.matricule}), inscrit en ${openYear.label} et paiement de ${paymentAmount} enregistré`,
           );
           return res.redirect(`/receipts/${payment.payment._id.toString()}`);
         } catch (error) {
@@ -431,7 +431,7 @@ export class StudentsController {
     setFlash(
       req,
       'success',
-      `Dossier eleve cree avec le matricule ${student.matricule}. Responsables enregistres: ${student.guardiansCount}`,
+      `Dossier élève créé avec le matricule ${student.matricule}. Responsables enregistrés: ${student.guardiansCount}`,
     );
     return res.redirect('/students');
   }
@@ -579,14 +579,14 @@ export class StudentsController {
       reasons.push(`${invalidDate} date de naissance illisible`);
     }
     if (creationFailed) {
-      reasons.push(`${creationFailed} en echec (doublon probable)`);
+      reasons.push(`${creationFailed} en échec (doublon probable)`);
     }
     const reasonSuffix = reasons.length ? ` (${reasons.join(', ')})` : '';
 
     setFlash(
       req,
       'success',
-      `Import eleves termine: ${created} crees, ${skipped} ignores${reasonSuffix}`,
+      `Import des élèves terminé : ${created} créé(s), ${skipped} ignoré(s)${reasonSuffix}`,
     );
     return res.redirect('/students');
   }
@@ -658,7 +658,7 @@ export class StudentsController {
     );
 
     return {
-      title: 'Detail eleve',
+      title: 'Détail élève',
       ...detail,
       fatherGuardian,
       motherGuardian,
@@ -735,7 +735,7 @@ export class StudentsController {
   ) {
     await this.studentsService.update(id, dto);
     await this.studentsService.savePhoto(id, pickUploadedFile(req, 'photo'));
-    setFlash(req, 'success', 'Dossier eleve mis a jour');
+    setFlash(req, 'success', 'Dossier élève mis à jour');
     return res.redirect(`/students/${id}`);
   }
 
@@ -748,7 +748,7 @@ export class StudentsController {
     const history = await this.enrollmentsService.findStudentHistory(id);
     const openArrears = await this.enrollmentsService.previewOpenArrears(id);
     return {
-      title: 'Reinscription ancien eleve',
+      title: 'Réinscription ancien élève',
       ...detail,
       history,
       openArrears,
@@ -774,7 +774,7 @@ export class StudentsController {
       reason: dto.reason,
       actorId: user?.id,
     });
-    setFlash(req, 'success', 'Reinscription effectuee');
+    setFlash(req, 'success', 'Réinscription effectuée');
     return res.redirect(`/enrollments/${result.enrollmentId}`);
   }
 }

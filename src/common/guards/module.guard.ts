@@ -45,7 +45,7 @@ export class ModuleGuard implements CanActivate {
     const active = await this.ecoleModulesService.isActive(ecoleId, code);
     if (!active) {
       throw new ForbiddenException(
-        `Le module ${code} est desactive pour cette ecole`,
+        `Le module ${code} est désactivé pour cette école`,
       );
     }
 

@@ -6,7 +6,7 @@
       <div>
         <h2>{{ item.name }}</h2>
         <p class="muted">
-          Quantite actuelle : <strong>{{ item.quantity }} {{ item.unit }}</strong>
+          Quantité actuelle : <strong>{{ item.quantity }} {{ item.unit }}</strong>
           {% if item.alertThreshold != null and item.alertThreshold != undefined %}
             (seuil d'alerte : {{ item.alertThreshold }})
           {% endif %}
@@ -26,7 +26,7 @@
           <label>Nom
             <input name="name" value="{{ item.name }}" required />
           </label>
-          <label>Categorie
+          <label>Catégorie
             <select name="category" required>
               {% for key, meta in ENUM_META.stockCategory %}
                 <option value="{{ key }}" {% if item.category == key %}selected{% endif %}>{{ meta.label }}</option>
@@ -52,7 +52,7 @@
 
     <div class="panel">
       <h2>Enregistrer un mouvement</h2>
-      <p class="muted">Une entree ajoute au stock (achat, don), une sortie en retire (distribution, perte, casse).</p>
+      <p class="muted">Une entrée ajoute au stock (achat, don), une sortie en retire (distribution, perte, casse).</p>
       <form method="post" action="/stock/{{ item._id }}/movements" class="stack">
         <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
         <div class="form-grid">
@@ -63,7 +63,7 @@
               {% endfor %}
             </select>
           </label>
-          <label>Quantite
+          <label>Quantité
             <input type="number" name="quantity" min="1" required />
           </label>
           <label>Date
@@ -87,9 +87,9 @@
             <th>N°</th>
             <th>Date</th>
             <th>Type</th>
-            <th>Quantite</th>
+            <th>Quantité</th>
             <th>Motif</th>
-            <th>Enregistre par</th>
+            <th>Enregistré par</th>
           </tr>
         </thead>
         <tbody>
@@ -103,7 +103,7 @@
               <td>{{ movement.recordedBy.name if movement.recordedBy else '—' }}</td>
             </tr>
           {% else %}
-            <tr><td colspan="6">Aucun mouvement enregistre pour cet article.</td></tr>
+            <tr><td colspan="6">Aucun mouvement enregistré pour cet article.</td></tr>
           {% endfor %}
         </tbody>
       </table>

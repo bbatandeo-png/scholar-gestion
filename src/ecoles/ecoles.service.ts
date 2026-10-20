@@ -85,7 +85,7 @@ export class EcolesService {
     const existingUser = await this.usersService.findByEmail(dto.adminEmail);
     if (existingUser) {
       throw new BadRequestException(
-        'Cet email est deja utilise par un autre compte',
+        'Cet email est déjà utilisé par un autre compte',
       );
     }
 
@@ -150,7 +150,7 @@ export class EcolesService {
   async resetAdminPassword(ecoleId: string, userId: string) {
     const user = await this.usersService.findById(userId);
     if (!user || String(user.ecoleId) !== ecoleId) {
-      throw new NotFoundException('Compte introuvable pour cette ecole');
+      throw new NotFoundException('Compte introuvable pour cette école');
     }
 
     const tempPassword = generateTempPassword();
@@ -194,7 +194,7 @@ export class EcolesService {
   async findById(id: string) {
     const ecole = await this.ecoleModel.findById(id).lean().exec();
     if (!ecole) {
-      throw new NotFoundException('Ecole introuvable');
+      throw new NotFoundException('École introuvable');
     }
     return ecole;
   }
@@ -209,7 +209,7 @@ export class EcolesService {
       .updateOne({ _id: id }, { registrationPaymentRequired: required })
       .exec();
     if (result.matchedCount === 0) {
-      throw new NotFoundException('Ecole introuvable');
+      throw new NotFoundException('École introuvable');
     }
   }
 
@@ -233,7 +233,7 @@ export class EcolesService {
       .lean()
       .exec();
     if (!ecole) {
-      throw new NotFoundException('Ecole introuvable');
+      throw new NotFoundException('École introuvable');
     }
     return ecole;
   }
@@ -266,7 +266,7 @@ export class EcolesService {
       .lean()
       .exec();
     if (!ecole) {
-      throw new NotFoundException('Ecole introuvable');
+      throw new NotFoundException('École introuvable');
     }
     return ecole;
   }
@@ -315,7 +315,7 @@ export class EcolesService {
       .lean()
       .exec();
     if (!existing) {
-      throw new NotFoundException('Ecole introuvable');
+      throw new NotFoundException('École introuvable');
     }
 
     const sessionSecret =
@@ -398,7 +398,7 @@ export class EcolesService {
     // where a stale bookmark/retry can still submit an old value.
     if (expiresAt && expiresAt.getTime() < Date.now()) {
       throw new BadRequestException(
-        "Date d'expiration invalide - elle doit etre dans le futur",
+        "Date d'expiration invalide - elle doit être dans le futur",
       );
     }
 

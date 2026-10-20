@@ -4,26 +4,35 @@
     <div class="panel-heading">
       <div>
         <h2>Enregistrer une dépense</h2>
-        <p class="muted">Gestion des sorties de fonds et suivi des catégories.</p>
+        <p class="muted">Sorties de fonds de l'établissement, classées par catégorie.</p>
       </div>
-      <div class="toolbar">
+      <div class="panel-heading-actions">
         <a class="button secondary" href="/expenses/categories">Catégories</a>
         <a class="button secondary btn-icon icon-export" href="/expenses/export">Exporter Excel</a>
         <a class="button secondary btn-icon icon-export" href="/expenses/pdf{% if categoryId %}?categoryId={{ categoryId }}{% endif %}">Imprimer PDF</a>
       </div>
     </div>
-    <form method="post" action="/expenses" class="stack">
+
+    {% if not categories.length %}
+      <div class="notice notice-warning">
+        Aucune catégorie de dépense : <a href="/expenses/categories">créez-en une</a> avant d'enregistrer une dépense.
+      </div>
+    {% endif %}
+
+    <form method="post" action="/expenses" class="stack" id="expenseCreateForm">
       <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
       <div class="form-grid">
-        <label>Date<input type="date" name="expenseDate" required /></label>
-        <label>Libellé<input type="text" name="label" required /></label>
-        <label>Montant<input type="number" name="amount" min="0" step="0.01" required /></label>
-        <label>Bénéficiaire<input type="text" name="beneficiary" required /></label>
+        <label>Date<input type="date" name="expenseDate" required data-default-today /></label>
+        <label>Libellé<input type="text" name="label" required placeholder="Ex : Achat de craies" autocomplete="off" /></label>
+        <label>Montant (FCFA)<input type="number" name="amount" min="0" step="0.01" required inputmode="decimal" /></label>
+        <label>Bénéficiaire<input type="text" name="beneficiary" required placeholder="Ex : Librairie du Centre" /></label>
         <label>Catégorie<select name="categoryId" required>
           {% for category in categories %}<option value="{{ category._id }}">{{ category.name }}</option>{% endfor %}
         </select></label>
       </div>
-      <button type="submit" class="btn-icon icon-save">Enregistrer</button>
+      <div>
+        <button type="submit" class="button btn-icon icon-save" {% if not categories.length %}disabled{% endif %}>Enregistrer la dépense</button>
+      </div>
     </form>
   </section>
 
@@ -31,8 +40,8 @@
     <section class="panel">
       <div class="panel-heading">
         <div>
-          <h2>Modifier une dépense</h2>
-          <p class="muted">Indiquez le motif de la modification (obligatoire).</p>
+          <h2>Modifier la dépense {{ editExpense.orderNumber }}</h2>
+          <p class="muted">Le motif de la modification est obligatoire : il est conservé dans l'historique.</p>
         </div>
       </div>
       <form method="post" action="/expenses/{{ editExpense._id }}" class="stack">
@@ -40,7 +49,7 @@
         <div class="form-grid">
           <label>Date<input type="date" name="expenseDate" value="{{ editExpense.expenseDate | inputDate }}" required /></label>
           <label>Libellé<input type="text" name="label" value="{{ editExpense.label }}" required /></label>
-          <label>Montant<input type="number" name="amount" min="0" step="0.01" value="{{ editExpense.amount }}" required /></label>
+          <label>Montant (FCFA)<input type="number" name="amount" min="0" step="0.01" value="{{ editExpense.amount }}" required inputmode="decimal" /></label>
           <label>Bénéficiaire<input type="text" name="beneficiary" value="{{ editExpense.beneficiary }}" required /></label>
           <label>Catégorie<select name="categoryId" required>
             {% for category in categories %}
@@ -48,9 +57,9 @@
             {% endfor %}
           </select></label>
         </div>
-        <label>Motif de modification<textarea name="modificationReason" required></textarea></label>
-        <div style="display:flex;gap:8px;align-items:center">
-          <button type="submit" class="btn-icon icon-save">Enregistrer la modification</button>
+        <label>Motif de la modification<textarea name="modificationReason" required placeholder="Ex : erreur de saisie du montant"></textarea></label>
+        <div class="toolbar compact-actions">
+          <button type="submit" class="button btn-icon icon-save">Enregistrer la modification</button>
           <a class="button secondary" href="/expenses">Annuler</a>
         </div>
       </form>
@@ -61,38 +70,66 @@
     <div class="panel-heading">
       <div>
         <h2>Liste des dépenses</h2>
-        <p class="muted">Recherche et filtre par catégorie.</p>
+        <p class="muted">Recherche par numéro, libellé ou bénéficiaire, et filtre par catégorie.</p>
       </div>
     </div>
-    <form method="get" action="/expenses" class="toolbar-grid">
-      <label>Recherche<input name="query" value="{{ query }}" placeholder="Numéro, libellé, bénéficiaire" /></label>
-      <label>Catégorie<select name="categoryId"><option value="">Toutes</option>{% for category in categories %}<option value="{{ category._id }}" {% if categoryId == category._id %}selected{% endif %}>{{ category.name }}</option>{% endfor %}</select></label>
-      <button type="submit" class="btn-icon icon-search">Rechercher</button>
+
+    <form method="get" action="/expenses" class="filter-bar" role="search" data-live-search="#expenses-results">
+      <label class="filter-bar-search">Rechercher
+        <input type="search" name="query" value="{{ query }}" placeholder="Numéro, libellé, bénéficiaire…" autocomplete="off" />
+      </label>
+      <label>Catégorie
+        <select name="categoryId">
+          <option value="">Toutes les catégories</option>
+          {% for category in categories %}<option value="{{ category._id }}" {% if categoryId == category._id %}selected{% endif %}>{{ category.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <button type="submit" class="button btn-icon icon-search">Rechercher</button>
     </form>
-    <div class="table-shell">
-      <table class="table-report">
-        <thead><tr><th>N°</th><th>Reference</th><th>Date</th><th>Libellé</th><th>Montant</th><th>Bénéficiaire</th><th>Catégorie</th><th>Motif</th><th>Actions</th></tr></thead>
-        <tbody>
-          {% for item in expenses %}
-            <tr>
-              <td>{{ loop.index }}</td>
-              <td>{{ item.orderNumber }}</td>
-              <td>{{ item.expenseDate | formatDate }}</td>
-              <td>{{ item.label }}</td>
-              <td>{{ item.amount }}</td>
-              <td>{{ item.beneficiary }}</td>
-              <td>{{ item.categoryId.name if item.categoryId else '' }}</td>
-              <td>{{ item.lastModificationReason or '' }}</td>
-              <td>
-                <a class="button btn-sm" href="/expenses/{{ item._id }}">Détails</a>
-                <a class="button btn-sm" href="/expenses/{{ item._id }}/edit">Modifier</a>
-              </td>
-            </tr>
-          {% else %}
-            <tr><td colspan="9">Aucune dépense enregistrée.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
+
+    <div id="expenses-results">
+      <div class="list-summary" aria-live="polite">
+        <span>{{ expenses.length }} dépense(s){% if query or categoryId %} correspondant à la recherche{% endif %}</span>
+        <span>Total : <strong>{{ (expenses | sum('amount')) | money or '0 FCFA' }}</strong></span>
+      </div>
+      <div class="table-shell">
+        <table class="table-report" data-no-filter>
+          <thead>
+            <tr><th>Réf.</th><th>Date</th><th>Libellé</th><th>Bénéficiaire</th><th>Catégorie</th><th class="num">Montant</th><th>Dernière modification</th><th><span class="sr-only">Actions</span></th></tr>
+          </thead>
+          <tbody>
+            {% for item in expenses %}
+              <tr>
+                <td>{{ item.orderNumber }}</td>
+                <td>{{ item.expenseDate | formatDay }}</td>
+                <td>{{ item.label }}</td>
+                <td>{{ item.beneficiary }}</td>
+                <td>{{ item.categoryId.name if item.categoryId else '—' }}</td>
+                <td class="num"><strong>{{ item.amount | money }}</strong></td>
+                <td class="muted">{{ item.lastModificationReason or '—' }}</td>
+                <td class="row-actions">
+                  <a class="button ghost btn-sm" href="/expenses/{{ item._id }}">Détails</a>
+                  <a class="button ghost btn-sm" href="/expenses/{{ item._id }}/edit">Modifier</a>
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="8">{{ 'Aucune dépense ne correspond à cette recherche.' if (query or categoryId) else 'Aucune dépense enregistrée.' }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
   </section>
+
+  <script>
+    // Date du jour proposee par defaut pour une nouvelle depense.
+    (() => {
+      const field = document.querySelector('#expenseCreateForm [data-default-today]');
+      if (field && !field.value) {
+        const now = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        field.value = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+      }
+    })();
+  </script>
 {% endblock %}

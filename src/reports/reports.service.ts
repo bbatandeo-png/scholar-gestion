@@ -1,3 +1,4 @@
+import { formatAmount } from '../common/view-helpers/format-money';
 import {
   BadRequestException,
   Injectable,
@@ -157,6 +158,12 @@ export type ExamStatisticsReport = {
   successRate: ExamStatisticsGenderCounts;
 };
 
+// Legende des statistiques de fin de periode (exports et page) : les
+// colonnes par sexe sont abregees G / F / T faute de place dans le PDF.
+export const EXAM_STATISTICS_LEGEND =
+  'Légende : G = Garçons, F = Filles, T = Total. Présents : élèves ayant un bulletin validé pour la période. ' +
+  'Admis : moyenne générale de la période supérieure ou égale à 10. % réussite = admis ÷ présents.';
+
 @Injectable()
 export class ReportsService {
   constructor(
@@ -199,6 +206,8 @@ export class ReportsService {
     });
   }
 
+  // Active enrollments per level (raw level ids) - no screen any more, kept
+  // as the probe the multi-tenant e2e suite uses on enrollment aggregates.
   async studentsByLevel(schoolYearId: string) {
     return this.enrollmentModel.aggregate<{ _id: string; total: number }>([
       {
@@ -432,7 +441,7 @@ export class ReportsService {
       .lean()
       .exec();
     if (!schoolYear) {
-      throw new BadRequestException('Annee scolaire introuvable');
+      throw new BadRequestException('Année scolaire introuvable');
     }
     const level = levelId
       ? await this.levelModel.findById(levelId).lean().exec()
@@ -749,7 +758,7 @@ export class ReportsService {
   ): Promise<StudentIdCardData> {
     const student = await this.studentModel.findById(studentId).lean().exec();
     if (!student) {
-      throw new NotFoundException('Eleve introuvable');
+      throw new NotFoundException('Élève introuvable');
     }
 
     const schoolYearQuery = schoolYearId
@@ -865,7 +874,7 @@ export class ReportsService {
       doc
         .font('Times-Roman')
         .fontSize(10)
-        .text(`Annee scolaire : ${schoolYearLabel}`, { align: 'center' });
+        .text(`Année scolaire : ${schoolYearLabel}`, { align: 'center' });
     }
 
     doc.moveDown(1);
@@ -1028,9 +1037,9 @@ export class ReportsService {
             student?.matricule ?? '',
             enrollment?.schoolYearId?.label ?? '',
             enrollment?.levelId?.label ?? '',
-            item.registrationFee ?? 0,
-            item.paidAmount ?? 0,
-            item.balanceDue ?? 0,
+            formatAmount(item.registrationFee ?? 0, { plainSpaces: true }),
+            formatAmount(item.paidAmount ?? 0, { plainSpaces: true }),
+            formatAmount(item.balanceDue ?? 0, { plainSpaces: true }),
           ];
 
           drawRow(values);
@@ -1133,11 +1142,11 @@ export class ReportsService {
           student?.matricule ?? '',
           `${student?.lastname ?? ''} ${student?.firstname ?? ''}`.trim(),
           student?.gender ?? '',
-          item.registrationFee.toFixed(2),
-          item.tuitionFee.toFixed(2),
-          item.totalDue.toFixed(2),
-          item.paidAmount.toFixed(2),
-          item.balanceDue.toFixed(2),
+          formatAmount(item.registrationFee, { plainSpaces: true }),
+          formatAmount(item.tuitionFee, { plainSpaces: true }),
+          formatAmount(item.totalDue, { plainSpaces: true }),
+          formatAmount(item.paidAmount, { plainSpaces: true }),
+          formatAmount(item.balanceDue, { plainSpaces: true }),
         ];
 
         drawRow(values);
@@ -1907,7 +1916,7 @@ export class ReportsService {
       doc
         .font('Helvetica-Bold')
         .fontSize(13)
-        .text('Statistiques de fin de periode', { align: 'center' });
+        .text('Statistiques de fin de période', { align: 'center' });
       doc.moveDown(0.4);
       doc
         .font('Helvetica')
@@ -2032,6 +2041,15 @@ export class ReportsService {
         ],
       ]);
 
+      doc.moveDown(0.8);
+      doc
+        .font('Helvetica')
+        .fontSize(8)
+        .fillColor('#000000')
+        .text(EXAM_STATISTICS_LEGEND, doc.page.margins.left, doc.y, {
+          width: usableWidth,
+        });
+
       doc.end();
     });
   }
@@ -2043,7 +2061,7 @@ export class ReportsService {
     const sheet = workbook.addWorksheet('Statistiques');
 
     sheet.addRow([report.schoolName.toUpperCase()]);
-    sheet.addRow(['Statistiques de fin de periode']);
+    sheet.addRow(['Statistiques de fin de période']);
     sheet.addRow([
       `Année scolaire : ${report.schoolYearLabel}`,
       `Classe : ${report.levelName}`,
@@ -2156,6 +2174,12 @@ export class ReportsService {
         right: { style: 'thin' },
       };
     });
+    sheet.addRow([]);
+    const legendRow = sheet.addRow([EXAM_STATISTICS_LEGEND]);
+    sheet.mergeCells(legendRow.number, 1, legendRow.number, 12);
+    legendRow.getCell(1).alignment = { wrapText: true, vertical: 'top' };
+    legendRow.getCell(1).font = { italic: true };
+    legendRow.height = 32;
 
     sheet.columns.forEach((column) => {
       column.width = 14;
@@ -2301,7 +2325,7 @@ export class ReportsService {
               spacing: { after: 100 },
               children: [
                 new TextRun({
-                  text: 'Statistiques de fin de periode',
+                  text: 'Statistiques de fin de période',
                   bold: true,
                   size: 24,
                 }),
@@ -2336,6 +2360,16 @@ export class ReportsService {
               width: { size: TABLE_WIDTH, type: WidthType.DXA },
               columnWidths: Array(12).fill(genderWidth),
               rows: [genderHeaderRow, genderDataRow],
+            }),
+            new Paragraph({
+              spacing: { before: 200 },
+              children: [
+                new TextRun({
+                  text: EXAM_STATISTICS_LEGEND,
+                  italics: true,
+                  size: 18,
+                }),
+              ],
             }),
           ],
         },
@@ -2465,7 +2499,7 @@ export class ReportsService {
     doc
       .font('Helvetica-Bold')
       .fontSize(6.5)
-      .text("Carte d'identite scolaire", x, y + TITLE_Y, {
+      .text("Carte d'identité scolaire", x, y + TITLE_Y, {
         width: CARD_W,
         align: 'center',
       });
@@ -2547,7 +2581,7 @@ export class ReportsService {
       ty += doc.heightOfString(text, { width: colW }) + 2;
     };
     line(`Nom : ${data.lastname}`.toUpperCase(), true);
-    line(`Prenoms : ${data.firstname}`, true);
+    line(`Prénoms : ${data.firstname}`, true);
     line(`Ne(e) le : ${data.birthDateAndPlaceLabel}`, true);
     line(`Sexe : ${data.genderLabel}`);
     line(`Classe : ${data.levelLabel}`, true);
@@ -2721,7 +2755,7 @@ export class ReportsService {
         doc
           .font('Helvetica')
           .fontSize(12)
-          .text('Aucun eleve dans cette classe.');
+          .text('Aucun élève dans cette classe.');
       }
       doc.end();
     });

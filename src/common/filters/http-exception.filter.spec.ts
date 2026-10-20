@@ -101,9 +101,9 @@ describe('HttpExceptionFilter', () => {
       referer: '/students/does-not-exist',
     });
 
-    filter.catch(new NotFoundException('Eleve introuvable'), host);
+    filter.catch(new NotFoundException('Élève introuvable'), host);
 
-    expect(req.session.flash?.message).toBe('Eleve introuvable');
+    expect(req.session.flash?.message).toBe('Élève introuvable');
     expect(redirect).toHaveBeenCalled();
     expect(status).not.toHaveBeenCalled();
   });

@@ -22,11 +22,11 @@
       {% endif %}
     </div>
     <div class="panel">
-      <h3>Charge horaire (annee en cours)</h3>
+      <h3>Charge horaire (année en cours)</h3>
       {% if stats.hoursByTeacher.length %}
-        <p class="muted">{{ stats.hoursByTeacher.length }} enseignant(s) avec une affectation cette annee.</p>
+        <p class="muted">{{ stats.hoursByTeacher.length }} enseignant(s) avec une affectation cette année.</p>
       {% else %}
-        <p class="muted">Aucune affectation enregistree pour l'annee en cours.</p>
+        <p class="muted">Aucune affectation enregistrée pour l'année en cours.</p>
       {% endif %}
     </div>
   </section>
@@ -39,14 +39,14 @@
       </div>
       <div class="toolbar compact-actions">
         <a class="button secondary" href="/teachers/export">Exporter Excel</a>
-        <a class="button" href="/teachers/new">Nouvel enseignant</a>
+        {% if currentUser and currentUser.role in ['super_admin', 'direction'] %}<a class="button" href="/teachers/new">Nouvel enseignant</a>{% endif %}
       </div>
     </div>
 
-    <form method="get" action="/teachers" class="toolbar compact-actions">
+    <form method="get" action="/teachers" class="toolbar compact-actions" role="search" data-live-search="#teachers-results">
       <label class="field-inline">
         Recherche
-        <input type="text" name="q" value="{{ filters.q }}" placeholder="Nom ou prenoms..." />
+        <input type="search" name="q" value="{{ filters.q }}" placeholder="Nom ou prénoms…" autocomplete="off" />
       </label>
       <label class="field-inline">
         Statut
@@ -59,18 +59,19 @@
       </label>
       <button type="submit" class="button">Filtrer</button>
       {% if filters.q or filters.status %}
-        <a href="/teachers" class="button secondary btn-sm">Reinitialiser</a>
+        <a href="/teachers" class="button secondary btn-sm">Réinitialiser</a>
       {% endif %}
     </form>
 
+    <div id="teachers-results">
     <div class="table-shell">
-      <table class="table-report js-sortable">
+      <table class="table-report js-sortable" data-no-filter>
         <thead>
           <tr>
             <th class="sortable" data-column-index="0" data-sort-type="text">Nom</th>
-            <th class="sortable" data-column-index="1" data-sort-type="text">Prenoms</th>
-            <th>Telephone</th>
-            <th>Classes (annee en cours)</th>
+            <th class="sortable" data-column-index="1" data-sort-type="text">Prénoms</th>
+            <th>Téléphone</th>
+            <th>Classes (année en cours)</th>
             <th>Volume horaire</th>
             <th>Statut</th>
             <th></th>
@@ -96,11 +97,12 @@
               <td><a class="button secondary btn-sm" href="/teachers/{{ teacher._id }}">Voir le dossier</a></td>
             </tr>
           {% else %}
-            <tr><td colspan="7">Aucun enseignant enregistre.</td></tr>
+            <tr><td colspan="7">Aucun enseignant enregistré.</td></tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
     {{ legend.render(['teacherStatus']) }}
+    </div>
   </div>
 {% endblock %}

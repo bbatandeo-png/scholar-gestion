@@ -31,7 +31,7 @@ export class SchoolYearsController {
   @Render('settings/school-years')
   async index() {
     return {
-      title: 'Annees scolaires',
+      title: 'Années scolaires',
       schoolYears: await this.schoolYearsService.list(),
       openSchoolYear: await this.schoolYearsService.findOpen(),
     };
@@ -71,7 +71,7 @@ export class SchoolYearsController {
   ) {
     try {
       await this.schoolYearsService.create(dto);
-      setFlash(req, 'success', 'Annee scolaire enregistree');
+      setFlash(req, 'success', 'Année scolaire enregistrée');
     } catch (error) {
       const isDuplicateKey =
         typeof error === 'object' &&
@@ -81,7 +81,7 @@ export class SchoolYearsController {
         setFlash(
           req,
           'error',
-          'Une annee scolaire avec ce libelle existe deja',
+          'Une année scolaire avec ce libellé existe déjà',
         );
         return res.redirect('/settings/school-years');
       }
@@ -99,7 +99,7 @@ export class SchoolYearsController {
     @Res() res: Response,
   ) {
     await this.schoolYearsService.updateStatus(id, dto.status);
-    setFlash(req, 'success', "Statut de l'annee mis a jour");
+    setFlash(req, 'success', "Statut de l'année mis à jour");
     return res.redirect('/settings/school-years');
   }
 
@@ -119,7 +119,7 @@ export class SchoolYearsController {
   ) {
     const year = await this.schoolYearsService.findById(schoolYearId);
     if (!year) {
-      setFlash(req, 'error', 'Annee scolaire introuvable');
+      setFlash(req, 'error', 'Année scolaire introuvable');
       return res.redirect('/dashboard');
     }
     req.session.selectedSchoolYearId = String(year._id);
@@ -141,7 +141,7 @@ export class SchoolYearsController {
     ]);
 
     return {
-      title: 'Modifier annee scolaire',
+      title: 'Modifier année scolaire',
       schoolYears,
       editYear,
       openSchoolYear,
@@ -157,7 +157,7 @@ export class SchoolYearsController {
     @Res() res: Response,
   ) {
     await this.schoolYearsService.update(id, dto);
-    setFlash(req, 'success', 'Annee scolaire modifiee');
+    setFlash(req, 'success', 'Année scolaire modifiée');
     return res.redirect('/settings/school-years');
   }
 }

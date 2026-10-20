@@ -86,7 +86,7 @@ export class PromotionsService {
       !(await this.ecoleModulesService.isActive(ecoleId, 'FINANCE'))
     ) {
       throw new ForbiddenException(
-        'Le module Finance doit etre actif pour valider une promotion',
+        'Le module Finance doit être actif pour valider une promotion',
       );
     }
 
@@ -104,21 +104,21 @@ export class PromotionsService {
           .session(session ?? null)
           .exec();
         if (!sourceYear || !targetYear) {
-          throw new ConflictException('Annee source ou cible introuvable');
+          throw new ConflictException('Année source ou cible introuvable');
         }
         if (targetYear.preparedAt) {
           throw new ConflictException(
-            'Cette annee scolaire a deja ete preparee',
+            'Cette année scolaire a déjà été préparée',
           );
         }
         if (String(sourceYear._id) === String(targetYear._id)) {
           throw new ConflictException(
-            'Les annees source et cible doivent etre differentes',
+            'Les années source et cible doivent être différentes',
           );
         }
         if (sourceYear.status !== SchoolYearStatus.CLOSED) {
           throw new ConflictException(
-            'Cloturez manuellement l annee source avant d activer la suivante',
+            'Clôturez manuellement l’année source avant d’activer la suivante',
           );
         }
         // Activation and preparation are independent actions - the target
@@ -137,7 +137,7 @@ export class PromotionsService {
           .exec();
         if (currentOpen) {
           throw new ConflictException(
-            `Cloturez d abord l annee ${currentOpen.label} avant d activer la suivante`,
+            `Clôturez d’abord l’année ${currentOpen.label} avant d’activer la suivante`,
           );
         }
         const activeSourceIds = await this.enrollmentModel
@@ -156,7 +156,7 @@ export class PromotionsService {
           activeSourceIds.some((id) => !decisionIds.has(String(id)))
         ) {
           throw new ConflictException(
-            'Une decision est requise pour chaque inscription active de l annee source',
+            'Une décision est requise pour chaque inscription active de l’année source',
           );
         }
 
@@ -191,17 +191,17 @@ export class PromotionsService {
           }
           if (String(source.schoolYearId) !== String(dto.sourceSchoolYearId)) {
             throw new ConflictException(
-              'Une decision ne correspond pas a l annee source',
+              'Une décision ne correspond pas à l’année source',
             );
           }
           if (String(source.studentId) !== String(item.studentId)) {
             throw new ConflictException(
-              'La decision ne correspond pas a l eleve source',
+              'La décision ne correspond pas à l’élève source',
             );
           }
           if (source.rolloverProcessedAt) {
             throw new ConflictException(
-              'Une inscription source a deja ete traitee',
+              'Une inscription source a déjà été traitée',
             );
           }
 
@@ -247,7 +247,7 @@ export class PromotionsService {
                 : await this.levelsService.findById(String(source.levelId));
             if (!nextLevel) {
               throw new ConflictException(
-                'Aucun niveau cible automatique : une decision de sortie est requise',
+                'Aucun niveau cible automatique : une décision de sortie est requise',
               );
             }
             const targetLevelId = String(nextLevel._id);
@@ -268,7 +268,7 @@ export class PromotionsService {
 
             if (existingTargetEnrollment) {
               throw new ConflictException(
-                'Impossible de valider la promotion : une inscription active existe deja pour cet eleve et cette annee scolaire.',
+                'Impossible de valider la promotion : une inscription active existe déjà pour cet élève et cette année scolaire.',
               );
             }
 

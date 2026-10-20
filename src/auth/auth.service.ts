@@ -20,7 +20,7 @@ export class AuthService {
     }
 
     if (user.status !== UserStatus.ACTIVE) {
-      throw new UnauthorizedException('Compte desactive');
+      throw new UnauthorizedException('Compte désactivé');
     }
 
     const isValid = await bcrypt.compare(password, user.passwordHash);
@@ -33,7 +33,7 @@ export class AuthService {
         String(user.ecoleId),
       );
       if (suspended) {
-        throw new UnauthorizedException('Compte de l ecole suspendu');
+        throw new UnauthorizedException('Compte de l’école suspendu');
       }
     }
 

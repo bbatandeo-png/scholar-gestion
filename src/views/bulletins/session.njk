@@ -9,8 +9,30 @@
     </div>
   </div>
 
-  {% if session.status != 'validated' %}
-    <h3>Importer le fichier Excel</h3>
+  {% if session.status != 'validated' and not (currentUser and currentUser.role in ['super_admin', 'direction', 'secretariat']) %}
+    <p class="muted">Les notes sont saisies par la direction ou le secrétariat ; vous pouvez consulter les données importées.</p>
+  {% elif session.status != 'validated' %}
+    <h3>Saisir les notes : deux possibilités, qui se complètent</h3>
+    <p class="muted">Les élèves de la classe, les matières et leurs coefficients viennent de la configuration ({% if currentUser and currentUser.role in ['super_admin', 'direction'] %}<a href="/bulletins/matieres?schoolYearId={{ session.schoolYearId._id }}&levelId={{ session.levelId._id }}">Matières</a>{% else %}Matières{% endif %}). Notes I1, I2, Devoir et Compo, de 0 à 20.</p>
+
+    <div class="grid cols-2 top-gap">
+      <div class="card stack">
+        <h4>A. Dans l'application</h4>
+        <p class="muted">Matière par matière, directement à l'écran, avec l'aperçu des moyennes pendant la saisie.</p>
+        <div>
+          <a class="button btn-icon icon-save" href="/bulletins/{{ session._id }}/saisie">Saisir les notes</a>
+        </div>
+      </div>
+      <div class="card stack">
+        <h4>B. Par fichier Excel</h4>
+        <p class="muted">Téléchargez le modèle déjà rempli avec la classe (une feuille « Exemple » montre le résultat attendu), saisissez les notes, puis importez-le ci-dessous.</p>
+        <div>
+          <a class="button secondary btn-icon icon-export" href="/bulletins/{{ session._id }}/template">Télécharger le modèle Excel</a>
+        </div>
+      </div>
+    </div>
+
+    <h3 class="top-gap">Importer le fichier Excel rempli</h3>
     <form method="post" action="/bulletins/{{ session._id }}/import?_csrf={{ csrfToken }}" enctype="multipart/form-data" class="stack">
       <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
       <div class="form-grid">
@@ -18,7 +40,8 @@
         <label>Mode d'import
           <select name="mode">
             {% for key, meta in ENUM_META.bulletinImportMode %}
-              <option value="{{ key }}" title="{{ meta.description }}">{{ meta.label }}</option>
+              {# Session deja alimentee : fusionner par defaut (complete sans effacer). #}
+              <option value="{{ key }}" title="{{ meta.description }}" {% if (session.status == 'draft' and key == 'premier_import') or (session.status != 'draft' and key == 'fusionner') %}selected{% endif %}>{{ meta.label }}</option>
             {% endfor %}
           </select>
         </label>
@@ -31,26 +54,27 @@
   {% if session.status == 'imported' or session.status == 'pending_review' or session.status == 'ready' %}
     <div class="toolbar top-gap">
       <a class="button" href="/bulletins/{{ session._id }}/review">Revoir les correspondances</a>
-      <a class="button secondary" href="/bulletins/{{ session._id }}/donnees">Voir les donnees importees</a>
-      <a class="button secondary" href="/bulletins/{{ session._id }}/discipline">Retards / absences / decisions</a>
-      {% if session.status == 'ready' %}
+      <a class="button secondary" href="/bulletins/{{ session._id }}/donnees">Voir les données importées</a>
+      <a class="button secondary" href="/bulletins/{{ session._id }}/discipline">Retards / absences / décisions</a>
+      {% if session.status == 'ready' and (currentUser and currentUser.role in ['super_admin', 'direction']) %}
         <form method="post" action="/bulletins/{{ session._id }}/validate" class="inline-form">
           <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
           <button type="submit">Valider la session</button>
         </form>
       {% else %}
-        <span class="muted">{{ unapprovedSubjects.length }} matiere(s) a approuver / des eleves a rapprocher avant validation.</span>
+        <span class="muted">{{ unapprovedSubjects.length }} matière(s) à approuver / des élèves à rapprocher avant validation.</span>
       {% endif %}
     </div>
   {% endif %}
 
   {% if session.status == 'validated' %}
     <div class="notice notice-info">
-      Session validee le {{ session.importedAt | formatDate }}. Les notes sont enregistrees.
+      Session validée le {{ session.importedAt | formatDate }}. Les notes sont enregistrées.
     </div>
     <div class="toolbar top-gap">
-      <a class="button secondary" href="/bulletins/{{ session._id }}/donnees">Voir les donnees importees</a>
-      <a class="button btn-icon icon-export" href="/bulletins/{{ session._id }}/pdf">Telecharger tous les bulletins (PDF)</a>
+      {% if currentUser and currentUser.role in ['super_admin', 'direction', 'secretariat'] %}<a class="button secondary" href="/bulletins/{{ session._id }}/saisie">Consulter les notes</a>{% endif %}
+      <a class="button secondary" href="/bulletins/{{ session._id }}/donnees">Voir les données importées</a>
+      <a class="button btn-icon icon-export" href="/bulletins/{{ session._id }}/pdf">Télécharger tous les bulletins (PDF)</a>
     </div>
   {% endif %}
 
@@ -58,8 +82,8 @@
     <h3 class="top-gap">Informations du fichier</h3>
     <p class="muted">
       Titulaire : {{ session.meta.titulaire or '—' }} —
-      Chef d'etablissement : {{ session.meta.chefEtablissement or '—' }} —
-      Annee scolaire (fichier) : {{ session.meta.anneeScolaire or '—' }} —
+      Chef d'établissement : {{ session.meta.chefEtablissement or '—' }} —
+      Année scolaire (fichier) : {{ session.meta.anneeScolaire or '—' }} —
       Date du conseil : {{ session.meta.dateDuConseil | formatDate if session.meta.dateDuConseil else '—' }}
     </p>
   {% endif %}

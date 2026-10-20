@@ -1,3 +1,4 @@
+import { formatMoney } from '../common/view-helpers/format-money';
 import {
   BadRequestException,
   Injectable,
@@ -153,7 +154,7 @@ export class FacturationService {
         .exec();
       if (!parametre) {
         throw new BadRequestException(
-          'Aucun parametre de facturation actif pour cette ecole',
+          'Aucun paramètre de facturation actif pour cette école',
         );
       }
 
@@ -169,7 +170,7 @@ export class FacturationService {
           .exec();
         if (already) {
           throw new BadRequestException(
-            'Une facture forfait existe deja pour cette periode',
+            'Une facture forfait existe déjà pour cette période',
           );
         }
         montantTotal = parametre.montantUnitaire;
@@ -196,7 +197,7 @@ export class FacturationService {
           .exec();
         if (!rows.length) {
           throw new BadRequestException(
-            'Aucune consommation facturable pour cette periode/classe',
+            'Aucune consommation facturable pour cette période/classe',
           );
         }
         consommationIds = rows.map((row) => row._id);
@@ -207,7 +208,7 @@ export class FacturationService {
             label:
               parametre.mode === FacturationMode.USAGE_BULLETIN
                 ? 'Bulletins generes'
-                : 'Eleves factures',
+                : 'Élèves facturés',
             quantite,
             prixUnitaire: parametre.montantUnitaire,
             sousTotal: montantTotal,
@@ -254,8 +255,8 @@ export class FacturationService {
       doc.fontSize(18).text('Facture', { align: 'center' });
       doc.moveDown();
       doc.fontSize(11);
-      doc.text(`Numero : ${facture.numero}`);
-      doc.text(`Periode : ${facture.periode}`);
+      doc.text(`Numéro : ${facture.numero}`);
+      doc.text(`Période : ${facture.periode}`);
       doc.text(
         `Date de generation : ${new Date(facture.dateGeneration).toLocaleDateString('fr-FR')}`,
       );
@@ -263,16 +264,19 @@ export class FacturationService {
 
       for (const ligne of facture.lignes) {
         doc.text(
-          `${ligne.label} — ${ligne.quantite} x ${ligne.prixUnitaire.toLocaleString('fr-FR')} = ${ligne.sousTotal.toLocaleString('fr-FR')}`,
+          `${ligne.label} — ${ligne.quantite} x ${formatMoney(ligne.prixUnitaire, { plainSpaces: true })} = ${formatMoney(ligne.sousTotal, { plainSpaces: true })}`,
         );
       }
 
       doc.moveDown();
       doc
         .fontSize(14)
-        .text(`Total : ${facture.montantTotal.toLocaleString('fr-FR')}`, {
-          align: 'right',
-        });
+        .text(
+          `Total : ${formatMoney(facture.montantTotal, { plainSpaces: true })}`,
+          {
+            align: 'right',
+          },
+        );
 
       doc.end();
     });

@@ -1,6 +1,12 @@
 import { LevelCycle, Periode } from '../common/enums/domain.enums';
 
 export const PERIODES_BY_CYCLE: Record<LevelCycle, Periode[]> = {
+  // Le primaire travaille par trimestres, comme le college.
+  [LevelCycle.PRIMAIRE]: [
+    Periode.TRIMESTRE_1,
+    Periode.TRIMESTRE_2,
+    Periode.TRIMESTRE_3,
+  ],
   [LevelCycle.COLLEGE]: [
     Periode.TRIMESTRE_1,
     Periode.TRIMESTRE_2,

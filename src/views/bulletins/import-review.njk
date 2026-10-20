@@ -5,34 +5,76 @@
   <div class="panel-heading">
     <div>
       <h2>Revue import — {{ session.levelId.label }} — {{ periodeLabels[session.periode] }}</h2>
-      <p class="muted">{{ rows.length }} ligne(s) importee(s).</p>
+      <p class="muted">{{ rows.length }} ligne(s) importée(s).</p>
     </div>
     <a class="button secondary" href="/bulletins/{{ session._id }}">Retour a la session</a>
   </div>
 
-  {% if unapprovedSubjects.length > 0 %}
-    <h3>Nouvelles matieres a approuver</h3>
-    {% for subject in unapprovedSubjects %}
-      <form method="post" action="/bulletins/{{ session._id }}/subjects/approve" class="inline-form top-gap">
-        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
-        <input type="hidden" name="subjectNameRaw" value="{{ subject.subjectNameRaw }}" />
-        <strong>{{ subject.subjectNameRaw }}</strong>
-        <label>Nom de la matiere
-          <input type="text" name="label" value="{{ subject.subjectNameRaw }}" required />
-        </label>
-        <label>Categorie
-          <select name="category" required>
-            {% for cat in subjectCategories %}<option value="{{ cat }}">{{ ENUM_META.subjectCategory[cat].label if ENUM_META.subjectCategory[cat] else cat }}</option>{% endfor %}
-          </select>
-        </label>
-        <label>Coefficient<input type="number" name="coefficient" min="0" step="1" required /></label>
-        <label>Professeur<input type="text" name="teacherName" value="{{ subject.profRaw }}" /></label>
-        <button type="submit" class="btn-sm">Approuver / creer</button>
-      </form>
-    {% endfor %}
+  {% if looksLikeOtherClass %}
+    <div class="notice notice-danger">
+      <strong>Ce fichier semble destiné à une autre classe :</strong> aucune de ses matières ne correspond à celles de {{ session.levelId.label }}.
+      N'approuvez rien : importez le fichier de la bonne classe en mode « Écraser », ou utilisez ce fichier dans une session de sa classe.
+    </div>
   {% endif %}
 
-  <h3 class="top-gap">Eleves</h3>
+  {% if unapprovedSubjects.length > 0 %}
+    <h3>Matières à approuver ({{ unapprovedSubjects.length }})</h3>
+    <p class="muted">
+      Ces matières du fichier ne sont pas encore configurées pour {{ session.levelId.label }}. Les valeurs sont reprises du fichier (coefficient, enseignant)
+      et du catalogue (nom, catégorie) : vérifiez-les puis approuvez. Elles seront ajoutées aux matières de la classe pour cette année.
+    </p>
+    <form method="post" action="/bulletins/{{ session._id }}/subjects/approve-all" class="stack">
+      <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+      <div class="table-shell">
+        <table class="table-report" data-no-filter>
+          <thead>
+            <tr><th>Matière dans le fichier</th><th>Nom retenu</th><th>Catégorie</th><th class="num">Coefficient</th><th>Enseignant</th></tr>
+          </thead>
+          <tbody>
+            {% for subject in unapprovedSubjects %}
+              <tr>
+                <td>
+                  <strong>{{ subject.subjectNameRaw }}</strong>
+                  <input type="hidden" name="subjects[{{ loop.index0 }}][subjectNameRaw]" value="{{ subject.subjectNameRaw }}" />
+                </td>
+                <td><input type="text" name="subjects[{{ loop.index0 }}][label]" value="{{ subject.label }}" required aria-label="Nom retenu pour {{ subject.subjectNameRaw }}" /></td>
+                <td>
+                  <select name="subjects[{{ loop.index0 }}][category]" required aria-label="Catégorie de {{ subject.subjectNameRaw }}">
+                    <option value="">Choisir…</option>
+                    {% for cat in subjectCategories %}
+                      <option value="{{ cat }}" {% if subject.category == cat %}selected{% endif %}>{{ ENUM_META.subjectCategory[cat].label if ENUM_META.subjectCategory[cat] else cat }}</option>
+                    {% endfor %}
+                  </select>
+                </td>
+                <td class="num"><input type="number" name="subjects[{{ loop.index0 }}][coefficient]" value="{{ subject.coefficient if subject.coefficient !== null }}" min="0" step="0.5" required class="coef-input" aria-label="Coefficient de {{ subject.subjectNameRaw }}" /></td>
+                <td><input type="text" name="subjects[{{ loop.index0 }}][teacherName]" value="{{ subject.profRaw }}" aria-label="Enseignant de {{ subject.subjectNameRaw }}" /></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <button type="submit" class="button btn-icon icon-save">Approuver les {{ unapprovedSubjects.length }} matière(s)</button>
+      </div>
+    </form>
+  {% endif %}
+
+  <details class="legend top-gap" {% if not configuredSubjects.length %}open{% endif %}>
+    <summary>Matières configurées pour {{ session.levelId.label }} ({{ configuredSubjects.length }})</summary>
+    {% if configuredSubjects.length %}
+      <ul class="legend-list">
+        {% for subject in configuredSubjects %}
+          <li>{{ subject.label }} — coefficient {{ subject.coefficient }}</li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">Aucune matière n'est encore configurée pour cette classe :
+        {% if currentUser and currentUser.role in ['super_admin', 'direction'] %}<a href="/bulletins/matieres?schoolYearId={{ session.schoolYearId._id }}&levelId={{ session.levelId._id }}">configurer les matières de {{ session.levelId.label }}</a>{% else %}demandez à la direction de configurer les matières de {{ session.levelId.label }}{% endif %},
+        ou approuvez celles du fichier ci-dessus.</p>
+    {% endif %}
+  </details>
+
+  <h3 class="top-gap">Élèves</h3>
   <div class="table-shell">
     <table class="table-report">
       <thead>
@@ -53,7 +95,7 @@
                 <form method="post" action="/bulletins/{{ session._id }}/rows/{{ row._id }}/resolve" class="inline-form no-wrap">
                   <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
                   <select name="studentId" required>
-                    <option value="">Choisir un eleve</option>
+                    <option value="">Choisir un élève</option>
                     {% for candidate in roster %}
                       <option value="{{ candidate.studentId }}">{{ candidate.lastname }} {{ candidate.firstname }} ({{ candidate.matricule }})</option>
                     {% endfor %}
@@ -64,7 +106,7 @@
             </td>
           </tr>
         {% else %}
-          <tr><td colspan="6">Aucune ligne importee.</td></tr>
+          <tr><td colspan="6">Aucune ligne importée.</td></tr>
         {% endfor %}
       </tbody>
     </table>

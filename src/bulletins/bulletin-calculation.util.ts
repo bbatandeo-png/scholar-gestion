@@ -208,7 +208,7 @@ export function computeStudentPeriodTotals(
   const totalCoef = graded.reduce((sum, s) => sum + s.coefficient, 0);
   if (totalCoef === 0) {
     throw new Error(
-      'Impossible de calculer la moyenne generale : aucune matiere notee',
+      'Impossible de calculer la moyenne générale : aucune matière notée',
     );
   }
   return {

@@ -3,8 +3,8 @@
   <div class="panel">
     <div class="panel-heading">
       <div>
-        <h2>Nouvelle entree au journal de discipline</h2>
-        <p class="muted">Avertissement, sanction ou convocation - consignee definitivement au dossier de l'eleve.</p>
+        <h2>Nouvelle entrée au journal de discipline</h2>
+        <p class="muted">Avertissement, sanction ou convocation - consignée définitivement au dossier de l'élève.</p>
       </div>
       <a class="button secondary btn-sm" href="/discipline{{ '?studentId=' + student._id if student }}">Annuler</a>
     </div>
@@ -12,7 +12,7 @@
     <form method="post" action="/discipline" class="stack">
       <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
 
-      <label>Eleve
+      <label>Élève
         {% if student %}
           <input value="{{ student.matricule }} - {{ student.lastname }} {{ student.firstname }}" disabled />
           <input type="hidden" name="studentId" value="{{ student._id }}" />
@@ -23,7 +23,7 @@
               id="studentSearchInput"
               autocomplete="off"
               required
-              placeholder="Rechercher un eleve (nom, prenom, matricule)..."
+              placeholder="Rechercher un élève (nom, prénom, matricule)..."
               role="combobox"
               aria-expanded="false"
               aria-autocomplete="list"
@@ -37,7 +37,7 @@
       </label>
 
       <div class="form-grid">
-        <label>Annee scolaire
+        <label>Année scolaire
           <input value="{{ activeYear.label }}" disabled />
         </label>
         <label>Type
@@ -56,7 +56,7 @@
         <textarea name="motif" rows="3" required placeholder="Ce qui s'est passe..."></textarea>
       </label>
       <label>Mesure <span class="muted">(facultatif)</span>
-        <textarea name="mesure" rows="2" placeholder="Decision prise : exclusion, convocation des parents, etc."></textarea>
+        <textarea name="mesure" rows="2" placeholder="Décision prise : exclusion, convocation des parents, etc."></textarea>
       </label>
 
       <button type="submit" class="button" id="disciplineRecordSubmit">Enregistrer</button>
@@ -110,7 +110,7 @@
           activeIndex = -1;
 
           if (!items.length) {
-            searchStatus.textContent = 'Aucun eleve trouve.';
+            searchStatus.textContent = 'Aucun élève trouvé.';
             closeResults();
             return;
           }
@@ -127,7 +127,7 @@
             searchResults.appendChild(option);
           });
 
-          searchStatus.textContent = `${items.length} resultat${items.length > 1 ? 's' : ''}.`;
+          searchStatus.textContent = `${items.length} résultat${items.length > 1 ? 's' : ''}.`;
           searchResults.hidden = false;
           searchInput.setAttribute('aria-expanded', 'true');
         };
@@ -159,7 +159,7 @@
           } catch (error) {
             if (error.name !== 'AbortError') {
               searchStatus.classList.remove('is-loading');
-              searchStatus.textContent = 'Impossible de rechercher les eleves.';
+              searchStatus.textContent = 'Impossible de rechercher les élèves.';
               closeResults();
             }
           }

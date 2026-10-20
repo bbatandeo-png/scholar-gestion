@@ -37,11 +37,11 @@
               <td>{{ item.student.matricule if item.student else '' }}</td>
               <td>{{ (item.student.lastname or '') ~ ' ' ~ (item.student.firstname or '') }}</td>
               <td>{{ item.student.gender if item.student else '' }}</td>
-              <td>{{ item.registrationFee }}</td>
-              <td>{{ item.tuitionFee }}</td>
-              <td>{{ item.totalDue }}</td>
-              <td>{{ item.paidAmount }}</td>
-              <td>{{ item.balanceDue }}</td>
+              <td>{{ item.registrationFee | money }}</td>
+              <td>{{ item.tuitionFee | money }}</td>
+              <td>{{ item.totalDue | money }}</td>
+              <td>{{ item.paidAmount | money }}</td>
+              <td>{{ item.balanceDue | money }}</td>
             </tr>
           {% else %}
             <tr><td colspan="9">Aucune donnée disponible.</td></tr>

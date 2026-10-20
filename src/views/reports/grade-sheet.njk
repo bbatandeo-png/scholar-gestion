@@ -1,38 +1,119 @@
 {% extends "layout.njk" %}
-{% block content %}
-  <div class="panel">
-    <div class="panel-heading">
-      <div>
-        <h3>Fiche de notes vierge</h3>
-        <p class="muted">Une feuille par classe, à photocopier pour chaque matière : l'effectif est déjà rempli, le professeur y écrit la matière, le coefficient et les notes à la main.</p>
-      </div>
+
+{# Compteur -/+ (champ numerique conserve pour le formulaire et sans JavaScript). #}
+{% macro stepper(name, label, value, hint) %}
+  <div class="stepper-field">
+    <span class="stepper-label" id="{{ name }}-label">{{ label }}</span>
+    <div class="stepper" role="group" aria-labelledby="{{ name }}-label">
+      <button type="button" class="button secondary stepper-btn" data-step="-1" aria-label="Retirer une colonne {{ label | lower }}">−</button>
+      <input type="number" name="{{ name }}" value="{{ value }}" min="0" max="8" inputmode="numeric" aria-labelledby="{{ name }}-label" data-column-count />
+      <button type="button" class="button secondary stepper-btn" data-step="1" aria-label="Ajouter une colonne {{ label | lower }}">+</button>
     </div>
-    <form method="get" action="/reports/grade-sheet/pdf" class="toolbar compact-actions" id="gradeSheetForm">
-      <label class="field-inline">
-        Classe
-        <select name="levelId" required>
-          <option value="">Sélectionner une classe</option>
-          {% for level in levels %}
-            <option value="{{ level._id }}">{{ level.label }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <label class="field-inline">
-        Nombre de notes
-        <input type="number" name="noteCount" value="2" min="0" max="8" style="width:64px;" />
-      </label>
-      <label class="field-inline">
-        Nombre d'interrogations
-        <input type="number" name="interroCount" value="2" min="0" max="8" style="width:64px;" />
-      </label>
-      <label class="field-inline">
-        Nombre de devoirs
-        <input type="number" name="devoirCount" value="1" min="0" max="8" style="width:64px;" />
-      </label>
-      <button type="submit" class="button secondary btn-icon icon-export">PDF</button>
-      <button type="submit" formaction="/reports/grade-sheet/docx" class="button secondary btn-icon icon-export">Word</button>
-      <button type="submit" formaction="/reports/grade-sheet/excel" class="button secondary btn-icon icon-export">Excel</button>
-    </form>
-    <p class="muted" style="margin:10px 0 0;">Seule la colonne Composition reste fixe ; le nombre de notes, d'interrogations et de devoirs s'ajuste.</p>
+    <span class="field-hint">{{ hint }}</span>
   </div>
+{% endmacro %}
+
+{% block content %}
+<div class="panel grade-sheet-page">
+  <div class="panel-heading">
+    <div>
+      <h2>Fiche de notes vierge</h2>
+      <p class="muted">À imprimer pour les enseignants : la liste des élèves est déjà remplie, ils y notent à la main.</p>
+    </div>
+  </div>
+  <p class="notice notice-info">Pour produire les bulletins, reportez ensuite ces notes dans la <a href="/bulletins">session de bulletins</a> de la classe (saisie à l'écran ou modèle Excel).</p>
+
+  <form method="get" action="/reports/grade-sheet/pdf" id="gradeSheetForm" class="grade-sheet-form">
+    <section class="grade-sheet-step">
+      <h3><span class="step-number" aria-hidden="true">1</span> Classe</h3>
+      <label class="sr-only" for="gradeSheetLevel">Classe</label>
+      <select name="levelId" id="gradeSheetLevel" required>
+        <option value="">Sélectionner une classe</option>
+        {% for level in levels %}
+          <option value="{{ level._id }}">{{ level.label }}</option>
+        {% endfor %}
+      </select>
+    </section>
+
+    <section class="grade-sheet-step">
+      <h3><span class="step-number" aria-hidden="true">2</span> Colonnes de la fiche</h3>
+      <div class="stepper-grid">
+        {{ stepper('noteCount', 'Notes', 2, 'Notes libres (exercices, cahier…)') }}
+        {{ stepper('interroCount', 'Interrogations', 2, 'Interro 1, Interro 2…') }}
+        {{ stepper('devoirCount', 'Devoirs', 1, 'Devoirs surveillés') }}
+        <div class="stepper-field">
+          <span class="stepper-label">Composition</span>
+          <span class="badge badge-neutral fixed-column">Toujours incluse</span>
+          <span class="field-hint">Colonne fixe</span>
+        </div>
+      </div>
+
+      <div class="column-preview" aria-live="polite">
+        <span class="column-preview-title">Aperçu des colonnes :</span>
+        <div class="column-chips" data-column-preview>
+          <span class="column-chip">N°</span><span class="column-chip">Nom et prénoms</span><span class="column-chip">Matricule</span><span class="column-chip">Sexe</span>
+        </div>
+        <p class="field-hint" data-width-warning hidden>Beaucoup de colonnes : la fiche dépassera la largeur d'une page A4.</p>
+      </div>
+    </section>
+
+    <section class="grade-sheet-step">
+      <h3><span class="step-number" aria-hidden="true">3</span> Télécharger</h3>
+      <div class="toolbar compact-actions">
+        <button type="submit" class="button btn-lg btn-icon icon-export">Télécharger le PDF</button>
+        <button type="submit" formaction="/reports/grade-sheet/docx" class="button secondary btn-icon icon-export">Word</button>
+        <button type="submit" formaction="/reports/grade-sheet/excel" class="button secondary btn-icon icon-export">Excel</button>
+      </div>
+    </section>
+  </form>
+</div>
+
+<script>
+  (() => {
+    const form = document.getElementById('gradeSheetForm');
+    if (!form) return;
+    const preview = form.querySelector('[data-column-preview]');
+    const warning = form.querySelector('[data-width-warning]');
+    const clamp = (value) => Math.max(0, Math.min(8, Math.round(Number(value) || 0)));
+    const countOf = (name) => clamp(form.querySelector(`[name="${name}"]`).value);
+
+    // Memes intitules que le document genere (ReportsService.buildGradeSheetColumns) :
+    // notes toujours numerotees, interro/devoir numerotes seulement s'il y en a plusieurs.
+    const numbered = (label, count) =>
+      count === 1 ? [label] : Array.from({ length: count }, (_, i) => `${label} ${i + 1}`);
+
+    const render = () => {
+      const columns = [
+        ...Array.from({ length: countOf('noteCount') }, (_, i) => `Note ${i + 1}`),
+        ...numbered('Interro', countOf('interroCount')),
+        ...numbered('Devoir', countOf('devoirCount')),
+        'Compo',
+      ];
+      preview.querySelectorAll('.column-chip.is-dynamic').forEach((chip) => chip.remove());
+      columns.forEach((label) => {
+        const chip = document.createElement('span');
+        chip.className = 'column-chip is-dynamic' + (label === 'Compo' ? ' is-fixed' : '');
+        chip.textContent = label;
+        preview.appendChild(chip);
+      });
+      warning.hidden = columns.length <= 10;
+    };
+
+    form.querySelectorAll('.stepper').forEach((stepper) => {
+      const input = stepper.querySelector('input');
+      stepper.querySelectorAll('[data-step]').forEach((button) => {
+        button.addEventListener('click', () => {
+          input.value = clamp(Number(input.value) + Number(button.dataset.step));
+          render();
+        });
+      });
+      input.addEventListener('input', render);
+      input.addEventListener('change', () => {
+        input.value = clamp(input.value);
+        render();
+      });
+    });
+    render();
+  })();
+</script>
 {% endblock %}

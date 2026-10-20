@@ -110,14 +110,14 @@ export class UsersController {
 
     try {
       await this.usersService.create({ ...dto, ecoleId });
-      setFlash(req, 'success', 'Utilisateur cree avec succes');
+      setFlash(req, 'success', 'Utilisateur créé avec succès');
     } catch (error) {
       const isDuplicateKey =
         typeof error === 'object' &&
         error !== null &&
         (error as { code?: number }).code === 11000;
       if (isDuplicateKey) {
-        setFlash(req, 'error', 'Cet email est deja utilise');
+        setFlash(req, 'error', 'Cet email est déjà utilisé');
         return res.redirect('/users');
       }
       throw error;
@@ -150,7 +150,7 @@ export class UsersController {
       return res.redirect('/users');
     }
 
-    setFlash(req, 'success', 'Acces utilisateur mis a jour');
+    setFlash(req, 'success', 'Accès utilisateur mis à jour');
     return res.redirect('/users');
   }
 
@@ -167,7 +167,7 @@ export class UsersController {
       return res.redirect('/users');
     }
 
-    setFlash(req, 'success', 'Mot de passe mis a jour');
+    setFlash(req, 'success', 'Mot de passe mis à jour');
     return res.redirect('/users');
   }
 }

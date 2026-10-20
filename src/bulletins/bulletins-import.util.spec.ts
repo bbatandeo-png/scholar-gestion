@@ -288,3 +288,46 @@ describe('parseBulletinWorkbook', () => {
     expect(parsed.rows).toHaveLength(1);
   });
 });
+
+describe('parseBulletinWorkbook - colonnes de discipline (modele telecharge)', () => {
+  const identity = (name: string) => [1, name, 'MAT-1', 'F', 'N'];
+  const mathsBlock = ['Maths', 10, 12, 11, 13, 3, 'PROF'];
+  const meta = ['5eme', 'M. Kossi', 'Mme Chef', '2040-2041', null];
+
+  it('lit retards, absences, exclusion et decision quand les colonnes sont presentes', () => {
+    const buffer = buildWorkbookBuffer([
+      [
+        ...IDENTITY_HEADERS,
+        'Maths',
+        ...SUBJECT_SUB_HEADERS,
+        'Classe',
+        'Titulaire',
+        "Chef d'établissement",
+        'Année scolaire',
+        'Date du conseil',
+        'Retards',
+        'Absences',
+        'Exclusion',
+        'Décision du conseil',
+      ],
+      [...identity('KOFFI Ama'), ...mathsBlock, ...meta, 2, 1, '', 'Admise'],
+    ]);
+    const parsed = parseBulletinWorkbook(buffer);
+    expect(parsed.rows[0].discipline).toEqual({
+      retards: 2,
+      absences: 1,
+      exclusion: '',
+      decisionConseil: 'Admise',
+    });
+  });
+
+  it('reste compatible avec les fichiers sans ces colonnes (discipline non lue)', () => {
+    const buffer = buildWorkbookBuffer([
+      buildHeaderRow(['Maths']),
+      [...identity('KOFFI Ama'), ...mathsBlock, ...meta, 12.5, '1er', 'Bien'],
+    ]);
+    const parsed = parseBulletinWorkbook(buffer);
+    expect(parsed.rows[0].discipline).toBeNull();
+    expect(parsed.rows[0].notes[0].i1).toBe(10);
+  });
+});

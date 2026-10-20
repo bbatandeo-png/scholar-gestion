@@ -4,6 +4,7 @@ import { DisciplineService } from './discipline.service';
 import { LevelsService } from '../levels/levels.service';
 import { SchoolYearsService } from '../school-years/school-years.service';
 import { StudentsService } from '../students/students.service';
+import { EcolesService } from '../ecoles/ecoles.service';
 import { DisciplineRecordType } from '../common/enums/domain.enums';
 
 function buildController(overrides: {
@@ -45,6 +46,9 @@ function buildController(overrides: {
     levelsService as unknown as LevelsService,
     schoolYearsService as unknown as SchoolYearsService,
     studentsService as unknown as StudentsService,
+    {
+      getCurrentSchoolName: jest.fn().mockResolvedValue('Ecole Test'),
+    } as unknown as EcolesService,
   );
 }
 

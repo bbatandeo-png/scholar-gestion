@@ -1,96 +1,211 @@
 {% extends "layout.njk" %}
+{% macro categoryLabel(cat) %}{{ ENUM_META.subjectCategory[cat].label if ENUM_META.subjectCategory[cat] else cat }}{% endmacro %}
 {% block content %}
-<div class="grid cols-2">
+<div class="grid cols-2 keep-columns">
+  {# Colonne 1 : le catalogue des matieres de l'ecole (commun a toutes les classes). #}
   <div class="panel">
-    <h2>Nouvelle matiere</h2>
-    <form method="post" action="/bulletins/matieres" class="stack">
-      <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
-      <div class="form-grid">
-        <label>Nom<input name="label" required /></label>
-        <label>Categorie
-          <select name="category" required>
-            {% for cat in subjectCategories %}<option value="{{ cat }}">{{ ENUM_META.subjectCategory[cat].label if ENUM_META.subjectCategory[cat] else cat }}</option>{% endfor %}
-          </select>
-        </label>
+    <div class="panel-heading">
+      <div>
+        <h2>Catalogue des matières</h2>
+        <p class="muted">Toutes les matières enseignées dans l'école. Créez-les une fois, puis ajoutez-les aux classes concernées.</p>
       </div>
-      <button type="submit">Creer</button>
-    </form>
+      <div class="panel-heading-actions">
+        <button type="button" class="button" data-open-dialog="subjectCreateDialog">+ Nouvelle matière</button>
+      </div>
+    </div>
 
     <div class="table-shell top-gap">
-      <table class="table-report">
-        <thead><tr><th>N°</th><th>Nom</th><th>Categorie</th></tr></thead>
+      <table class="table-report" id="subjectCatalog">
+        <thead><tr><th>N°</th><th>Matière</th><th>Catégorie</th><th>Classes ({{ selectedYearLabel or 'année' }})</th></tr></thead>
         <tbody>
           {% for subject in subjects %}
-            <tr><td>{{ loop.index }}</td><td>{{ subject.label }}</td><td>{{ ENUM_META.subjectCategory[subject.category].label if ENUM_META.subjectCategory[subject.category] else subject.category }}</td></tr>
+            {% set used = usageBySubject[subject._id | string] or 0 %}
+            <tr>
+              <td>{{ loop.index }}</td>
+              <td>{{ subject.label }}</td>
+              <td>{{ categoryLabel(subject.category) }}</td>
+              <td>{% if used %}{{ used }} classe{% if used > 1 %}s{% endif %}{% else %}<span class="muted">Aucune</span>{% endif %}</td>
+            </tr>
           {% else %}
-            <tr><td colspan="3">Aucune matiere.</td></tr>
+            <tr><td colspan="4">Aucune matière pour l'instant. Créez la première avec « + Nouvelle matière ».</td></tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
   </div>
 
+  {# Colonne 2 : les matieres d'une classe pour une annee, avec leur coefficient. #}
   <div class="panel">
-    <h2>Coefficients par classe</h2>
-    <form method="get" action="/bulletins/matieres" class="stack">
-      <div class="form-grid">
-        <label>Annee scolaire
-          <select name="schoolYearId" required>
-            <option value="">Choisir</option>
+    <div class="panel-heading">
+      <div>
+        <h2>Coefficients par classe</h2>
+        <p class="muted">Le coefficient utilisé dans les bulletins est celui défini ici, pour chaque classe et chaque année.</p>
+      </div>
+    </div>
+
+    {% if not schoolYears.length %}
+      <p class="empty-state">Aucune année scolaire. Créez-en une dans <a href="/settings/school-years">Années scolaires</a>.</p>
+    {% else %}
+      <form method="get" action="/bulletins/matieres" class="filter-bar" id="classPicker">
+        <label>Année scolaire
+          <select name="schoolYearId" data-auto-submit>
             {% for year in schoolYears %}
-              <option value="{{ year._id }}" {% if year._id == selectedSchoolYearId %}selected{% endif %}>{{ year.label }}</option>
+              <option value="{{ year._id }}" {% if year._id | string == selectedSchoolYearId %}selected{% endif %}>{{ year.label }}{% if year.status == 'open' %} (ouverte){% endif %}</option>
             {% endfor %}
           </select>
         </label>
         <label>Classe
-          <select name="levelId" required>
-            <option value="">Choisir</option>
-            {% for level in levels %}
-              <option value="{{ level._id }}" {% if level._id == selectedLevelId %}selected{% endif %}>{{ level.label }}</option>
+          <select name="levelId" data-auto-submit>
+            {% for group in levelGroups %}
+              <optgroup label="{{ group.label }}">
+                {% for level in group.items %}
+                  <option value="{{ level._id }}" {% if level._id | string == selectedLevelId %}selected{% endif %}>{{ level.label }}</option>
+                {% endfor %}
+              </optgroup>
             {% endfor %}
           </select>
         </label>
-      </div>
-      <button type="submit" class="secondary">Afficher</button>
-    </form>
-
-    {% if selectedSchoolYearId and selectedLevelId %}
-      <form method="post" action="/bulletins/matieres/class-subject" class="stack top-gap">
-        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
-        <input type="hidden" name="schoolYearId" value="{{ selectedSchoolYearId }}" />
-        <input type="hidden" name="levelId" value="{{ selectedLevelId }}" />
-        <div class="form-grid">
-          <label>Matiere
-            <select name="subjectId" required>
-              {% for subject in subjects %}<option value="{{ subject._id }}">{{ subject.label }}</option>{% endfor %}
-            </select>
-          </label>
-          <label>Coefficient<input type="number" name="coefficient" min="0" step="1" required /></label>
-          <label>Professeur<input type="text" name="teacherName" /></label>
-        </div>
-        <button type="submit">Enregistrer</button>
+        <noscript><button type="submit" class="secondary">Afficher</button></noscript>
       </form>
 
-      <div class="table-shell top-gap">
-        <table class="table-report">
-          <thead><tr><th>N°</th><th>Matiere</th><th>Coefficient</th><th>Professeur</th></tr></thead>
-          <tbody>
-            {% for cs in classSubjects %}
-              <tr>
-                <td>{{ loop.index }}</td>
-                <td>{{ cs.subjectId.label }}</td>
-                <td>{{ cs.coefficient }}</td>
-                <td>{{ cs.teacherName or '—' }}</td>
-              </tr>
-            {% else %}
-              <tr><td colspan="4">Aucune matiere configuree pour cette classe.</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    {% else %}
-      <p class="muted top-gap">Choisissez une annee scolaire et une classe pour voir/configurer les coefficients.</p>
+      {% if not selectedLevelId %}
+        <p class="empty-state top-gap">Aucune classe active pour cette année. Activez des niveaux dans <a href="/settings/levels">Niveaux</a>.</p>
+      {% else %}
+        <p class="list-summary top-gap">
+          <strong>{{ selectedLevelLabel }}</strong> :
+          {{ classSubjects.length }} matière{% if classSubjects.length > 1 %}s{% endif %}
+          · total des coefficients <strong>{{ totalCoefficient }}</strong>
+        </p>
+
+        <div class="table-shell">
+          <table class="table-report" id="classSubjects" data-no-filter>
+            <thead><tr><th>Matière</th><th>Catégorie</th><th>Coef.</th><th>Professeur</th><th><span class="sr-only">Actions</span></th></tr></thead>
+            <tbody>
+              {% for cs in classSubjects %}
+                <tr>
+                  <td>{{ cs.subjectId.label }}</td>
+                  <td>{{ categoryLabel(cs.subjectId.category) }}</td>
+                  <td><strong>{{ cs.coefficient }}</strong></td>
+                  <td>{{ cs.teacherName or '—' }}</td>
+                  <td class="row-actions">
+                    <button type="button" class="button secondary btn-sm"
+                      data-edit-class-subject
+                      data-subject-id="{{ cs.subjectId._id }}"
+                      data-subject-label="{{ cs.subjectId.label }}"
+                      data-coefficient="{{ cs.coefficient }}"
+                      data-teacher="{{ cs.teacherName or '' }}">Modifier</button>
+                    <form method="post" action="/bulletins/matieres/class-subject/{{ cs._id }}/delete" class="inline-form"
+                      data-confirm="Retirer « {{ cs.subjectId.label }} » de la classe {{ selectedLevelLabel }} ?">
+                      <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+                      <input type="hidden" name="schoolYearId" value="{{ selectedSchoolYearId }}" />
+                      <input type="hidden" name="levelId" value="{{ selectedLevelId }}" />
+                      <button type="submit" class="button ghost btn-sm danger">Retirer</button>
+                    </form>
+                  </td>
+                </tr>
+              {% else %}
+                <tr><td colspan="5">Aucune matière pour cette classe. Ajoutez-en ci-dessous.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <h3 class="top-gap">Ajouter une matière à {{ selectedLevelLabel }}</h3>
+        {% if availableSubjects.length %}
+          <form method="post" action="/bulletins/matieres/class-subject" class="stack">
+            <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+            <input type="hidden" name="schoolYearId" value="{{ selectedSchoolYearId }}" />
+            <input type="hidden" name="levelId" value="{{ selectedLevelId }}" />
+            <div class="form-grid">
+              <label>Matière
+                <select name="subjectId" required>
+                  <option value="">Choisir une matière</option>
+                  {% for subject in availableSubjects %}<option value="{{ subject._id }}">{{ subject.label }}</option>{% endfor %}
+                </select>
+              </label>
+              <label>Coefficient<input type="number" name="coefficient" min="0" step="0.5" value="1" required /></label>
+              <label>Professeur <span class="muted">(facultatif)</span><input type="text" name="teacherName" /></label>
+            </div>
+            <div><button type="submit">+ Ajouter à la classe</button></div>
+          </form>
+        {% elif subjects.length %}
+          <p class="muted">Toutes les matières du catalogue sont déjà dans cette classe.</p>
+        {% else %}
+          <p class="muted">Créez d'abord des matières dans le catalogue.</p>
+        {% endif %}
+      {% endif %}
     {% endif %}
   </div>
 </div>
+
+<dialog id="subjectCreateDialog" class="confirm-dialog app-dialog" aria-labelledby="subjectCreateTitle">
+  <form method="post" action="/bulletins/matieres" class="stack">
+    <h3 id="subjectCreateTitle">Nouvelle matière</h3>
+    <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+    <label>Nom de la matière<input name="label" required placeholder="Ex. : Mathématiques" /></label>
+    <label>Catégorie
+      <select name="category" required>
+        {% for cat in subjectCategories %}<option value="{{ cat }}">{{ categoryLabel(cat) }}</option>{% endfor %}
+      </select>
+    </label>
+    <div class="actions">
+      <button type="button" class="button secondary" data-close-dialog>Annuler</button>
+      <button type="submit">Créer la matière</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="classSubjectEditDialog" class="confirm-dialog app-dialog" aria-labelledby="classSubjectEditTitle">
+  <form method="post" action="/bulletins/matieres/class-subject" class="stack">
+    <h3 id="classSubjectEditTitle">Modifier la matière</h3>
+    <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+    <input type="hidden" name="schoolYearId" value="{{ selectedSchoolYearId }}" />
+    <input type="hidden" name="levelId" value="{{ selectedLevelId }}" />
+    <input type="hidden" name="subjectId" />
+    <label>Coefficient<input type="number" name="coefficient" min="0" step="0.5" required /></label>
+    <label>Professeur <span class="muted">(facultatif)</span><input type="text" name="teacherName" /></label>
+    <div class="actions">
+      <button type="button" class="button secondary" data-close-dialog>Annuler</button>
+      <button type="submit">Enregistrer</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+  (() => {
+    // Changer d'annee ou de classe affiche directement la configuration :
+    // plus besoin de cliquer sur « Afficher ». Changer d'annee repart sur la
+    // premiere classe active de cette annee.
+    const picker = document.getElementById('classPicker');
+    picker?.querySelectorAll('[data-auto-submit]').forEach((select) => {
+      select.addEventListener('change', () => {
+        if (select.name === 'schoolYearId') {
+          picker.querySelector('[name="levelId"]').disabled = true;
+        }
+        picker.submit();
+      });
+    });
+
+    document.querySelectorAll('form[data-confirm]').forEach((form) => {
+      form.addEventListener('submit', (event) => {
+        if (!window.confirm(form.dataset.confirm)) event.preventDefault();
+      });
+    });
+
+    const dialog = document.getElementById('classSubjectEditDialog');
+    document.querySelectorAll('[data-edit-class-subject]').forEach((button) => {
+      button.addEventListener('click', () => {
+        if (!dialog || typeof dialog.showModal !== 'function') return;
+        const form = dialog.querySelector('form');
+        form.subjectId.value = button.dataset.subjectId;
+        form.coefficient.value = button.dataset.coefficient;
+        form.teacherName.value = button.dataset.teacher;
+        dialog.querySelector('h3').textContent = 'Modifier ' + button.dataset.subjectLabel;
+        dialog.showModal();
+        form.coefficient.focus();
+        form.coefficient.select();
+      });
+    });
+  })();
+</script>
 {% endblock %}

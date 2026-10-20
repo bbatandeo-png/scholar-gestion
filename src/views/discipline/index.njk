@@ -3,24 +3,26 @@
 {% block content %}
   <section class="panel">
     <div class="panel-heading">
-      <div>
-        <h2>Journal de discipline</h2>
-        <p class="muted">Avertissements, sanctions et convocations - toute la scolarite de l'eleve, toutes annees confondues.</p>
+      <p class="muted">Avertissements, sanctions et convocations sur toute la scolarité de l'élève, toutes années confondues.</p>
+      <div class="panel-heading-actions">
+        <a class="button secondary" id="disciplinePdfLink" href="/discipline/pdf?studentId={{ filters.studentId }}&amp;levelId={{ filters.levelId }}&amp;schoolYearId={{ filters.schoolYearId }}&amp;type={{ filters.type }}" download>Télécharger en PDF</a>
+        {% if currentUser and currentUser.role in ['super_admin', 'direction'] %}<a class="button" href="/discipline/new{{ '?studentId=' + filters.studentId if filters.studentId }}">+ Ajouter une entrée</a>{% endif %}
       </div>
-      <a class="button" href="/discipline/new{{ '?studentId=' + filters.studentId if filters.studentId }}">Ajouter une entree</a>
     </div>
 
     {% if student %}
-      <div class="notice" style="margin-bottom:14px;">
+      <div class="notice">
         Filtre sur <strong>{{ student.matricule }} - {{ student.lastname }} {{ student.firstname }}</strong>.
         <a href="/discipline">Voir tout le journal</a>
       </div>
     {% endif %}
 
-    <form method="get" action="/discipline" class="toolbar compact-actions">
+    <form method="get" action="/discipline" class="filter-bar" role="search" data-live-search="#discipline-results">
       <input type="hidden" name="studentId" value="{{ filters.studentId }}" />
-      <label class="field-inline">
-        Classe
+      <label class="filter-bar-search">Rechercher
+        <input type="search" data-table-filter="#disciplineTable" placeholder="Élève, matricule, motif…" autocomplete="off" aria-label="Rechercher dans le journal affiché" />
+      </label>
+      <label>Classe
         <select name="levelId">
           <option value="">Toutes les classes</option>
           {% for level in levels %}
@@ -28,17 +30,15 @@
           {% endfor %}
         </select>
       </label>
-      <label class="field-inline">
-        Annee scolaire
+      <label>Année scolaire
         <select name="schoolYearId">
-          <option value="">Toutes les annees</option>
+          <option value="">Toutes les années</option>
           {% for year in schoolYears %}
             <option value="{{ year._id }}" {% if filters.schoolYearId == year._id.toString() %}selected{% endif %}>{{ year.label }}</option>
           {% endfor %}
         </select>
       </label>
-      <label class="field-inline">
-        Type
+      <label>Type
         <select name="type">
           <option value="">Tous les types</option>
           {% for key, meta in ENUM_META.disciplineRecordType %}
@@ -47,24 +47,22 @@
         </select>
       </label>
       <button type="submit" class="button">Filtrer</button>
-      {% if filters.levelId or filters.schoolYearId or filters.type %}
-        <a href="/discipline{{ '?studentId=' + filters.studentId if filters.studentId }}" class="button secondary btn-sm">Reinitialiser</a>
-      {% endif %}
     </form>
 
-    <div class="table-shell" style="margin-top:14px;">
-      <table class="table-report">
+    <div id="discipline-results">
+    <div class="table-shell">
+      <table class="table-report" id="disciplineTable" data-no-filter>
         <thead>
           <tr>
             <th>N°</th>
             <th>Date</th>
-            <th>Eleve</th>
+            <th>Élève</th>
             <th>Matricule</th>
-            <th>Annee</th>
+            <th>Année</th>
             <th>Type</th>
             <th>Motif</th>
             <th>Mesure</th>
-            <th>Enregistre par</th>
+            <th>Enregistré par</th>
           </tr>
         </thead>
         <tbody>
@@ -81,7 +79,7 @@
               <td>{{ record.recordedBy.name if record.recordedBy else '—' }}</td>
             </tr>
           {% else %}
-            <tr><td colspan="9">Aucune entree au journal de discipline.</td></tr>
+            <tr><td colspan="9">Aucune entrée au journal de discipline.</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -95,9 +93,9 @@
           <input type="hidden" name="schoolYearId" value="{{ filters.schoolYearId }}" />
           <input type="hidden" name="type" value="{{ filters.type }}" />
           <input type="hidden" name="page" value="{{ page - 1 }}" />
-          <button type="submit" class="secondary btn-sm btn-icon icon-prev" {% if page <= 1 %}disabled{% endif %}>Precedent</button>
+          <button type="submit" class="secondary btn-sm btn-icon icon-prev" {% if page <= 1 %}disabled{% endif %}>Précédent</button>
         </form>
-        <span class="muted">Page {{ page }} sur {{ totalPages }} • {{ total }} entree(s)</span>
+        <span class="muted">Page {{ page }} sur {{ totalPages }} • {{ total }} entrée(s)</span>
         <form method="get" action="/discipline" class="inline-form">
           <input type="hidden" name="studentId" value="{{ filters.studentId }}" />
           <input type="hidden" name="levelId" value="{{ filters.levelId }}" />
@@ -110,5 +108,17 @@
     {% endif %}
 
     {{ legend.render(['disciplineRecordType']) }}
+    </div>
   </section>
+  <script>
+    // Le bouton PDF reste en haut de page : quand la recherche instantanee
+    // change les filtres (et l'URL), son lien suit les nouveaux filtres.
+    document.addEventListener('live-search:updated', () => {
+      const link = document.getElementById('disciplinePdfLink');
+      if (!link) return;
+      const params = new URLSearchParams(window.location.search);
+      params.delete('page');
+      link.href = '/discipline/pdf?' + params.toString();
+    });
+  </script>
 {% endblock %}

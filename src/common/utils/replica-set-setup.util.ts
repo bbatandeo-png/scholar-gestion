@@ -126,19 +126,19 @@ export async function ensureReplicaSetReady(mongoUri: string): Promise<void> {
     const scriptPath = resolveSetupScriptPath();
     if (!scriptPath) {
       console.error(
-        "[licence-mongo] Configuration de la base de donnees incomplete et script d'initialisation introuvable - contactez le support.",
+        "[licence-mongo] Configuration de la base de données incomplète et script d'initialisation introuvable - contactez le support.",
       );
       return;
     }
 
     console.log(
-      "[licence-mongo] Premiere configuration de la base de donnees sur ce poste - une fenetre Windows va demander une autorisation, merci de l'accepter.",
+      "[licence-mongo] Première configuration de la base de données sur ce poste - une fenêtre Windows va demander une autorisation, merci de l'accepter.",
     );
     elevatedAttempted = true;
     const exitCode = await runElevatedSetup(scriptPath);
     if (exitCode !== 0) {
       console.error(
-        "[licence-mongo] La configuration initiale de la base de donnees necessite une autorisation administrateur qui n'a pas ete accordee (ou a echoue) - relancez l'application et acceptez la fenetre Windows, ou contactez le support.",
+        "[licence-mongo] La configuration initiale de la base de données nécessite une autorisation administrateur qui n'a pas été accordée (ou a échoué) - relancez l'application et acceptez la fenetre Windows, ou contactez le support.",
       );
       return;
     }
@@ -146,6 +146,6 @@ export async function ensureReplicaSetReady(mongoUri: string): Promise<void> {
   }
 
   console.error(
-    '[licence-mongo] MongoDB ne repond toujours pas apres plusieurs tentatives - verifiez que le service MongoDB est installe et demarre, ou contactez le support.',
+    '[licence-mongo] MongoDB ne répond toujours pas après plusieurs tentatives - vérifiez que le service MongoDB est installé et démarré, ou contactez le support.',
   );
 }

@@ -35,7 +35,7 @@ export class LicenseController {
   @Render('licence/index')
   async index(@CurrentEcole() ecoleId: string | null) {
     if (!ecoleId) {
-      throw new BadRequestException('Aucune ecole associee a ce compte');
+      throw new BadRequestException('Aucune école associée à ce compte');
     }
     return {
       title: 'Licence',
@@ -52,7 +52,7 @@ export class LicenseController {
     @CurrentUser() user: SessionUser | undefined,
   ) {
     if (!ecoleId) {
-      throw new BadRequestException('Aucune ecole associee a ce compte');
+      throw new BadRequestException('Aucune école associée à ce compte');
     }
     try {
       await this.licensingService.applyRenewalCode(

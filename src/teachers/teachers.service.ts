@@ -262,7 +262,7 @@ export class TeachersService {
     }
     if (created === 0) {
       throw new BadRequestException(
-        'Cette affectation (matiere/classe/annee) existe deja pour cet enseignant',
+        'Cette affectation (matière/classe/année) existe déjà pour cet enseignant',
       );
     }
     return { created, skipped };
@@ -527,7 +527,7 @@ export class TeachersService {
       .findOne({ _id: recordId, teacherId })
       .exec();
     if (!record) {
-      throw new NotFoundException('Entree de suivi introuvable');
+      throw new NotFoundException('Entrée de suivi introuvable');
     }
 
     const before = {

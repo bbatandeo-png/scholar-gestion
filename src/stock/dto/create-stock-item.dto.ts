@@ -1,5 +1,12 @@
 import { Transform } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, IsString, Min, MinLength } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  Min,
+  MinLength,
+} from 'class-validator';
 import { StockCategory } from '../../common/enums/domain.enums';
 
 // A blank "Seuil d'alerte" input submits '' - must become undefined (not a

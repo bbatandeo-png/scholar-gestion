@@ -6,14 +6,14 @@
       <div class="topbar-heading">
         <div class="topbar-title-row">
           <h2>Anciens élèves</h2>
-          <p class="muted">{{ pagination.total }} résultat(s) • page {{ pagination.page }} / {{ pagination.totalPages }}</p>
+          <p class="muted" id="archived-summary" aria-live="polite">{{ pagination.total }} résultat(s) • page {{ pagination.page }} / {{ pagination.totalPages }}</p>
         </div>
       </div>
 
       <div class="topbar-actions">
-        <form method="get" action="/students/search" class="inline-form" id="search-archived">
+        <form method="get" action="/students/search" class="inline-form" id="search-archived" role="search" data-live-search="#archived-summary, #archived-advanced-form, #archived-results">
           <label class="search-controls">
-            <input type="search" name="q" value="{{ query }}" placeholder="Matricule, nom, prénom, quartier" />
+            <input type="search" name="q" value="{{ query }}" placeholder="Matricule, nom, prénom, quartier…" aria-label="Rechercher un ancien élève" autocomplete="off" />
             <button type="submit" class="button btn-icon icon-search">Rechercher</button>
             <button type="button" id="toggle-advanced-archived" class="button secondary">Filtres</button>
           </label>
@@ -23,7 +23,7 @@
 
     <div id="advanced-filters-archived" style="display:none;margin-top:14px;">
       <div class="panel form-section">
-        <form method="get" action="/students/search" class="form-grid">
+        <form method="get" action="/students/search" class="form-grid" id="archived-advanced-form">
           <input type="hidden" name="q" value="{{ query }}" />
           <label>Niveau
             <input name="level" placeholder="Ex: 6ème, 5ème" />
@@ -42,6 +42,7 @@
       </div>
     </div>
 
+    <div id="archived-results">
     <div class="table-shell">
       <table class="table-report js-sortable" data-no-filter>
         <thead>
@@ -60,7 +61,7 @@
               <td>{% set value = student.status %}{% set group = 'studentStatus' %}{% include "partials/status-badge.njk" %}</td>
               <td class="actions">
                 <a class="button secondary btn-sm btn-icon icon-view" href="/students/{{ student._id }}">Fiche</a>
-                <a class="button" href="/students/{{ student._id }}/reenroll">Reinscrire</a>
+                {% if currentUser and currentUser.role in ['super_admin', 'secretariat'] %}<a class="button" href="/students/{{ student._id }}/reenroll">Réinscrire</a>{% endif %}
               </td>
             </tr>
           {% else %}
@@ -75,7 +76,7 @@
         <input type="hidden" name="q" value="{{ query }}" />
         <input type="hidden" name="pageSize" value="{{ pagination.pageSize }}" />
         <input type="hidden" name="page" value="{{ pagination.prevPage }}" />
-        <button type="submit" class="secondary btn-sm btn-icon icon-prev" {% if not pagination.hasPrev %}disabled{% endif %}>Precedent</button>
+        <button type="submit" class="secondary btn-sm btn-icon icon-prev" {% if not pagination.hasPrev %}disabled{% endif %}>Précédent</button>
       </form>
       <span class="muted">Page {{ pagination.page }} sur {{ pagination.totalPages }}</span>
       <form method="get" action="/students/search" class="inline-form">
@@ -84,6 +85,7 @@
         <input type="hidden" name="page" value="{{ pagination.nextPage }}" />
         <button type="submit" class="secondary btn-sm btn-icon icon-next" {% if not pagination.hasNext %}disabled{% endif %}>Suivant</button>
       </form>
+    </div>
     </div>
   </section>
 

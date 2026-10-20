@@ -24,7 +24,7 @@
         <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
         <div class="form-grid">
           <label>Nom<input name="lastname" value="{{ teacher.lastname }}" required /></label>
-          <label>Prenoms<input name="firstname" value="{{ teacher.firstname }}" required /></label>
+          <label>Prénoms<input name="firstname" value="{{ teacher.firstname }}" required /></label>
           <label>Sexe
             <select name="gender">
               <option value="">Sélectionner</option>
@@ -34,11 +34,11 @@
           </label>
           <label>Date de naissance<input type="date" name="birthDate" value="{{ teacher.birthDate | inputDate }}" /></label>
           <label>Lieu de naissance<input name="birthPlace" value="{{ teacher.birthPlace }}" /></label>
-          <label>Telephone<input name="phone" value="{{ teacher.phone }}" /></label>
+          <label>Téléphone<input name="phone" value="{{ teacher.phone }}" /></label>
           <label>Email<input type="email" name="email" value="{{ teacher.email }}" /></label>
           <label>Adresse<input name="address" value="{{ teacher.address }}" /></label>
           <label>Diplome<input name="diploma" value="{{ teacher.diploma }}" /></label>
-          <label>Specialite<input name="specialty" value="{{ teacher.specialty }}" /></label>
+          <label>Spécialité<input name="specialty" value="{{ teacher.specialty }}" /></label>
           <label>Date d'embauche<input type="date" name="hireDate" value="{{ teacher.hireDate | inputDate }}" /></label>
           <label>Statut
             <select name="status">
@@ -60,7 +60,7 @@
 
     <div class="panel">
       <h3>Nouvelle affectation</h3>
-      <p class="muted">Annee scolaire : <strong>{{ openSchoolYear.label if openSchoolYear else 'aucune annee ouverte' }}</strong> (toujours l'annee en cours, non modifiable ici).</p>
+      <p class="muted">Année scolaire : <strong>{{ openSchoolYear.label if openSchoolYear else 'aucune année ouverte' }}</strong> (toujours l'année en cours, non modifiable ici).</p>
       <form method="post" action="/teachers/{{ teacher._id }}/assignments" class="stack">
         <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
         <div class="form-grid">
@@ -71,7 +71,7 @@
               {% endfor %}
             </select>
           </label>
-          <label>Matiere
+          <label>Matière
             <select name="subjectId" required>
               <option value="">Choisir</option>
               {% for subject in subjects %}
@@ -96,9 +96,9 @@
           <thead>
             <tr>
               <th>N°</th>
-              <th>Annee</th>
+              <th>Année</th>
               <th>Classe</th>
-              <th>Matiere</th>
+              <th>Matière</th>
               <th>H/semaine</th>
               <th>Titulaire</th>
               <th></th>
@@ -125,7 +125,7 @@
                 </td>
               </tr>
             {% else %}
-              <tr><td colspan="7">Aucune affectation enregistree.</td></tr>
+              <tr><td colspan="7">Aucune affectation enregistrée.</td></tr>
             {% endfor %}
           </tbody>
         </table>
@@ -147,7 +147,7 @@
               {% endfor %}
             </select>
           </label>
-          <label>Date de debut<input type="date" name="startDate" value="{{ today }}" required /></label>
+          <label>Date de début<input type="date" name="startDate" value="{{ today }}" required /></label>
           <label>Date de fin <span class="muted">(facultatif)</span><input type="date" name="endDate" /></label>
         </div>
         <label>Notes <span class="muted">(facultatif)</span>
@@ -162,7 +162,7 @@
             <tr>
               <th>N°</th>
               <th>Type</th>
-              <th>Debut</th>
+              <th>Début</th>
               <th>Fin</th>
               <th>Statut</th>
               <th></th>
@@ -188,16 +188,16 @@
                       data-notes="{{ contract.notes or '' }}"
                     >Modifier</button>
                     {% if contract.status == 'actif' %}
-                      <form method="post" action="/teachers/{{ teacher._id }}/contracts/{{ contract._id }}/terminate" onsubmit="return confirm('Resilier ce contrat ?');">
+                      <form method="post" action="/teachers/{{ teacher._id }}/contracts/{{ contract._id }}/terminate" onsubmit="return confirm('Résilier ce contrat ? Cette action met fin au contrat en cours.');">
                         <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
-                        <button type="submit" class="button secondary btn-sm">Resilier</button>
+                        <button type="submit" class="button danger btn-sm">Résilier</button>
                       </form>
                     {% endif %}
                   </div>
                 </td>
               </tr>
             {% else %}
-              <tr><td colspan="6">Aucun contrat enregistre.</td></tr>
+              <tr><td colspan="6">Aucun contrat enregistré.</td></tr>
             {% endfor %}
           </tbody>
         </table>
@@ -207,7 +207,7 @@
 
     <div class="panel">
       <h3>Suivi</h3>
-      <p class="muted">Annee scolaire : <strong>{{ openSchoolYear.label if openSchoolYear else 'aucune annee ouverte' }}</strong> (toujours l'annee en cours, non modifiable ici).</p>
+      <p class="muted">Année scolaire : <strong>{{ openSchoolYear.label if openSchoolYear else 'aucune année ouverte' }}</strong> (toujours l'année en cours, non modifiable ici).</p>
       <form method="post" action="/teachers/{{ teacher._id }}/tracking" class="stack">
         <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
         <div class="form-grid">
@@ -231,7 +231,7 @@
           <thead>
             <tr>
               <th>N°</th>
-              <th>Annee</th>
+              <th>Année</th>
               <th>Date</th>
               <th>Type</th>
               <th>Note</th>
@@ -258,7 +258,7 @@
                 </td>
               </tr>
             {% else %}
-              <tr><td colspan="6">Aucune entree de suivi.</td></tr>
+              <tr><td colspan="6">Aucune entrée de suivi.</td></tr>
             {% endfor %}
           </tbody>
         </table>
@@ -272,7 +272,7 @@
     <form method="post" action="/teachers/{{ teacher._id }}/documents" enctype="multipart/form-data" class="toolbar compact-actions">
       <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
       <label class="field-inline">
-        Libelle
+        Libellé
         <input name="label" placeholder="Diplome, CNI, CV..." required />
       </label>
       <label class="field-inline">
@@ -287,7 +287,7 @@
         <thead>
           <tr>
             <th>N°</th>
-            <th>Libelle</th>
+            <th>Libellé</th>
             <th>Fichier</th>
             <th>Ajoute le</th>
             <th></th>
@@ -322,7 +322,7 @@
     <form method="post" id="assignmentEditForm">
       <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
       <div class="form-grid">
-        <label>Matiere
+        <label>Matière
           <select name="subjectId" required>
             {% for subject in subjects %}
               <option value="{{ subject._id }}">{{ subject.label }}</option>
@@ -359,7 +359,7 @@
             {% endfor %}
           </select>
         </label>
-        <label>Date de debut<input type="date" name="startDate" required /></label>
+        <label>Date de début<input type="date" name="startDate" required /></label>
         <label>Date de fin <span class="muted">(facultatif)</span><input type="date" name="endDate" /></label>
       </div>
       <label>Notes <span class="muted">(facultatif)</span>
@@ -376,7 +376,7 @@
   </dialog>
 
   <dialog id="trackingEditDialog" class="confirm-dialog">
-    <h3>Modifier l'entree de suivi</h3>
+    <h3>Modifier l'entrée de suivi</h3>
     <form method="post" id="trackingEditForm">
       <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
       <div class="form-grid">
@@ -406,7 +406,7 @@
     <h3>Modifier le document</h3>
     <form method="post" id="documentEditForm" enctype="multipart/form-data">
       <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
-      <label>Libelle
+      <label>Libellé
         <input name="label" required />
       </label>
       <label>Remplacer le fichier <span class="muted">(optionnel)</span>

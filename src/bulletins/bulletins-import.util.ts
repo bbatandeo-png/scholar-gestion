@@ -15,11 +15,21 @@ export type ParsedNoteCell = {
   profRaw: string;
 };
 
+// Colonnes facultatives (modele telecharge depuis la session) : absentes
+// des anciens fichiers, elles restent alors null/vides.
+export type ParsedDiscipline = {
+  retards: number | null;
+  absences: number | null;
+  exclusion: string;
+  decisionConseil: string;
+};
+
 export type ParsedIdentityRow = {
   nameRaw: string;
   matriculeRaw: string;
   sexeRaw: string;
   notes: ParsedNoteCell[];
+  discipline: ParsedDiscipline | null;
 };
 
 export type ParsedBulletinMeta = {
@@ -36,6 +46,20 @@ export type ParsedBulletinFile = {
 };
 
 const NOTE_BLOCK_LABELS = ['i1', 'i2', 'devoir', 'compo', 'coef', 'prof'];
+// En-tetes des colonnes de discipline, juste apres les 5 colonnes
+// d'informations de la classe (Classe, Titulaire, Chef, Annee, Date du conseil).
+export const DISCIPLINE_HEADERS = [
+  'Retards',
+  'Absences',
+  'Exclusion',
+  'Décision du conseil',
+];
+const DISCIPLINE_ALIASES = [
+  'retards',
+  'absences',
+  'exclusion',
+  'decision_du_conseil',
+];
 const IDENTITY_HEADER_ALIASES = [
   ['nom_et_prenoms', 'nom', 'nomprenoms'],
   ['matricule'],
@@ -216,6 +240,11 @@ export function parseBulletinWorkbook(buffer: Buffer): ParsedBulletinFile {
     .slice(1)
     .filter((row) => toTrimmedString(row[1]) !== '');
 
+  const disciplineStart = trailingStartColumn + 5;
+  const hasDiscipline = DISCIPLINE_ALIASES.every((alias, offset) =>
+    matchesAnyAlias(headerRow[disciplineStart + offset], [alias]),
+  );
+
   const rows: ParsedIdentityRow[] = dataRows.map((row) => ({
     nameRaw: toTrimmedString(row[1]),
     matriculeRaw: toTrimmedString(row[2]),
@@ -229,6 +258,14 @@ export function parseBulletinWorkbook(buffer: Buffer): ParsedBulletinFile {
       coef: toNullableNumber(row[block.columnIndex + 5]),
       profRaw: toTrimmedString(row[block.columnIndex + 6]),
     })),
+    discipline: hasDiscipline
+      ? {
+          retards: toNullableNumber(row[disciplineStart]),
+          absences: toNullableNumber(row[disciplineStart + 1]),
+          exclusion: toTrimmedString(row[disciplineStart + 2]),
+          decisionConseil: toTrimmedString(row[disciplineStart + 3]),
+        }
+      : null,
   }));
 
   const meta =

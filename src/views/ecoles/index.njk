@@ -5,8 +5,8 @@
        data-has-new="{{ 'true' if newCredentials else 'false' }}"
        data-admin-email="{{ newCredentials.email if newCredentials else '' }}"
        data-admin-password="{{ newCredentials.tempPassword if newCredentials else '' }}">
-    <h3>Compte administrateur cree</h3>
-    <p class="muted">Notez ces identifiants - ils resteront affiches meme apres rechargement de la page, jusqu'a ce que vous cliquiez sur "Fermer".</p>
+    <h3>Compte administrateur créé</h3>
+    <p class="muted">Notez ces identifiants - ils resteront affichés même après rechargement de la page, jusqu'à ce que vous cliquiez sur "Fermer".</p>
     <div class="form-grid">
       <label>Email
         <div class="inline-form no-wrap">
@@ -93,11 +93,11 @@
               flashButton(button, 'Copie !', 1500);
             },
             function () {
-              flashButton(button, 'Echec - selectionnez et Ctrl+C', 3000);
+              flashButton(button, 'Échec - sélectionnez et Ctrl+C', 3000);
             },
           );
         } else {
-          flashButton(button, 'Echec - selectionnez et Ctrl+C', 3000);
+          flashButton(button, 'Échec - sélectionnez et Ctrl+C', 3000);
         }
       }
 
@@ -114,14 +114,14 @@
     <div class="panel top-gap">
       <div class="panel-heading">
         <div>
-          <h3>Comptes de cette ecole</h3>
-          <p class="muted">Copiez l'email ou reinitialisez le mot de passe si l'ecole n'arrive pas a se connecter.</p>
+          <h3>Comptes de cette école</h3>
+          <p class="muted">Copiez l'email ou réinitialisez le mot de passe si l'école n'arrive pas à se connecter.</p>
         </div>
       </div>
       <div class="table-shell">
         <table class="table-report">
           <thead>
-            <tr><th>N°</th><th>Nom</th><th>Email</th><th>Role</th><th>Statut</th><th></th></tr>
+            <tr><th>N°</th><th>Nom</th><th>Email</th><th>Rôle</th><th>Statut</th><th></th></tr>
           </thead>
           <tbody>
             {% for admin in ecoleAdmins %}
@@ -134,17 +134,17 @@
                     <button type="button" class="button secondary btn-sm" data-copy-target="admin-email-{{ admin._id }}">Copier</button>
                   </div>
                 </td>
-                <td>{{ admin.role }}</td>
-                <td>{{ admin.status }}</td>
+                <td>{{ ENUM_META.role[admin.role].label if ENUM_META.role[admin.role] else admin.role }}</td>
+                <td>{% set value = admin.status %}{% set group = 'userStatus' %}{% include "partials/status-badge.njk" %}</td>
                 <td>
-                  <form method="post" action="/platform/ecoles/{{ editEcole._id }}/users/{{ admin._id }}/reset-password" class="inline-form no-wrap" onsubmit="return confirm('Reinitialiser le mot de passe de ce compte ? Un nouveau mot de passe temporaire sera genere et devra lui etre communique.');">
+                  <form method="post" action="/platform/ecoles/{{ editEcole._id }}/users/{{ admin._id }}/reset-password" class="inline-form no-wrap" onsubmit="return confirm('Réinitialiser le mot de passe de ce compte ? Un nouveau mot de passe temporaire sera généré et devra lui être communique.');">
                     <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
-                    <button type="submit" class="button secondary btn-sm">Reinitialiser le mot de passe</button>
+                    <button type="submit" class="button danger btn-sm">Réinitialiser le mot de passe</button>
                   </form>
                 </td>
               </tr>
             {% else %}
-              <tr><td colspan="6">Aucun compte pour cette ecole.</td></tr>
+              <tr><td colspan="6">Aucun compte pour cette école.</td></tr>
             {% endfor %}
           </tbody>
         </table>
@@ -155,7 +155,7 @@
       <div class="panel-heading">
         <div>
           <h3>Modules actives</h3>
-          <p class="muted">Une ecriture est refusee tant qu'un module est desactive - les donnees deja saisies restent consultables.</p>
+          <p class="muted">Une écriture est refusée tant qu'un module est désactivé - les données déjà saisies restent consultables.</p>
         </div>
       </div>
       <div class="form-grid">
@@ -163,70 +163,70 @@
           <strong>Finance</strong>
           <p class="muted">{{ 'Actif' if moduleStatus.finance else 'Inactif' }}</p>
           {% if moduleStatus.finance %}
-            <form method="post" action="/platform/ecoles/{{ editEcole._id }}/modules/toggle" class="inline-form no-wrap" onsubmit="return confirm('Desactiver le module Finance pour cette ecole ? Toute nouvelle ecriture financiere sera refusee tant que le module ne sera pas reactive (les donnees deja saisies restent consultables).');">
+            <form method="post" action="/platform/ecoles/{{ editEcole._id }}/modules/toggle" class="inline-form no-wrap" onsubmit="return confirm('Désactiver le module Finance pour cette école ? Toute nouvelle ecriture financière sera refusee tant que le module ne sera pas reactive (les données déjà saisies restent consultables).');">
           {% else %}
-            <form method="post" action="/platform/ecoles/{{ editEcole._id }}/modules/toggle" class="inline-form no-wrap" onsubmit="return confirm('Activer le module Finance pour cette ecole ?');">
+            <form method="post" action="/platform/ecoles/{{ editEcole._id }}/modules/toggle" class="inline-form no-wrap" onsubmit="return confirm('Activer le module Finance pour cette école ?');">
           {% endif %}
             <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
             <input type="hidden" name="code" value="FINANCE" />
             <input type="hidden" name="active" value="{{ 'false' if moduleStatus.finance else 'true' }}" />
-            <button type="submit" class="button secondary btn-sm">{{ 'Desactiver' if moduleStatus.finance else 'Activer' }}</button>
+            <button type="submit" class="button btn-sm {{ 'danger' if moduleStatus.finance }}">{{ 'Désactiver' if moduleStatus.finance else 'Activer' }}</button>
           </form>
         </div>
         <div>
           <strong>Bulletins</strong>
           <p class="muted">{{ 'Actif' if moduleStatus.bulletins else 'Inactif' }}</p>
           {% if moduleStatus.bulletins %}
-            <form method="post" action="/platform/ecoles/{{ editEcole._id }}/modules/toggle" class="inline-form no-wrap" onsubmit="return confirm('Desactiver le module Bulletins pour cette ecole ? Toute nouvelle ecriture sur les bulletins sera refusee tant que le module ne sera pas reactive (les donnees deja saisies restent consultables).');">
+            <form method="post" action="/platform/ecoles/{{ editEcole._id }}/modules/toggle" class="inline-form no-wrap" onsubmit="return confirm('Désactiver le module Bulletins pour cette école ? Toute nouvelle ecriture sur les bulletins sera refusee tant que le module ne sera pas reactive (les données déjà saisies restent consultables).');">
           {% else %}
-            <form method="post" action="/platform/ecoles/{{ editEcole._id }}/modules/toggle" class="inline-form no-wrap" onsubmit="return confirm('Activer le module Bulletins pour cette ecole ?');">
+            <form method="post" action="/platform/ecoles/{{ editEcole._id }}/modules/toggle" class="inline-form no-wrap" onsubmit="return confirm('Activer le module Bulletins pour cette école ?');">
           {% endif %}
             <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
             <input type="hidden" name="code" value="BULLETINS" />
             <input type="hidden" name="active" value="{{ 'false' if moduleStatus.bulletins else 'true' }}" />
-            <button type="submit" class="button secondary btn-sm">{{ 'Desactiver' if moduleStatus.bulletins else 'Activer' }}</button>
+            <button type="submit" class="button btn-sm {{ 'danger' if moduleStatus.bulletins }}">{{ 'Désactiver' if moduleStatus.bulletins else 'Activer' }}</button>
           </form>
         </div>
         <div>
           <strong>Journal de discipline</strong>
           <p class="muted">{{ 'Actif' if moduleStatus.discipline else 'Inactif' }}</p>
           {% if moduleStatus.discipline %}
-            <form method="post" action="/platform/ecoles/{{ editEcole._id }}/modules/toggle" class="inline-form no-wrap" onsubmit="return confirm('Desactiver le Journal de discipline pour cette ecole ? Toute nouvelle ecriture sera refusee tant que le module ne sera pas reactive (les donnees deja saisies restent consultables).');">
+            <form method="post" action="/platform/ecoles/{{ editEcole._id }}/modules/toggle" class="inline-form no-wrap" onsubmit="return confirm('Désactiver le Journal de discipline pour cette école ? Toute nouvelle ecriture sera refusee tant que le module ne sera pas reactive (les données déjà saisies restent consultables).');">
           {% else %}
-            <form method="post" action="/platform/ecoles/{{ editEcole._id }}/modules/toggle" class="inline-form no-wrap" onsubmit="return confirm('Activer le Journal de discipline pour cette ecole ?');">
+            <form method="post" action="/platform/ecoles/{{ editEcole._id }}/modules/toggle" class="inline-form no-wrap" onsubmit="return confirm('Activer le Journal de discipline pour cette école ?');">
           {% endif %}
             <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
             <input type="hidden" name="code" value="DISCIPLINE" />
             <input type="hidden" name="active" value="{{ 'false' if moduleStatus.discipline else 'true' }}" />
-            <button type="submit" class="button secondary btn-sm">{{ 'Desactiver' if moduleStatus.discipline else 'Activer' }}</button>
+            <button type="submit" class="button btn-sm {{ 'danger' if moduleStatus.discipline }}">{{ 'Désactiver' if moduleStatus.discipline else 'Activer' }}</button>
           </form>
         </div>
         <div>
           <strong>Stocks &amp; fournitures</strong>
           <p class="muted">{{ 'Actif' if moduleStatus.stock else 'Inactif' }}</p>
           {% if moduleStatus.stock %}
-            <form method="post" action="/platform/ecoles/{{ editEcole._id }}/modules/toggle" class="inline-form no-wrap" onsubmit="return confirm('Desactiver Stocks &amp; fournitures pour cette ecole ? Toute nouvelle ecriture sera refusee tant que le module ne sera pas reactive (les donnees deja saisies restent consultables).');">
+            <form method="post" action="/platform/ecoles/{{ editEcole._id }}/modules/toggle" class="inline-form no-wrap" onsubmit="return confirm('Désactiver Stocks &amp; fournitures pour cette école ? Toute nouvelle ecriture sera refusee tant que le module ne sera pas reactive (les données déjà saisies restent consultables).');">
           {% else %}
-            <form method="post" action="/platform/ecoles/{{ editEcole._id }}/modules/toggle" class="inline-form no-wrap" onsubmit="return confirm('Activer Stocks &amp; fournitures pour cette ecole ?');">
+            <form method="post" action="/platform/ecoles/{{ editEcole._id }}/modules/toggle" class="inline-form no-wrap" onsubmit="return confirm('Activer Stocks &amp; fournitures pour cette école ?');">
           {% endif %}
             <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
             <input type="hidden" name="code" value="STOCK" />
             <input type="hidden" name="active" value="{{ 'false' if moduleStatus.stock else 'true' }}" />
-            <button type="submit" class="button secondary btn-sm">{{ 'Desactiver' if moduleStatus.stock else 'Activer' }}</button>
+            <button type="submit" class="button btn-sm {{ 'danger' if moduleStatus.stock }}">{{ 'Désactiver' if moduleStatus.stock else 'Activer' }}</button>
           </form>
         </div>
         <div>
           <strong>Personnel enseignant</strong>
           <p class="muted">{{ 'Actif' if moduleStatus.enseignants else 'Inactif' }}</p>
           {% if moduleStatus.enseignants %}
-            <form method="post" action="/platform/ecoles/{{ editEcole._id }}/modules/toggle" class="inline-form no-wrap" onsubmit="return confirm('Desactiver le module Personnel enseignant pour cette ecole ? Toute nouvelle ecriture sera refusee tant que le module ne sera pas reactive (les donnees deja saisies restent consultables).');">
+            <form method="post" action="/platform/ecoles/{{ editEcole._id }}/modules/toggle" class="inline-form no-wrap" onsubmit="return confirm('Désactiver le module Personnel enseignant pour cette école ? Toute nouvelle ecriture sera refusee tant que le module ne sera pas reactive (les données déjà saisies restent consultables).');">
           {% else %}
-            <form method="post" action="/platform/ecoles/{{ editEcole._id }}/modules/toggle" class="inline-form no-wrap" onsubmit="return confirm('Activer le module Personnel enseignant pour cette ecole ?');">
+            <form method="post" action="/platform/ecoles/{{ editEcole._id }}/modules/toggle" class="inline-form no-wrap" onsubmit="return confirm('Activer le module Personnel enseignant pour cette école ?');">
           {% endif %}
             <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
             <input type="hidden" name="code" value="ENSEIGNANTS" />
             <input type="hidden" name="active" value="{{ 'false' if moduleStatus.enseignants else 'true' }}" />
-            <button type="submit" class="button secondary btn-sm">{{ 'Desactiver' if moduleStatus.enseignants else 'Activer' }}</button>
+            <button type="submit" class="button btn-sm {{ 'danger' if moduleStatus.enseignants }}">{{ 'Désactiver' if moduleStatus.enseignants else 'Activer' }}</button>
           </form>
         </div>
         <div>
@@ -244,7 +244,7 @@
       <div class="panel-heading">
         <div>
           <h3>Pack d'installation</h3>
-          <p class="muted">Exe pre-construit (fabrique via <code>npm run build:exe:native</code> et depose sur ce serveur), empaquete avec un <code>.env</code> genere pour cette ecole (secrets propres, admin de cette ecole). Rien n'est compile ici — c'est un simple assemblage de fichiers.</p>
+          <p class="muted">Exe préconstruit (fabriqué via <code>npm run build:exe:native</code> et déposé sur ce serveur), empaqueté avec un <code>.env</code> généré pour cette école (secrets propres, admin de cette école). Rien n'est compile ici — c'est un simple assemblage de fichiers.</p>
         </div>
       </div>
       {% if releaseAssetsConfigured %}
@@ -254,7 +254,7 @@
           </label>
           <button type="submit" class="button" id="download-installation-package">Télécharger le pack d'installation (.zip)</button>
         </form>
-        <p class="muted" style="margin:10px 0 0;">Avec une date : le pack genere est deja actif jusqu'a cette date, sans aucune action supplementaire cote ecole au premier demarrage. Sans date : le pack part sans limite de licence (comme avant), a decider plus tard.</p>
+        <p class="muted" style="margin:10px 0 0;">Avec une date : le pack généré est déjà actif jusqu'à cette date, sans aucune action supplémentaire côté école au premier démarrage. Sans date : le pack part sans limite de licence (comme avant), a decider plus tard.</p>
         {% if editEcole.licenseActivatedAt %}
           <p class="muted" style="margin:4px 0 0;">Dernier téléchargement : {{ editEcole.licenseActivatedAt | formatDate }}{% if editEcole.releaseVersion %} (version {{ editEcole.releaseVersion }}){% endif %}{% if editEcole.licenseExpiresAt %}, licence jusqu'au {{ editEcole.licenseExpiresAt | formatDate }}{% endif %}.</p>
         {% endif %}
@@ -271,7 +271,7 @@
           })();
         </script>
       {% else %}
-        <p class="notice notice-info">Indisponible sur cette instance — aucun exe pre-construit trouve (variable <code>RELEASE_ASSETS_DIR</code> non configuree, ou dossier vide).</p>
+        <p class="notice notice-info">Indisponible sur cette instance — aucun exe préconstruit trouvé (variable <code>RELEASE_ASSETS_DIR</code> non configuree, ou dossier vide).</p>
       {% endif %}
     </div>
 
@@ -292,7 +292,7 @@
             <button type="button" class="button secondary btn-sm" data-copy-target="provisioning-secret-field">Copier</button>
           </div>
         </label>
-        <p class="muted" style="margin:6px 0 0;">À enregistrer une fois avec <code>npm run license -- set-secret "Nom de l'ecole" {{ provisioningLicenseSecret }}</code>, puis réutilisable pour chaque renouvellement — voir docs/deploiement-offline.md.</p>
+        <p class="muted" style="margin:6px 0 0;">À enregistrer une fois avec <code>npm run license -- set-secret "Nom de l'école" {{ provisioningLicenseSecret }}</code>, puis réutilisable pour chaque renouvellement — voir docs/deploiement-offline.md.</p>
       {% else %}
         <p class="notice notice-info">Aucun secret généré pour l'instant — téléchargez le pack d'installation ci-dessus une première fois pour en créer un.</p>
       {% endif %}
@@ -303,7 +303,7 @@
     <div class="panel">
       <div class="panel-heading">
         <div>
-          <h2>{% if editEcole %}Modifier l'ecole{% else %}Nouvelle ecole{% endif %}</h2>
+          <h2>{% if editEcole %}Modifier l'école{% else %}Nouvelle école{% endif %}</h2>
           <p class="muted">
             {% if editEcole %}
               Mettez a jour les informations de {{ editEcole.nom }}.
@@ -317,7 +317,7 @@
         <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
 
         <div class="form-section">
-          <span class="form-section-title">Identite de l'etablissement</span>
+          <span class="form-section-title">Identité de l'établissement</span>
           <div class="form-grid">
             <label>Nom<input name="nom" value="{{ editEcole.nom }}" required /></label>
             <label>Ministere de tutelle<input name="ministereTutelle" value="{{ editEcole.ministereTutelle }}" /></label>
@@ -344,7 +344,7 @@
         {% if not editEcole %}
           <div class="form-section">
             <span class="form-section-title">Compte administrateur</span>
-            <p class="form-section-desc">Ce compte permet a l'equipe de l'ecole de se connecter des la creation - les identifiants generes seront affiches une seule fois, juste apres l'enregistrement.</p>
+            <p class="form-section-desc">Ce compte permet à l'équipe de l'école de se connecter dès la création - les identifiants générés seront affichés une seule fois, juste après l'enregistrement.</p>
             <div class="form-grid">
               <label>Nom de l'administrateur<input name="adminName" required /></label>
               <label>Email de l'administrateur<input type="email" name="adminEmail" required /></label>
@@ -352,8 +352,8 @@
           </div>
 
           <div class="form-section">
-            <span class="form-section-title">Modules actives a la creation</span>
-            <p class="form-section-desc">Modifiable ensuite depuis la fiche de l'ecole.</p>
+            <span class="form-section-title">Modules activés à la création</span>
+            <p class="form-section-desc">Modifiable ensuite depuis la fiche de l'école.</p>
             <div class="grid cols-2">
               <label class="toggle-option"><input type="checkbox" name="activateFinance" value="true" /> Module Finance</label>
               <label class="toggle-option"><input type="checkbox" name="activateBulletins" value="true" /> Module Bulletins</label>
@@ -363,7 +363,7 @@
 
         <div class="form-section">
           <span class="form-section-title">Personnalisation visuelle</span>
-          <p class="form-section-desc">Ces couleurs apparaissent sur les cartes scolaires et les bulletins generes pour cette ecole - avec le logo, c'est ce qui permet de distinguer chaque etablissement d'un coup d'oeil.</p>
+          <p class="form-section-desc">Ces couleurs apparaissent sur les cartes scolaires et les bulletins générés pour cette école - avec le logo, c'est ce qui permet de distinguer chaque établissement d'un coup d'oeil.</p>
           <div class="grid cols-2">
             <div class="color-field">
               <input type="color" name="couleurCarte" id="couleurCarte-input" value="{{ editEcole.couleurCarte or '#eef2fb' }}" {% if not editEcole.couleurCarte %}disabled{% endif %} />
@@ -406,8 +406,8 @@
     <div class="panel">
       <div class="panel-heading">
         <div>
-          <h2>Ecoles</h2>
-          <p class="muted">Etablissements clients de la plateforme.</p>
+          <h2>Écoles</h2>
+          <p class="muted">Établissements clients de la plateforme.</p>
         </div>
       </div>
       <div class="table-shell">
@@ -441,7 +441,7 @@
                 </td>
               </tr>
             {% else %}
-              <tr><td colspan="6">Aucune ecole.</td></tr>
+              <tr><td colspan="6">Aucune école.</td></tr>
             {% endfor %}
           </tbody>
         </table>

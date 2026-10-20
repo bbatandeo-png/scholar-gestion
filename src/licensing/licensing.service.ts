@@ -148,7 +148,7 @@ export class LicensingService {
     }
     if (payload.ecoleId !== ecoleId) {
       throw new BadRequestException(
-        "Ce code ne correspond pas a cette ecole - verifiez qu'il a bien ete genere pour ce poste",
+        "Ce code ne correspond pas à cette école - vérifiez qu'il a bien été généré pour ce poste",
       );
     }
 
@@ -156,7 +156,7 @@ export class LicensingService {
     const existing = await this.licenseStateModel.findOne({ ecoleId }).exec();
     if (existing && expiresAt.getTime() <= existing.expiresAt.getTime()) {
       throw new BadRequestException(
-        'Ce code ne prolonge pas la licence actuelle - un nouveau code est necessaire',
+        'Ce code ne prolonge pas la licence actuelle - un nouveau code est nécessaire',
       );
     }
 

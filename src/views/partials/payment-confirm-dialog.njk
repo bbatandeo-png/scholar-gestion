@@ -4,7 +4,7 @@
 <dialog id="{{ dialogId }}" class="confirm-dialog payment-confirm-dialog">
   <h3>Confirmer le paiement</h3>
   <p>Enregistrer un paiement de <strong class="js-confirm-amount"></strong> (<span class="js-confirm-method"></span>) ?</p>
-  <p class="muted">Cette action ne peut pas etre annulee depuis cette page.</p>
+  <p class="muted">Cette action ne peut pas être annulée depuis cette page.</p>
   <div class="toolbar compact-actions">
     <button type="button" class="secondary js-confirm-cancel">Annuler</button>
     <button type="button" class="btn-icon icon-save js-confirm-ok">Confirmer</button>
@@ -27,7 +27,7 @@
       if (confirmed) return;
       event.preventDefault();
       if (typeof form.reportValidity === 'function' && !form.reportValidity()) return;
-      amountLabel.textContent = amountInput.value;
+      amountLabel.textContent = window.formatMoney ? window.formatMoney(amountInput.value) : amountInput.value;
       methodLabel.textContent = methodSelect?.options[methodSelect.selectedIndex]?.text || '';
       dialog.showModal();
     });

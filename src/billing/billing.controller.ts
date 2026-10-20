@@ -156,7 +156,7 @@ export class BillingController {
       schoolYearId: String(year._id),
     });
     await this.levelsService.enableForSchoolYear(String(year._id), dto.levelId);
-    setFlash(req, 'success', 'Frais enregistres');
+    setFlash(req, 'success', 'Frais enregistrés');
     return res.redirect('/settings/fees');
   }
 
@@ -219,7 +219,7 @@ export class BillingController {
     setFlash(
       req,
       'success',
-      `Import frais termine: ${imported} lignes importees, ${skipped} ignorees`,
+      `Import des frais terminé : ${imported} lignes importées, ${skipped} ignorées`,
     );
     return res.redirect('/settings/fees');
   }

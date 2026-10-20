@@ -110,6 +110,7 @@ describe('EnrollmentsService.updateEnrollment', () => {
   function buildFakeThis(overrides: {
     enrollment: Record<string, unknown>;
     conflicting?: Record<string, unknown> | null;
+    invoice?: Record<string, unknown> | null;
   }) {
     const findOneExec = jest
       .fn()
@@ -137,8 +138,147 @@ describe('EnrollmentsService.updateEnrollment', () => {
       },
       studentsService: { findById: jest.fn() },
       auditService: { log: jest.fn().mockResolvedValue(undefined) },
+      billingService: {
+        findInvoiceByEnrollment: jest
+          .fn()
+          .mockResolvedValue(overrides.invoice ?? null),
+        getFeeSchedule: jest
+          .fn()
+          .mockResolvedValue({ registrationFee: 15000, tuitionFee: 130000 }),
+        createOrUpdateInvoice: jest
+          .fn()
+          .mockImplementation((payload: Record<string, number>) =>
+            Promise.resolve({
+              totalDue: payload.registrationFee + payload.tuitionFee,
+              balanceDue:
+                payload.registrationFee +
+                payload.tuitionFee -
+                payload.paidAmount,
+            }),
+          ),
+      },
     };
   }
+
+  const paidInvoice = {
+    _id: 'inv-1',
+    registrationFee: 15000,
+    tuitionFee: 120000,
+    discountAmount: 0,
+    arrearsAmount: 0,
+    paidAmount: 50000,
+    totalDue: 135000,
+  };
+  const baseEnrollment = {
+    _id: 'enr-1',
+    studentId: 'student-1',
+    schoolYearId: 'year-1',
+    levelId: 'level-6e',
+    type: 'initial',
+  };
+
+  it('sans paiement : change la classe librement et recalcule la facture sur la nouvelle classe', async () => {
+    const fakeThis = buildFakeThis({
+      enrollment: baseEnrollment,
+      invoice: { ...paidInvoice, paidAmount: 0 },
+    });
+
+    await EnrollmentsService.prototype.updateEnrollment.call(
+      fakeThis as any,
+      'enr-1',
+      { levelId: 'level-4e' },
+      'actor-1',
+      'secretariat',
+    );
+
+    expect(fakeThis.billingService.createOrUpdateInvoice).toHaveBeenCalledWith(
+      expect.objectContaining({
+        enrollmentId: 'enr-1',
+        registrationFee: 15000,
+        tuitionFee: 130000,
+        paidAmount: 0,
+      }),
+    );
+  });
+
+  it('apres un paiement : le secretariat ne peut plus changer la classe', async () => {
+    const fakeThis = buildFakeThis({
+      enrollment: baseEnrollment,
+      invoice: paidInvoice,
+    });
+
+    await expect(
+      EnrollmentsService.prototype.updateEnrollment.call(
+        fakeThis as any,
+        'enr-1',
+        { levelId: 'level-4e', levelChangeReason: 'erreur' },
+        'actor-1',
+        'secretariat',
+      ),
+    ).rejects.toThrow('seuls la direction et le super administrateur');
+    expect(fakeThis.enrollmentModel.findByIdAndUpdate).not.toHaveBeenCalled();
+    expect(
+      fakeThis.billingService.createOrUpdateInvoice,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('apres un paiement : la direction doit donner un motif', async () => {
+    const fakeThis = buildFakeThis({
+      enrollment: baseEnrollment,
+      invoice: paidInvoice,
+    });
+
+    await expect(
+      EnrollmentsService.prototype.updateEnrollment.call(
+        fakeThis as any,
+        'enr-1',
+        { levelId: 'level-4e' },
+        'actor-1',
+        'direction',
+      ),
+    ).rejects.toThrow('indiquez le motif');
+    expect(fakeThis.enrollmentModel.findByIdAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it('apres un paiement : la direction change la classe avec motif, paiements conserves, changement trace', async () => {
+    const fakeThis = buildFakeThis({
+      enrollment: baseEnrollment,
+      invoice: paidInvoice,
+    });
+
+    await EnrollmentsService.prototype.updateEnrollment.call(
+      fakeThis as any,
+      'enr-1',
+      {
+        levelId: 'level-4e',
+        levelChangeReason: "Erreur de classe a l'inscription",
+      },
+      'actor-1',
+      'direction',
+    );
+
+    expect(fakeThis.enrollmentModel.findByIdAndUpdate).toHaveBeenCalled();
+    expect(fakeThis.billingService.createOrUpdateInvoice).toHaveBeenCalledWith(
+      expect.objectContaining({
+        registrationFee: 15000,
+        tuitionFee: 130000,
+        paidAmount: 50000,
+      }),
+    );
+    const calls = fakeThis.auditService.log.mock.calls as Array<
+      [{ action: string; details: Record<string, unknown> }]
+    >;
+    const trace = calls.find(
+      ([entry]) => entry.action === 'enrollment_level_changed',
+    )?.[0];
+    expect(trace?.details).toMatchObject({
+      reason: "Erreur de classe a l'inscription",
+      paidAmount: 50000,
+      totalDueBefore: 135000,
+      totalDueAfter: 145000,
+      balanceDueAfter: 95000,
+    });
+  });
 
   it("change le niveau sans revalider l'absence de double inscription quand l'eleve ne change pas", async () => {
     const enrollment = {
@@ -181,7 +321,7 @@ describe('EnrollmentsService.updateEnrollment', () => {
         { studentId: 'student-2' },
         'actor-1',
       ),
-    ).rejects.toThrow('Double inscription active interdite pour cette annee');
+    ).rejects.toThrow('Double inscription active interdite pour cette année');
   });
 });
 

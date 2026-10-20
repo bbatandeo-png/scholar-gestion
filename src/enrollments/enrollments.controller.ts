@@ -204,7 +204,7 @@ export class EnrollmentsController {
       !(await this.ecoleModulesService.isActive(ecoleId, 'FINANCE'))
     ) {
       throw new ForbiddenException(
-        'Le module FINANCE est desactive pour cette ecole',
+        'Le module FINANCE est désactivé pour cette école',
       );
     }
 
@@ -224,7 +224,7 @@ export class EnrollmentsController {
         setFlash(
           req,
           'error',
-          'Cet eleve est deja inscrit cette annee. Indiquez un montant a payer pour enregistrer un nouveau versement, ou ouvrez sa fiche d’inscription.',
+          'Cet élève est déjà inscrit cette année. Indiquez un montant à payer pour enregistrer un nouveau versement, ou ouvrez sa fiche d’inscription.',
         );
         return res.redirect(req.get('referer') || '/enrollments');
       }
@@ -236,7 +236,7 @@ export class EnrollmentsController {
         setFlash(
           req,
           'error',
-          'Cet eleve est deja inscrit cette annee, mais aucune facture n’a ete trouvee pour enregistrer le paiement.',
+          'Cet élève est déjà inscrit cette année, mais aucune facture n’a été trouvée pour enregistrer le paiement.',
         );
         return res.redirect(`/enrollments/${String(existingEnrollment._id)}`);
       }
@@ -274,7 +274,7 @@ export class EnrollmentsController {
     );
 
     if (!wantsPayment) {
-      setFlash(req, 'success', 'Inscription creee');
+      setFlash(req, 'success', 'Inscription créée');
       return res.redirect(`/enrollments/${result.enrollmentId}`);
     }
 
@@ -291,7 +291,7 @@ export class EnrollmentsController {
       setFlash(
         req,
         'success',
-        `Inscription creee et paiement de ${paymentAmount} enregistre`,
+        `Inscription créée et paiement de ${paymentAmount} enregistré`,
       );
       return res.redirect(`/receipts/${payment.payment._id.toString()}`);
     } catch (error) {
@@ -358,7 +358,7 @@ export class EnrollmentsController {
   ) {
     if (!(await this.settingsService.getImportPaidStudentsEnabled())) {
       throw new ForbiddenException(
-        "L'import des eleves deja payes n'est pas active pour cette ecole",
+        "L'import des élèves déjà payés n'est pas activé pour cette école",
       );
     }
     const ecoleId = req.session?.user?.ecoleId;
@@ -367,7 +367,7 @@ export class EnrollmentsController {
       !(await this.ecoleModulesService.isActive(ecoleId, 'FINANCE'))
     ) {
       throw new ForbiddenException(
-        'Le module FINANCE est desactive pour cette ecole',
+        'Le module FINANCE est désactivé pour cette école',
       );
     }
     const file = pickUploadedFile(req, 'file');
@@ -395,14 +395,14 @@ export class EnrollmentsController {
       reasons.push(`${report.invalidDate} date de naissance illisible`);
     }
     if (report.creationFailed) {
-      reasons.push(`${report.creationFailed} en echec (doublon probable)`);
+      reasons.push(`${report.creationFailed} en échec (doublon probable)`);
     }
     const reasonSuffix = reasons.length ? ` (${reasons.join(', ')})` : '';
 
     setFlash(
       req,
       'success',
-      `Import termine: ${report.created} eleve(s) inscrit(s), ${report.paid} paiement(s) enregistre(s), ${report.skipped} ignore(s)${reasonSuffix}`,
+      `Import terminé : ${report.created} élève(s) inscrit(s), ${report.paid} paiement(s) enregistré(s), ${report.skipped} ignoré(s)${reasonSuffix}`,
     );
     return res.redirect('/enrollments');
   }
@@ -430,11 +430,11 @@ export class EnrollmentsController {
       ) !== String(selected._id)
     ) {
       throw new ForbiddenException(
-        'Cette inscription appartient a une autre annee scolaire',
+        'Cette inscription appartient à une autre année scolaire',
       );
     }
     return {
-      title: 'Detail inscription',
+      title: 'Détail de l’inscription',
       ...detail,
       students: await this.studentsService.list(),
       schoolYears: [selected],
@@ -442,8 +442,10 @@ export class EnrollmentsController {
     };
   }
 
+  // Direction incluse : elle seule (avec le super admin) peut changer la
+  // classe d'un eleve ayant deja paye (voir EnrollmentsService.updateEnrollment).
   @Put('/:id')
-  @Roles(Role.SUPER_ADMIN, Role.SECRETARIAT)
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT)
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateEnrollmentDto,
@@ -451,8 +453,20 @@ export class EnrollmentsController {
     @Res() res: Response,
     @CurrentUser() user: SessionUser | undefined,
   ) {
-    await this.enrollmentsService.updateEnrollment(id, dto, user?.id);
-    setFlash(req, 'success', 'Inscription mise a jour');
+    try {
+      await this.enrollmentsService.updateEnrollment(
+        id,
+        dto,
+        user?.id,
+        user?.role,
+      );
+      setFlash(req, 'success', 'Inscription mise à jour');
+    } catch (error) {
+      if (!(error instanceof BadRequestException)) {
+        throw error;
+      }
+      setFlash(req, 'error', error.message);
+    }
     return res.redirect(req.get('referer') || `/enrollments/${id}`);
   }
 
@@ -474,7 +488,7 @@ export class EnrollmentsController {
   ) {
     const actorRole = user?.role;
     if (actorRole !== Role.SUPER_ADMIN && actorRole !== Role.COMPTABILITE) {
-      throw new ForbiddenException('Acces refuse pour ce role');
+      throw new ForbiddenException('Accès refusé pour ce rôle');
     }
 
     await this.enrollmentsService.updateFinancialDetails(
@@ -496,7 +510,7 @@ export class EnrollmentsController {
       actorRole,
     );
 
-    setFlash(req, 'success', 'Montants financiers mis a jour');
+    setFlash(req, 'success', 'Montants financiers mis à jour');
     return res.redirect(req.get('referer') || `/enrollments/${id}`);
   }
 }

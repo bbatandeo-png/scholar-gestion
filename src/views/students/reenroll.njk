@@ -3,11 +3,11 @@
 {% block content %}
   <section class="grid cols-2">
     <div class="panel">
-      <h2>Reinscription de {{ student.lastname }} {{ student.firstname }}</h2>
+      <h2>Réinscription de {{ student.lastname }} {{ student.firstname }}</h2>
       <form method="post" action="/students/{{ student._id }}/reenroll" class="stack">
         <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
         <div class="form-grid">
-          <label>Annee scolaire cible
+          <label>Année scolaire cible
             <select name="targetSchoolYearId" required>
               {% for year in schoolYears %}
                 <option value="{{ year._id }}">{{ year.label }}</option>
@@ -24,18 +24,18 @@
           <label>Motif
             <input name="reason" value="RETURNING_STUDENT" />
           </label>
-          <label>Reporter les impayes
+          <label>Reporter les impayés
             <select name="carryOverArrears">
               <option value="true">Oui</option>
               <option value="false">Non</option>
             </select>
           </label>
         </div>
-        <button type="submit">Valider la reinscription</button>
+        <button type="submit">Valider la réinscription</button>
       </form>
     </div>
     <div class="panel">
-      <h2>Impayes ouverts reportables</h2>
+      <h2>Impayés ouverts reportables</h2>
       <div class="table-shell">
         <table class="table-report">
           <thead><tr><th>N°</th><th>Montant initial</th><th>Reste</th><th>Statut</th></tr></thead>
@@ -43,12 +43,12 @@
             {% for item in openArrears %}
               <tr>
                 <td>{{ loop.index }}</td>
-                <td>{{ item.amountInitial }}</td>
-                <td>{{ item.amountRemaining }}</td>
+                <td>{{ item.amountInitial | money }}</td>
+                <td>{{ item.amountRemaining | money }}</td>
                 <td>{% set value = item.status %}{% set group = 'arrearStatus' %}{% include "partials/status-badge.njk" %}</td>
               </tr>
             {% else %}
-              <tr><td colspan="4">Aucun impaye ouvert.</td></tr>
+              <tr><td colspan="4">Aucun impayé ouvert.</td></tr>
             {% endfor %}
           </tbody>
         </table>

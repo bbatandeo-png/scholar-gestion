@@ -2,7 +2,7 @@
 {% block content %}
   <section class="panel">
     <h2>{{ receipt.schoolName or "Nom de l'école" }}</h2>
-    <h3 class="receipt-header">REÇU DE PAIEMENT DES FRAIS DE SCOLARITE</h3>
+    <h3 class="receipt-header">REÇU DE PAIEMENT DES FRAIS DE SCOLARITÉ</h3>
 
     {% set invoice = receipt.invoiceId %}
     {% set enrollment = invoice.enrollmentId if invoice %}
@@ -15,12 +15,12 @@
     <p><strong>Sexe                      :</strong> {{ student.gender if student else '-' }}</p>
     <p><strong>Classe                    :</strong> {{ enrollment.levelId.label if enrollment and enrollment.levelId else '-' }}</p>
     {% if receipt.receiptMode == 'tuition_and_registration' %}
-      <p><strong>Frais d'inscription         :</strong> {{ receipt.receiptSummary.registrationFee }}</p>
+      <p><strong>Frais d'inscription         :</strong> {{ receipt.receiptSummary.registrationFee | money }}</p>
     {% endif %}
-    <p><strong>Montant de l’écolage      :</strong> {{ receipt.receiptSummary.tuitionFee }}</p>
-    <p><strong>Nouveau paiement          :</strong> {{ receipt.amount }}</p>
-    <p><strong>Total payé                :</strong> {{ receipt.receiptSummary.totalPaid }}</p>
-    <p><strong>Reste à payer             :</strong> {{ receipt.receiptSummary.balanceDue }}</p>
+    <p><strong>Montant de l’écolage      :</strong> {{ receipt.receiptSummary.tuitionFee | money }}</p>
+    <p><strong>Nouveau paiement          :</strong> {{ receipt.amount | money }}</p>
+    <p><strong>Total payé                :</strong> {{ receipt.receiptSummary.totalPaid | money }}</p>
+    <p><strong>Reste à payer             :</strong> {{ receipt.receiptSummary.balanceDue | money }}</p>
 
     <p class="receipt-signature">Lomé, le {{ receipt.paidAt | formatDate }}</p>
     <p class="receipt-signature">L’économe</p>

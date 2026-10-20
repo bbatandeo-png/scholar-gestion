@@ -4,8 +4,8 @@
 <div class="panel">
   <div class="panel-heading">
     <div>
-      <h2>Donnees importees — {{ session.levelId.label }} — {{ periodeLabels[session.periode] }}</h2>
-      <p class="muted">{{ rows.length }} eleve(s), {{ subjects.length }} matiere(s). Reflete l'etat actuel de l'import (avant ou apres validation).</p>
+      <h2>Données importées — {{ session.levelId.label }} — {{ periodeLabels[session.periode] }}</h2>
+      <p class="muted">{{ rows.length }} élève(s), {{ subjects.length }} matière(s). Reflète l'état actuel de l'import (avant ou après validation).</p>
     </div>
     <div class="toolbar">
       <a class="button secondary" href="/bulletins/{{ session._id }}/review">Revue / rapprochement</a>
@@ -16,8 +16,8 @@
   {% if session.meta %}
     <p class="muted">
       Titulaire : {{ session.meta.titulaire or '—' }} —
-      Chef d'etablissement : {{ session.meta.chefEtablissement or '—' }} —
-      Annee scolaire (fichier) : {{ session.meta.anneeScolaire or '—' }} —
+      Chef d'établissement : {{ session.meta.chefEtablissement or '—' }} —
+      Année scolaire (fichier) : {{ session.meta.anneeScolaire or '—' }} —
       Date du conseil : {{ session.meta.dateDuConseil | formatDate if session.meta.dateDuConseil else '—' }}
     </p>
   {% endif %}
@@ -32,7 +32,7 @@
         <tr>
           {% if session.status == 'validated' %}<th rowspan="2"><input type="checkbox" id="select-all-bulletins" /></th>{% endif %}
           <th rowspan="2">N°</th>
-          <th rowspan="2">Eleve</th>
+          <th rowspan="2">Élève</th>
           <th rowspan="2">Sexe</th>
           <th rowspan="2">Statut</th>
           {% if session.status == 'validated' %}<th rowspan="2"></th>{% endif %}
@@ -68,7 +68,7 @@
             {% endfor %}
           </tr>
         {% else %}
-          <tr><td colspan="4">Aucune donnee importee.</td></tr>
+          <tr><td colspan="4">Aucune donnée importée.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -76,8 +76,8 @@
   {% if session.status == 'validated' %}
       {% if rows.length %}
         <div class="toolbar compact-actions top-gap">
-          <button type="submit" class="button secondary btn-icon icon-export" id="download-bulletins-selection-btn" disabled>Telecharger la selection (PDF)</button>
-          <span class="muted" id="bulletins-selection-count">0 eleve(s) selectionne(s)</span>
+          <button type="submit" class="button secondary btn-icon icon-export" id="download-bulletins-selection-btn" disabled>Télécharger la sélection (PDF)</button>
+          <span class="muted" id="bulletins-selection-count">0 élève(s) sélectionné(s)</span>
         </div>
       {% endif %}
     </form>
@@ -90,7 +90,7 @@
         const refresh = () => {
           const checked = boxes.filter((box) => box.checked).length;
           if (downloadBtn) downloadBtn.disabled = checked === 0;
-          if (counter) counter.textContent = checked + ' eleve(s) selectionne(s)';
+          if (counter) counter.textContent = checked + ' élève(s) sélectionné(s)';
         };
         selectAll?.addEventListener('change', () => {
           boxes.forEach((box) => { box.checked = selectAll.checked; });

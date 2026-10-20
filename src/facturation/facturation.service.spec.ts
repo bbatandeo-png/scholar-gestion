@@ -187,7 +187,7 @@ describe('FacturationService', () => {
       runWithTenant(tenant, () =>
         service.genererFacture({ periode: '2026-T1' }),
       ),
-    ).rejects.toThrow('Une facture forfait existe deja');
+    ).rejects.toThrow('Une facture forfait existe déjà');
   });
 
   it('isole les parametres de facturation entre deux ecoles', async () => {

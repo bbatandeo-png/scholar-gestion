@@ -18,7 +18,11 @@ import { AuthenticatedGuard } from '../common/guards/authenticated.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { buildExcelBuffer } from '../common/utils/excel.util';
 import { toDisplayString } from '../common/utils/safe-string.util';
-import { GradeSheetOptions, ReportsService } from './reports.service';
+import {
+  EXAM_STATISTICS_LEGEND,
+  GradeSheetOptions,
+  ReportsService,
+} from './reports.service';
 import { SchoolYearsService } from '../school-years/school-years.service';
 
 // Not gated by @RequireModule('FINANCE'): every route here is read-only, and
@@ -206,7 +210,8 @@ export class ReportsController {
         levelId || undefined,
       ));
     return {
-      title: 'Statistiques de fin de periode',
+      title: 'Statistiques de fin de période',
+      legend: EXAM_STATISTICS_LEGEND,
       activeYear,
       levels: await this.reportsService.listLevels(),
       periode: periode || '',
@@ -223,7 +228,7 @@ export class ReportsController {
     @Res() res: Response,
   ) {
     if (!periode) {
-      throw new BadRequestException('Veuillez choisir une periode');
+      throw new BadRequestException('Veuillez choisir une période');
     }
     const activeYear = await this.schoolYearsService.requireOpen();
     const report = await this.reportsService.getExamStatistics(
@@ -250,7 +255,7 @@ export class ReportsController {
     @Res() res: Response,
   ) {
     if (!periode) {
-      throw new BadRequestException('Veuillez choisir une periode');
+      throw new BadRequestException('Veuillez choisir une période');
     }
     const activeYear = await this.schoolYearsService.requireOpen();
     const report = await this.reportsService.getExamStatistics(
@@ -280,7 +285,7 @@ export class ReportsController {
     @Res() res: Response,
   ) {
     if (!periode) {
-      throw new BadRequestException('Veuillez choisir une periode');
+      throw new BadRequestException('Veuillez choisir une période');
     }
     const activeYear = await this.schoolYearsService.requireOpen();
     const report = await this.reportsService.getExamStatistics(
@@ -361,7 +366,7 @@ export class ReportsController {
           : []
     ).filter(Boolean);
     if (studentIds.length === 0) {
-      throw new BadRequestException('Aucun eleve selectionne');
+      throw new BadRequestException('Aucun élève sélectionné');
     }
 
     const schoolYearId = await this.selectedYearId(req);
@@ -401,49 +406,12 @@ export class ReportsController {
     return res.send(pdf);
   }
 
-  @Get('/students-by-level')
-  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.AUDITEUR)
-  @Render('reports/students-by-level')
-  async studentsByLevel(@Req() req: Request) {
-    return {
-      title: 'Rapport eleves par niveau',
-      report: await this.reportsService.studentsByLevel(
-        await this.selectedYearId(req),
-      ),
-    };
-  }
-
-  @Get('/students-by-level/export')
-  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.AUDITEUR)
-  async studentsByLevelExport(@Req() req: Request, @Res() res: Response) {
-    const report = await this.reportsService.studentsByLevel(
-      await this.selectedYearId(req),
-    );
-    const buffer = buildExcelBuffer(
-      'Eleves_par_niveau',
-      report.map((item) => ({
-        niveau_id: toDisplayString(item._id ?? ''),
-        total: item.total,
-      })),
-    );
-
-    res.setHeader(
-      'Content-Type',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    );
-    res.setHeader(
-      'Content-Disposition',
-      'attachment; filename="eleves_par_niveau.xlsx"',
-    );
-    return res.send(buffer);
-  }
-
   @Get('/paid-students')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.COMPTABILITE, Role.AUDITEUR)
   @Render('reports/paid-students')
   async paidStudents(@Req() req: Request) {
     return {
-      title: 'Eleves soldes',
+      title: 'Élèves soldés',
       report: await this.reportsService.paidStudents(
         await this.selectedYearId(req),
       ),
@@ -513,7 +481,7 @@ export class ReportsController {
     ]);
 
     return {
-      title: "Eleves ayant paye l'inscription",
+      title: "Élèves ayant payé l'inscription",
       report,
       filter: normalizedFilter,
       levelId: levelId || '',
@@ -621,7 +589,7 @@ export class ReportsController {
   @Render('reports/unpaid-students')
   async unpaidStudents(@Req() req: Request) {
     return {
-      title: 'Eleves impayes',
+      title: 'Élèves impayés',
       report: await this.reportsService.unpaidStudents(
         await this.selectedYearId(req),
       ),
@@ -681,7 +649,7 @@ export class ReportsController {
         )
       : report;
     return {
-      title: 'Situation financiere des classes',
+      title: 'Situation financière des classes',
       report: filtered,
       levels: await this.reportsService.listLevels(),
       levelId: levelId || '',

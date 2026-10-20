@@ -1,3 +1,4 @@
+import { FeeScheduleNotFoundException } from '../common/exceptions/fee-schedule-not-found.exception';
 import {
   BadRequestException,
   ConflictException,
@@ -391,7 +392,7 @@ export class EnrollmentsService {
         .exec();
       if (existing) {
         throw new ConflictException(
-          'Double inscription active interdite pour cette annee',
+          'Double inscription active interdite pour cette année',
         );
       }
 
@@ -517,14 +518,15 @@ export class EnrollmentsService {
 
   async updateEnrollment(
     id: string,
-    rawDto: Partial<CreateEnrollmentDto>,
+    rawDto: Partial<CreateEnrollmentDto> & { levelChangeReason?: string },
     actorId?: string,
+    actorRole?: string,
   ) {
     // A blank field (e.g. the untouched "Choisir un niveau" placeholder)
     // means "leave unchanged", never a value to write.
     const dto = Object.fromEntries(
       Object.entries(rawDto).filter(([, value]) => value !== ''),
-    ) as Partial<CreateEnrollmentDto>;
+    ) as Partial<CreateEnrollmentDto> & { levelChangeReason?: string };
     const enrollment = await this.enrollmentModel.findById(id).exec();
     if (!enrollment) {
       throw new NotFoundException('Inscription introuvable');
@@ -552,7 +554,7 @@ export class EnrollmentsService {
         .exec();
       if (conflicting) {
         throw new ConflictException(
-          'Double inscription active interdite pour cette annee',
+          'Double inscription active interdite pour cette année',
         );
       }
     }
@@ -571,6 +573,44 @@ export class EnrollmentsService {
     if (levelChanged && !levelSnapshot) {
       throw new NotFoundException('Niveau introuvable');
     }
+
+    // Changement de classe : un eleve qui a deja paye cette annee ne change
+    // de classe que sur decision de la direction (ou du super administrateur),
+    // avec un motif - la facture est ensuite recalculee sur les frais de la
+    // nouvelle classe, sans toucher aux paiements deja encaisses.
+    const invoiceBefore = levelChanged
+      ? await this.billingService.findInvoiceByEnrollment(id)
+      : null;
+    const alreadyPaid = Number(invoiceBefore?.paidAmount ?? 0) > 0;
+    const levelChangeReason = dto.levelChangeReason?.trim() ?? '';
+    if (levelChanged && alreadyPaid) {
+      if (actorRole !== Role.SUPER_ADMIN && actorRole !== Role.DIRECTION) {
+        throw new BadRequestException(
+          'Cet élève a déjà effectué un paiement cette année : seuls la direction et le super administrateur peuvent changer sa classe. Adressez-vous à la direction.',
+        );
+      }
+      if (!levelChangeReason) {
+        throw new BadRequestException(
+          'Cet élève a déjà effectué un paiement : indiquez le motif du changement de classe.',
+        );
+      }
+    }
+    // Frais de la nouvelle classe : si sa grille n'est pas encore
+    // configuree, le changement reste possible et la facture garde ses
+    // montants (comportement d'avant), plutot que de bloquer l'operation.
+    const newFees = levelChanged
+      ? await this.billingService
+          .getFeeSchedule(
+            String(enrollment.schoolYearId),
+            dto.levelId as string,
+          )
+          .catch((error: unknown) => {
+            if (error instanceof FeeScheduleNotFoundException) {
+              return null;
+            }
+            throw error;
+          })
+      : null;
 
     const updated = await this.enrollmentModel
       .findByIdAndUpdate(
@@ -608,6 +648,35 @@ export class EnrollmentsService {
         { new: true },
       )
       .exec();
+
+    if (levelChanged && invoiceBefore && newFees) {
+      const invoiceAfter = await this.billingService.createOrUpdateInvoice({
+        schoolYearId: String(enrollment.schoolYearId),
+        enrollmentId: id,
+        registrationFee: newFees.registrationFee,
+        tuitionFee: newFees.tuitionFee,
+        discountAmount: invoiceBefore.discountAmount,
+        arrearsAmount: invoiceBefore.arrearsAmount,
+        paidAmount: invoiceBefore.paidAmount,
+      });
+      await this.auditService.log({
+        schoolYearId: String(enrollment.schoolYearId),
+        actorId,
+        action: AuditAction.ENROLLMENT_LEVEL_CHANGED,
+        entityType: 'Enrollment',
+        entityId: id,
+        details: {
+          fromLevelId: String(enrollment.levelId),
+          toLevelId: dto.levelId,
+          toLevelLabel: levelSnapshot?.label,
+          reason: levelChangeReason || undefined,
+          paidAmount: invoiceBefore.paidAmount,
+          totalDueBefore: invoiceBefore.totalDue,
+          totalDueAfter: invoiceAfter?.totalDue,
+          balanceDueAfter: invoiceAfter?.balanceDue,
+        },
+      });
+    }
 
     await this.auditService.log({
       schoolYearId: String(enrollment.schoolYearId),
@@ -655,7 +724,7 @@ export class EnrollmentsService {
       (!Number.isFinite(payload.paidAmount) || payload.paidAmount < 0)
     ) {
       throw new BadRequestException(
-        'Le montant paye doit etre un nombre positif ou nul',
+        'Le montant payé doit être un nombre positif ou nul',
       );
     }
 
@@ -696,7 +765,7 @@ export class EnrollmentsService {
         invoiceId: String(invoice._id),
         schoolYearId: String(enrollment.schoolYearId),
         delta: paidDelta,
-        reason: `Correction du montant paye : ${payload.reason?.trim() ?? ''}`,
+        reason: `Correction du montant payé : ${payload.reason?.trim() ?? ''}`,
         actorId,
       });
     }
@@ -799,7 +868,7 @@ export class EnrollmentsService {
         enrollmentId: log.entityId,
         studentName:
           `${student?.lastname ?? ''} ${student?.firstname ?? ''}`.trim() ||
-          'Eleve inconnu',
+          'Élève inconnu',
         matricule: student?.matricule ?? '',
         levelLabel: level?.label ?? '',
         actorName: log.actorId

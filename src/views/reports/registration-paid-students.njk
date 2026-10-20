@@ -66,9 +66,9 @@
               <td>{{ item.enrollmentId.studentId.gender if item.enrollmentId and item.enrollmentId.studentId }}</td>
               <td>{{ item.enrollmentId.studentId.matricule if item.enrollmentId and item.enrollmentId.studentId }}</td>
               <td>{{ item.enrollmentId.levelId.label if item.enrollmentId and item.enrollmentId.levelId }}</td>
-              <td>{{ item.amountDue }}</td>
-              <td>{{ item.amountPaid }}</td>
-              <td>{{ item.balanceDue }}</td>
+              <td>{{ item.amountDue | money }}</td>
+              <td>{{ item.amountPaid | money }}</td>
+              <td>{{ item.balanceDue | money }}</td>
             </tr>
           {% else %}
             <tr><td colspan="8">Aucun paiement trouvé pour ce filtre.</td></tr>

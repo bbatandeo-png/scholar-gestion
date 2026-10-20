@@ -4,26 +4,26 @@
   <section class="panel">
     <div class="panel-heading">
       <div>
-        <h2>Impayes reportes</h2>
-        <p class="muted">{{ pagination.total }} impaye(s) • page {{ pagination.page }} / {{ pagination.totalPages }}</p>
+        <h2>Impayés reportés</h2>
+        <p class="muted">{{ pagination.total }} impayé(s) • page {{ pagination.page }} / {{ pagination.totalPages }}</p>
       </div>
       <a class="button secondary btn-icon icon-export" href="/arrears/export">Exporter Excel</a>
     </div>
     <div class="table-shell">
       <table class="table-report">
-        <thead><tr><th>N°</th><th>Eleve</th><th>Date d'enregistrement</th><th>Montant initial</th><th>Montant restant</th><th>Statut</th></tr></thead>
+        <thead><tr><th>N°</th><th>Élève</th><th>Date d'enregistrement</th><th>Montant initial</th><th>Montant restant</th><th>Statut</th></tr></thead>
         <tbody>
           {% for item in arrears %}
             <tr>
               <td>{{ (pagination.page - 1) * pagination.pageSize + loop.index }}</td>
               <td>{{ item.studentId.lastname if item.studentId }} {{ item.studentId.firstname if item.studentId }}</td>
               <td>{{ item.createdAt | formatDate }}</td>
-              <td>{{ item.amountInitial }}</td>
-              <td>{{ item.amountRemaining }}</td>
+              <td>{{ item.amountInitial | money }}</td>
+              <td>{{ item.amountRemaining | money }}</td>
               <td>{% set value = item.status %}{% set group = 'arrearStatus' %}{% include "partials/status-badge.njk" %}</td>
             </tr>
           {% else %}
-            <tr><td colspan="6">Aucun impaye reporte.</td></tr>
+            <tr><td colspan="6">Aucun impayé reporté.</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -33,7 +33,7 @@
       <form method="get" action="/arrears" class="inline-form">
         <input type="hidden" name="pageSize" value="{{ pagination.pageSize }}" />
         <input type="hidden" name="page" value="{{ pagination.prevPage }}" />
-        <button type="submit" class="secondary btn-sm btn-icon icon-prev" {% if not pagination.hasPrev %}disabled{% endif %}>Precedent</button>
+        <button type="submit" class="secondary btn-sm btn-icon icon-prev" {% if not pagination.hasPrev %}disabled{% endif %}>Précédent</button>
       </form>
       <span class="muted">Page {{ pagination.page }} sur {{ pagination.totalPages }}</span>
       <form method="get" action="/arrears" class="inline-form">

@@ -1,185 +1,274 @@
 {% extends "layout.njk" %}
 {% import "partials/legend.njk" as legend %}
+
+{# Menus accessibles par role (aide a la creation d'un compte). #}
+{% set ROLE_MENUS = {
+  'super_admin': 'Tous les menus, y compris Paramètres et Utilisateurs.',
+  'direction': 'Tableau de bord, élèves, inscriptions et paiements, finances, promotions, rapports, paramètres.',
+  'secretariat': 'Tableau de bord, élèves, inscriptions et paiements, bulletins.',
+  'comptabilite': 'Tableau de bord, inscriptions et paiements, finances, rapports financiers.',
+  'auditeur': 'Consultation : élèves, inscriptions, finances, promotions, rapports (sans opérations sensibles).'
+} %}
+
+{% macro renderRoleOptions(roles, selected) %}
+  {% for role in roles %}
+    <option value="{{ role }}" {% if role == selected %}selected{% endif %}>{{ ENUM_META.role[role].label if ENUM_META.role[role] else role }}</option>
+  {% endfor %}
+{% endmacro %}
+
+{% macro renderStatusOptions(statuses, selected) %}
+  {% for status in statuses %}
+    <option value="{{ status }}" {% if status == selected %}selected{% endif %}>{{ ENUM_META.userStatus[status].label if ENUM_META.userStatus[status] else status }}</option>
+  {% endfor %}
+{% endmacro %}
+
 {% block content %}
-  <section class="grid user-page two-columns">
-    <div class="panel">
-      <div class="panel-heading">
-        <div>
-          <h2>Créer un utilisateur</h2>
-          <p class="muted">Attribuez un rôle, définissez le statut et créez un compte en quelques secondes.</p>
-        </div>
-        <span class="badge badge-neutral">Nouveau</span>
-      </div>
-
-      <div class="card role-summary">
-        <div class="card-body">
-          <h3 class="card-title">Rôles et accès</h3>
-          <p class="muted">Sélectionnez le rôle adapté au profil et contrôlez rapidement les menus disponibles.</p>
-        </div>
-        <div class="table-shell">
-          <table class="table-report" data-no-filter>
-            <thead>
-              <tr><th>Role</th><th>Signification</th><th>Menus accessibles</th></tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>super_admin</td>
-                <td>Contrôle total de l’application.</td>
-                <td>Dashboard, Élèves, Recherche, Inscriptions, Impayés, Promotions, Années scolaires, Niveaux, Frais, Utilisateurs, Rapports</td>
-              </tr>
-              <tr>
-                <td>direction</td>
-                <td>Pilotage pédagogique et administratif.</td>
-                <td>Dashboard, Élèves, Recherche, Inscriptions, Impayés, Promotions, Années scolaires, Niveaux, Frais, Rapports</td>
-              </tr>
-              <tr>
-                <td>secrétariat</td>
-                <td>Gestion opérationnelle des dossiers scolaires.</td>
-                <td>Dashboard, Élèves, Recherche, Inscriptions</td>
-              </tr>
-              <tr>
-                <td>comptabilité</td>
-                <td>Gestion financière et suivi des règlements.</td>
-                <td>Dashboard, Inscriptions, Impayés, Rapports (recettes/financier)</td>
-              </tr>
-              <tr>
-                <td>auditeur</td>
-                <td>Consultation et contrôle sans opérations sensibles.</td>
-                <td>Dashboard, Élèves, Recherche, Inscriptions, Impayés, Promotions, Rapports</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <form method="post" action="/users" class="stack user-form">
-        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
-        <div class="form-grid form-grid-2">
-          <label><span>Nom complet</span>
-            <input name="name" required />
-          </label>
-          <label><span>Email</span>
-            <input type="email" name="email" required />
-          </label>
-          <label><span>Mot de passe initial</span>
-            <input type="password" name="password" minlength="8" required />
-          </label>
-          <label><span>Role</span>
-            <select name="role" required>
-              {% for role in roleOptions %}
-                <option value="{{ role }}" title="{{ ENUM_META.role[role].description }}">{{ ENUM_META.role[role].label if ENUM_META.role[role] else role }}</option>
-              {% endfor %}
-            </select>
-          </label>
-          <label><span>Statut</span>
-            <select name="status" required>
-              {% for status in statusOptions %}
-                <option value="{{ status }}" {% if status == 'active' %}selected{% endif %} title="{{ ENUM_META.userStatus[status].description }}">{{ ENUM_META.userStatus[status].label if ENUM_META.userStatus[status] else status }}</option>
-              {% endfor %}
-            </select>
-          </label>
-        </div>
-        <button type="submit" class="button btn-lg btn-icon icon-save">Créer l’utilisateur</button>
-      </form>
+<div class="panel">
+  <div class="panel-heading">
+    <div>
+      <h2>Comptes utilisateurs</h2>
+      <p class="muted" id="users-summary" aria-live="polite">{{ pagination.total }} compte(s) • page {{ pagination.page }} / {{ pagination.totalPages }}</p>
     </div>
+    <div class="panel-heading-actions">
+      <button type="button" class="button" data-open-dialog="userCreateDialog">+ Créer un utilisateur</button>
+    </div>
+  </div>
 
-    <div class="panel">
-      <div class="panel-heading">
-        <div>
-          <h2>Comptes utilisateurs</h2>
-          <p class="muted">{{ pagination.total }} compte(s) • page {{ pagination.page }} / {{ pagination.totalPages }}</p>
-        </div>
-        <a class="button secondary" href="/users">Réinitialiser</a>
-      </div>
+  <form method="get" action="/users" class="toolbar toolbar-grid user-filters" role="search" data-live-search="#users-summary, #users-results">
+    <label><span>Recherche</span>
+      <input type="search" name="q" value="{{ query }}" placeholder="Nom ou e-mail…" autocomplete="off" />
+    </label>
+    <label><span>Rôle</span>
+      <select name="role">
+        <option value="">Tous les rôles</option>
+        {{ renderRoleOptions(roleOptions, selectedRole) }}
+      </select>
+    </label>
+    <label><span>Statut</span>
+      <select name="status">
+        <option value="">Tous les statuts</option>
+        {{ renderStatusOptions(statusOptions, selectedStatus) }}
+      </select>
+    </label>
+    <input type="hidden" name="pageSize" value="{{ pagination.pageSize }}" />
+    <button type="submit" class="button btn-md btn-icon icon-search">Filtrer</button>
+  </form>
 
-      <form method="get" action="/users" class="toolbar toolbar-grid user-filters">
-        <label><span>Recherche</span>
-          <input type="search" name="q" value="{{ query }}" placeholder="Nom ou email" />
-        </label>
-        <label><span>Role</span>
-          <select name="role">
-            <option value="">Tous les rôles</option>
-            {% for role in roleOptions %}
-              <option value="{{ role }}" {% if role == selectedRole %}selected{% endif %}>{{ ENUM_META.role[role].label if ENUM_META.role[role] else role }}</option>
-            {% endfor %}
-          </select>
-        </label>
-        <label><span>Statut</span>
-          <select name="status">
-            <option value="">Tous les statuts</option>
-            {% for status in statusOptions %}
-              <option value="{{ status }}" {% if status == selectedStatus %}selected{% endif %}>{{ ENUM_META.userStatus[status].label if ENUM_META.userStatus[status] else status }}</option>
-            {% endfor %}
-          </select>
-        </label>
+  <div id="users-results">
+    <div class="table-shell">
+      <table class="table-report user-table" data-no-filter>
+        <thead>
+          <tr><th>Utilisateur</th><th>Rôle</th><th>Statut</th><th>Créé le</th><th><span class="sr-only">Actions</span></th></tr>
+        </thead>
+        <tbody>
+          {% for user in users %}
+            {% set isMe = currentUser and (user._id | string) == (currentUser.id | string) %}
+            <tr>
+              <td>
+                <div class="user-cell">
+                  <span class="user-avatar" aria-hidden="true">{{ (user.name or user.email)[0] | upper }}</span>
+                  <span class="user-identity">
+                    <strong>{{ user.name }}{% if isMe %} <span class="badge badge-neutral">vous</span>{% endif %}</strong>
+                    <span class="muted">{{ user.email }}</span>
+                  </span>
+                </div>
+              </td>
+              <td>{{ ENUM_META.role[user.role].label if ENUM_META.role[user.role] else user.role }}</td>
+              <td>{% set value = user.status %}{% set group = 'userStatus' %}{% include "partials/status-badge.njk" %}</td>
+              <td>{{ user.createdAt | formatDate }}</td>
+              <td class="row-actions">
+                <button type="button" class="button ghost btn-sm" data-user-action="access"
+                  data-id="{{ user._id }}" data-name="{{ user.name }}" data-role="{{ user.role }}" data-status="{{ user.status }}"
+                  data-is-me="{{ 'true' if isMe else 'false' }}">Modifier l'accès</button>
+                <button type="button" class="button ghost btn-sm" data-user-action="password"
+                  data-id="{{ user._id }}" data-name="{{ user.name }}">Mot de passe</button>
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="5">{{ 'Aucun compte ne correspond à ces critères.' if (query or selectedRole or selectedStatus) else 'Aucun utilisateur.' }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {{ legend.render(['userStatus']) }}
+    <div class="pagination-row">
+      <form method="get" action="/users" class="inline-form">
+        <input type="hidden" name="q" value="{{ query }}" />
+        <input type="hidden" name="role" value="{{ selectedRole }}" />
+        <input type="hidden" name="status" value="{{ selectedStatus }}" />
         <input type="hidden" name="pageSize" value="{{ pagination.pageSize }}" />
-        <button type="submit" class="button btn-md btn-icon icon-search">Filtrer</button>
+        <input type="hidden" name="page" value="{{ pagination.prevPage }}" />
+        <button type="submit" class="secondary btn-sm btn-icon icon-prev" {% if not pagination.hasPrev %}disabled{% endif %}>Précédent</button>
       </form>
-
-      <div class="table-shell">
-        <table class="table-report" data-no-filter>
-          <thead>
-            <tr><th>N°</th><th>Nom</th><th>Email</th><th>Role</th><th>Statut</th><th>Date d'enregistrement</th><th>Actions</th></tr>
-          </thead>
-          <tbody>
-            {% for user in users %}
-              <tr>
-                <td>{{ (pagination.page - 1) * pagination.pageSize + loop.index }}</td>
-                <td>{{ user.name }}</td>
-                <td>{{ user.email }}</td>
-                <td>{{ ENUM_META.role[user.role].label if ENUM_META.role[user.role] else user.role }}</td>
-                <td>{% set value = user.status %}{% set group = 'userStatus' %}{% include "partials/status-badge.njk" %}</td>
-                <td>{{ user.createdAt | formatDate }}</td>
-                <td>
-                  <div class="table-actions">
-                    <form method="post" action="/users/{{ user._id }}/access" class="inline-form no-wrap">
-                      <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
-                      <select name="role">
-                        {% for role in roleOptions %}
-                          <option value="{{ role }}" {% if role == user.role %}selected{% endif %}>{{ ENUM_META.role[role].label if ENUM_META.role[role] else role }}</option>
-                        {% endfor %}
-                      </select>
-                      <select name="status">
-                        {% for status in statusOptions %}
-                          <option value="{{ status }}" {% if status == user.status %}selected{% endif %}>{{ ENUM_META.userStatus[status].label if ENUM_META.userStatus[status] else status }}</option>
-                        {% endfor %}
-                      </select>
-                      <button type="submit" class="secondary btn-sm btn-icon icon-save">Accès</button>
-                    </form>
-                    <form method="post" action="/users/{{ user._id }}/password" class="inline-form no-wrap top-gap">
-                      <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
-                      <input type="password" name="password" minlength="8" placeholder="Nouveau mot de passe" required />
-                      <button type="submit" class="btn-sm btn-icon icon-save">Mot de passe</button>
-                    </form>
-                  </div>
-                </td>
-              </tr>
-            {% else %}
-              <tr><td colspan="7">Aucun utilisateur.</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {{ legend.render(['userStatus']) }}
-      <div class="pagination-row">
-        <form method="get" action="/users" class="inline-form">
-          <input type="hidden" name="q" value="{{ query }}" />
-          <input type="hidden" name="role" value="{{ selectedRole }}" />
-          <input type="hidden" name="status" value="{{ selectedStatus }}" />
-          <input type="hidden" name="pageSize" value="{{ pagination.pageSize }}" />
-          <input type="hidden" name="page" value="{{ pagination.prevPage }}" />
-          <button type="submit" class="secondary btn-sm btn-icon icon-prev" {% if not pagination.hasPrev %}disabled{% endif %}>Précédent</button>
-        </form>
-        <span class="muted">Page {{ pagination.page }} sur {{ pagination.totalPages }}</span>
-        <form method="get" action="/users" class="inline-form">
-          <input type="hidden" name="q" value="{{ query }}" />
-          <input type="hidden" name="role" value="{{ selectedRole }}" />
-          <input type="hidden" name="status" value="{{ selectedStatus }}" />
-          <input type="hidden" name="pageSize" value="{{ pagination.pageSize }}" />
-          <input type="hidden" name="page" value="{{ pagination.nextPage }}" />
-          <button type="submit" class="secondary btn-sm btn-icon icon-next" {% if not pagination.hasNext %}disabled{% endif %}>Suivant</button>
-        </form>
-      </div>
+      <span class="muted">Page {{ pagination.page }} sur {{ pagination.totalPages }}</span>
+      <form method="get" action="/users" class="inline-form">
+        <input type="hidden" name="q" value="{{ query }}" />
+        <input type="hidden" name="role" value="{{ selectedRole }}" />
+        <input type="hidden" name="status" value="{{ selectedStatus }}" />
+        <input type="hidden" name="pageSize" value="{{ pagination.pageSize }}" />
+        <input type="hidden" name="page" value="{{ pagination.nextPage }}" />
+        <button type="submit" class="secondary btn-sm btn-icon icon-next" {% if not pagination.hasNext %}disabled{% endif %}>Suivant</button>
+      </form>
     </div>
-  </section>
+  </div>
+
+  <details class="legend top-gap">
+    <summary>Rôles et accès : que peut faire chaque rôle ?</summary>
+    <div class="table-shell top-gap">
+      <table class="table-report" data-no-filter>
+        <thead><tr><th>Rôle</th><th>Usage</th><th>Menus accessibles</th></tr></thead>
+        <tbody>
+          {% for role in roleOptions %}
+            <tr>
+              <td><strong>{{ ENUM_META.role[role].label if ENUM_META.role[role] else role }}</strong></td>
+              <td>{{ ENUM_META.role[role].description if ENUM_META.role[role] }}</td>
+              <td>{{ ROLE_MENUS[role] }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+</div>
+
+{# Creation d'un compte #}
+<dialog id="userCreateDialog" class="confirm-dialog app-dialog" aria-labelledby="userCreateTitle">
+  <form method="post" action="/users" class="stack">
+    <h3 id="userCreateTitle">Créer un utilisateur</h3>
+    <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+    <div class="form-grid">
+      <label>Nom complet<input name="name" required autocomplete="off" /></label>
+      <label>E-mail (identifiant de connexion)<input type="email" name="email" required autocomplete="off" spellcheck="false" /></label>
+      <label>Mot de passe initial
+        <input type="password" name="password" minlength="8" required autocomplete="new-password" />
+      </label>
+      <label>Rôle
+        <select name="role" required data-role-select>{{ renderRoleOptions(roleOptions, 'secretariat') }}</select>
+      </label>
+      <label>Statut
+        <select name="status" required>{{ renderStatusOptions(statusOptions, 'active') }}</select>
+      </label>
+    </div>
+    <p class="field-hint">8 caractères minimum. Communiquez-le à la personne : elle pourra le changer ensuite.</p>
+    <p class="field-hint" data-role-help></p>
+    <div class="toolbar compact-actions dialog-actions">
+      <button type="button" class="button secondary" data-close-dialog>Annuler</button>
+      <button type="submit" class="button btn-icon icon-save">Créer le compte</button>
+    </div>
+  </form>
+</dialog>
+
+{# Modification du role / statut #}
+<dialog id="userAccessDialog" class="confirm-dialog app-dialog" aria-labelledby="userAccessTitle">
+  <form method="post" action="" class="stack">
+    <h3 id="userAccessTitle">Modifier l'accès</h3>
+    <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+    <div class="form-grid">
+      <label>Rôle
+        <select name="role" required data-field="role" data-role-select>{{ renderRoleOptions(roleOptions, '') }}</select>
+      </label>
+      <label>Statut
+        <select name="status" required data-field="status">{{ renderStatusOptions(statusOptions, '') }}</select>
+      </label>
+    </div>
+    <p class="field-hint" data-role-help></p>
+    <p class="field-hint" data-self-hint hidden>C'est votre propre compte : vous ne pouvez pas le désactiver.</p>
+    <div class="toolbar compact-actions dialog-actions">
+      <button type="button" class="button secondary" data-close-dialog>Annuler</button>
+      <button type="submit" class="button btn-icon icon-save">Enregistrer</button>
+    </div>
+  </form>
+</dialog>
+
+{# Nouveau mot de passe #}
+<dialog id="userPasswordDialog" class="confirm-dialog app-dialog" aria-labelledby="userPasswordTitle">
+  <form method="post" action="" class="stack">
+    <h3 id="userPasswordTitle">Nouveau mot de passe</h3>
+    <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+    <label>Nouveau mot de passe
+      <input type="password" name="password" minlength="8" required autocomplete="new-password" data-field="password" />
+    </label>
+    <label class="field-inline">
+      <input type="checkbox" data-show-password /> Afficher le mot de passe
+    </label>
+    <p class="field-hint">8 caractères minimum. L'ancien mot de passe ne fonctionnera plus.</p>
+    <div class="toolbar compact-actions dialog-actions">
+      <button type="button" class="button secondary" data-close-dialog>Annuler</button>
+      <button type="submit" class="button btn-icon icon-save">Changer le mot de passe</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+  (() => {
+    if (typeof HTMLDialogElement !== 'function') {
+      return;
+    }
+    const ROLE_HELP = {
+      {% for role in roleOptions %}'{{ role }}': '{{ (ENUM_META.role[role].description if ENUM_META.role[role] else "") | replace("'", "’") }} {{ ROLE_MENUS[role] | replace("'", "’") }}',{% endfor %}
+    };
+    const accessDialog = document.getElementById('userAccessDialog');
+    const passwordDialog = document.getElementById('userPasswordDialog');
+
+    const refreshRoleHelp = (dialog) => {
+      const select = dialog.querySelector('[data-role-select]');
+      const help = dialog.querySelector('[data-role-help]');
+      if (select && help) {
+        help.textContent = ROLE_HELP[select.value] || '';
+      }
+    };
+    document.querySelectorAll('[data-role-select]').forEach((select) => {
+      select.addEventListener('change', () => refreshRoleHelp(select.closest('dialog')));
+    });
+
+    const open = (dialog, focusSelector) => {
+      refreshRoleHelp(dialog);
+      dialog.showModal();
+      dialog.querySelector(focusSelector)?.focus();
+    };
+
+    document.querySelectorAll('[data-open-dialog]').forEach((button) => {
+      button.addEventListener('click', () =>
+        open(document.getElementById(button.dataset.openDialog), 'input:not([type=hidden])'),
+      );
+    });
+    document.querySelectorAll('dialog [data-close-dialog]').forEach((button) => {
+      button.addEventListener('click', () => button.closest('dialog').close());
+    });
+    passwordDialog.querySelector('[data-show-password]').addEventListener('change', (event) => {
+      passwordDialog.querySelector('[data-field="password"]').type = event.target.checked ? 'text' : 'password';
+    });
+    passwordDialog.addEventListener('close', () => {
+      const input = passwordDialog.querySelector('[data-field="password"]');
+      input.value = '';
+      input.type = 'password';
+      passwordDialog.querySelector('[data-show-password]').checked = false;
+    });
+
+    // Delegation : les lignes sont remplacees par la recherche instantanee.
+    document.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-user-action]');
+      if (!button) {
+        return;
+      }
+      const { id, name } = button.dataset;
+      if (button.dataset.userAction === 'access') {
+        const form = accessDialog.querySelector('form');
+        form.action = '/users/' + id + '/access';
+        accessDialog.querySelector('#userAccessTitle').textContent = "Modifier l'accès de " + name;
+        form.querySelector('[data-field="role"]').value = button.dataset.role;
+        form.querySelector('[data-field="status"]').value = button.dataset.status;
+        // Champ laisse actif (un champ desactive n'est pas envoye) : le
+        // serveur refuse deja la desactivation de son propre compte.
+        accessDialog.querySelector('[data-self-hint]').hidden =
+          button.dataset.isMe !== 'true';
+        open(accessDialog, '[data-field="role"]');
+      } else {
+        passwordDialog.querySelector('form').action = '/users/' + id + '/password';
+        passwordDialog.querySelector('#userPasswordTitle').textContent = 'Nouveau mot de passe pour ' + name;
+        open(passwordDialog, '[data-field="password"]');
+      }
+    });
+  })();
+</script>
 {% endblock %}

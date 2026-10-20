@@ -156,7 +156,7 @@ describe('EcolesService.onboardNewEcole', () => {
         },
         actorId(),
       ),
-    ).rejects.toThrow('deja utilise');
+    ).rejects.toThrow('déjà utilisé');
 
     const countAfter = await ecoleModel.countDocuments().exec();
     expect(countAfter).toBe(countBefore);
@@ -447,7 +447,7 @@ describe('EcolesService.streamInstallationPackage', () => {
         new Date('2020-01-01'),
         createDrainingResponse(),
       ),
-    ).rejects.toThrow('doit etre dans le futur');
+    ).rejects.toThrow('doit être dans le futur');
   }, 20000);
 
   it('sans date choisie, ne bootstrap aucune licence (comportement historique)', async () => {

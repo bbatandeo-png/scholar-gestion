@@ -79,14 +79,14 @@ export class EcolesController {
       setFlash(
         req,
         'success',
-        'Ecole creee. Notez les identifiants du compte administrateur ci-dessous - ils ne seront plus affiches.',
+        'École créée. Notez les identifiants du compte administrateur ci-dessous - ils ne seront plus affichés.',
       );
       return res.redirect(`/platform/ecoles/${String(ecole._id)}/edit`);
     } catch (error) {
       setFlash(
         req,
         'error',
-        error instanceof Error ? error.message : 'Echec de la creation',
+        error instanceof Error ? error.message : 'Échec de la création',
       );
       return res.redirect('/platform/ecoles');
     }
@@ -112,7 +112,7 @@ export class EcolesController {
     delete req.session.lastCreatedCredentials;
     const activeModuleCodes = activeModules.map((m) => m.code);
     return {
-      title: 'Modifier ecole',
+      title: 'Modifier l’école',
       ecoles,
       editEcole,
       ecoleAdmins,
@@ -186,14 +186,14 @@ export class EcolesController {
       } else {
         await this.ecoleModulesService.deactivate(id, dto.code, actorId);
       }
-      setFlash(req, 'success', `Module ${dto.code} mis a jour`);
+      setFlash(req, 'success', `Module ${dto.code} mis à jour`);
     } catch (error) {
       setFlash(
         req,
         'error',
         error instanceof Error
           ? error.message
-          : 'Echec de la mise a jour du module',
+          : 'Échec de la mise à jour du module',
       );
     }
     return res.redirect(`/platform/ecoles/${id}/edit`);
@@ -211,14 +211,14 @@ export class EcolesController {
         id,
         dto.required === 'true',
       );
-      setFlash(req, 'success', "Paiement a l'inscription mis a jour");
+      setFlash(req, 'success', "Paiement a l'inscription mis à jour");
     } catch (error) {
       setFlash(
         req,
         'error',
         error instanceof Error
           ? error.message
-          : 'Echec de la mise a jour du reglage',
+          : 'Échec de la mise à jour du réglage',
       );
     }
     return res.redirect(`/platform/ecoles/${id}/edit`);
@@ -238,13 +238,13 @@ export class EcolesController {
       setFlash(
         req,
         'success',
-        'Mot de passe reinitialise. Notez les identifiants ci-dessous - ils ne seront plus affiches.',
+        'Mot de passe reinitialise. Notez les identifiants ci-dessous - ils ne seront plus affichés.',
       );
     } catch (error) {
       setFlash(
         req,
         'error',
-        error instanceof Error ? error.message : 'Echec de la reinitialisation',
+        error instanceof Error ? error.message : 'Échec de la réinitialisation',
       );
     }
     return res.redirect(`/platform/ecoles/${id}/edit`);
@@ -259,7 +259,7 @@ export class EcolesController {
   ) {
     await this.ecolesService.update(id, dto);
     await this.ecolesService.saveLogo(id, pickUploadedFile(req, 'logo'));
-    setFlash(req, 'success', 'Ecole mise a jour');
+    setFlash(req, 'success', 'École mise à jour');
     return res.redirect('/platform/ecoles');
   }
 
@@ -291,7 +291,7 @@ export class EcolesController {
     @Res() res: Response,
   ) {
     await this.ecolesService.updateStatus(id, dto.statutCompte);
-    setFlash(req, 'success', 'Statut du compte mis a jour');
+    setFlash(req, 'success', 'Statut du compte mis à jour');
     return res.redirect('/platform/ecoles');
   }
 }

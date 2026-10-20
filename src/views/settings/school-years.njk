@@ -1,17 +1,17 @@
 {% extends "layout.njk" %}
 {% import "partials/legend.njk" as legend %}
 {% block content %}
-  <section class="grid cols-2">
+  <section class="grid cols-2 keep-columns">
     <div class="panel">
-      <h2>{% if editYear %}Modifier annee scolaire{% else %}Nouvelle annee scolaire{% endif %}</h2>
+      <h2>{% if editYear %}Modifier année scolaire{% else %}Nouvelle année scolaire{% endif %}</h2>
       <div class="notice notice-info">
         La clôture est manuelle. Clôturez l’année ouverte lorsque vous l’avez décidé. Pour la nouvelle année, ce sont deux actions séparées : "Préparer" (promotion annuelle des élèves vers la classe suivante) et "Ouvrir" (active l’année), à faire dans l’ordre de votre choix. Une année ancienne se consulte avec le sélecteur sans modifier son historique.
       </div>
       <form method="post" action="{% if editYear %}/settings/school-years/{{ editYear._id }}{% else %}/settings/school-years{% endif %}" class="stack">
         <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
         <div class="form-grid">
-          <label>Libelle<input name="label" value="{{ editYear and editYear.label or '' }}" required /></label>
-          <label>Date debut<input type="date" name="startDate" value="{% if editYear %}{{ editYear.startDate | inputDate }}{% endif %}" required /></label>
+          <label>Libellé<input name="label" value="{{ editYear and editYear.label or '' }}" required /></label>
+          <label>Date début<input type="date" name="startDate" value="{% if editYear %}{{ editYear.startDate | inputDate }}{% endif %}" required /></label>
           <label>Date fin<input type="date" name="endDate" value="{% if editYear %}{{ editYear.endDate | inputDate }}{% endif %}" required /></label>
           <label>Statut
             <select name="status">
@@ -33,14 +33,14 @@
     <div class="panel">
       <div class="panel-heading">
         <div>
-          <h2>Annees configurees</h2>
+          <h2>Années configurées</h2>
           <p class="muted">Export Excel de la liste des années scolaires.</p>
         </div>
         <a class="button secondary" href="/settings/school-years/export">Exporter Excel</a>
       </div>
       <div class="table-shell">
         <table class="table-report">
-          <thead><tr><th>N°</th><th>Libelle</th><th>Debut</th><th>Fin</th><th>Statut</th><th>Actions</th></tr></thead>
+          <thead><tr><th>N°</th><th>Libellé</th><th>Début</th><th>Fin</th><th>Statut</th><th>Actions</th></tr></thead>
           <tbody>
             {% for item in schoolYears %}
               <tr>
@@ -60,10 +60,10 @@
                     </form>
                     {% if item.status == 'draft' %}<a class="button btn-sm secondary" href="/promotions">Préparer</a>{% endif %}
                     {% if item.status == 'open' %}
-                      <form method="post" action="/settings/school-years/{{ item._id }}/status" class="inline-form">
+                      <form method="post" action="/settings/school-years/{{ item._id }}/status" class="inline-form" onsubmit="return confirm('Clôturer cette année scolaire ? Elle passera en lecture seule.');">
                         <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
                         <input type="hidden" name="status" value="closed" />
-                        <button type="submit" class="button btn-sm secondary">Clôturer</button>
+                        <button type="submit" class="button btn-sm danger">Clôturer</button>
                       </form>
                     {% elif (item.status == 'closed' or item.status == 'draft') and not openSchoolYear %}
                       <form method="post" action="/settings/school-years/{{ item._id }}/status" class="inline-form">

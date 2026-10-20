@@ -8,10 +8,10 @@
           Actif depuis le {{ parametre.dateEffet | formatDate }} —
           mode <strong>{{ parametre.mode }}</strong>
           {% if parametre.sousType %}({{ parametre.sousType }}){% endif %},
-          {{ parametre.montantUnitaire }} FCFA
+          {{ parametre.montantUnitaire | money }}
         </p>
       {% else %}
-        <p class="muted">Aucun parametre de facturation configure pour votre ecole.</p>
+        <p class="muted">Aucun paramètre de facturation configuré pour votre école.</p>
       {% endif %}
       <p class="notice notice-info">Le mode et le tarif sont geres par la plateforme.</p>
     </div>
@@ -22,7 +22,7 @@
       </div>
       <div class="table-shell">
         <table class="table-report">
-          <thead><tr><th>N°</th><th>Numero</th><th>Periode</th><th>Date</th><th>Montant</th><th>Statut</th><th></th></tr></thead>
+          <thead><tr><th>N°</th><th>Numéro</th><th>Période</th><th>Date</th><th>Montant</th><th>Statut</th><th></th></tr></thead>
           <tbody>
             {% for facture in factures %}
               <tr>
@@ -30,7 +30,7 @@
                 <td>{{ facture.numero }}</td>
                 <td>{{ facture.periode }}</td>
                 <td>{{ facture.dateGeneration | formatDate }}</td>
-                <td>{{ facture.montantTotal }}</td>
+                <td>{{ facture.montantTotal | money }}</td>
                 <td>{{ facture.statut }}</td>
                 <td><a class="button btn-sm" href="/facturation/factures/{{ facture._id }}/pdf">PDF</a></td>
               </tr>

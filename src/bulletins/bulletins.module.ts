@@ -6,6 +6,7 @@ import { EcolesModule } from '../ecoles/ecoles.module';
 import { EnrollmentsModule } from '../enrollments/enrollments.module';
 import { LevelsModule } from '../levels/levels.module';
 import { SchoolYearsModule } from '../school-years/school-years.module';
+import { SettingsModule } from '../settings/settings.module';
 import { StudentsModule } from '../students/students.module';
 import { BulletinsController } from './bulletins.controller';
 import { BulletinsService } from './bulletins.service';
@@ -46,6 +47,7 @@ import { Subject, SubjectSchema } from './schemas/subject.schema';
     EcoleModulesModule,
     EcolesModule,
     StudentsModule,
+    SettingsModule,
   ],
   // SubjectsController (the more specific /bulletins/matieres routes) must
   // be registered before BulletinsController: Nest/Express match routes in

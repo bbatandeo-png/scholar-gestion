@@ -9,8 +9,8 @@
           <p class="muted">Modifiez les informations de base de l'inscription.</p>
         </div>
       </div>
-      <p><strong>Eleve:</strong> {{ enrollment.studentId.lastname if enrollment.studentId }} {{ enrollment.studentId.firstname if enrollment.studentId }}</p>
-      <p><strong>Annee:</strong> {{ enrollment.schoolYearId.label if enrollment.schoolYearId }}</p>
+      <p><strong>Élève:</strong> {{ enrollment.studentId.lastname if enrollment.studentId }} {{ enrollment.studentId.firstname if enrollment.studentId }}</p>
+      <p><strong>Année:</strong> {{ enrollment.schoolYearId.label if enrollment.schoolYearId }}</p>
       <p><strong>Niveau:</strong> {{ enrollment.levelId.label if enrollment.levelId }}</p>
       <p><strong>Type:</strong> {{ ENUM_META.enrollmentType[enrollment.type].label if ENUM_META.enrollmentType[enrollment.type] else enrollment.type }}</p>
       <p><strong>Statut:</strong> {% set value = enrollment.status %}{% set group = 'enrollmentStatus' %}{% include "partials/status-badge.njk" %}</p>
@@ -18,14 +18,14 @@
       <form id="modifier" method="post" action="/enrollments/{{ enrollment._id }}?_method=PUT" class="stack">
         <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
         <div class="form-grid">
-          <label>Eleve
+          <label>Élève
             <select name="studentId" required>
               {% for student in students %}
                 <option value="{{ student._id }}" {% if enrollment.studentId and enrollment.studentId._id and student._id and enrollment.studentId._id.toString() == student._id.toString() %}selected{% endif %}>{{ student.matricule }} - {{ student.lastname }} {{ student.firstname }}</option>
               {% endfor %}
             </select>
           </label>
-          <label>Annee
+          <label>Année
             <select name="schoolYearId" required>
               {% for year in schoolYears %}
                 <option value="{{ year._id }}" {% if enrollment.schoolYearId and enrollment.schoolYearId._id and year._id and enrollment.schoolYearId._id.toString() == year._id.toString() %}selected{% endif %}>{{ year.label }}</option>
@@ -48,7 +48,20 @@
             </select>
           </label>
         </div>
-        <button type="submit">Enregistrer les changements</button>
+        {# Changement de classe : voir EnrollmentsService.updateEnrollment. #}
+        {% if invoice and invoice.paidAmount > 0 %}
+          <div class="notice notice-warning">
+            Cet élève a déjà payé <strong>{{ invoice.paidAmount | money }}</strong> cette année.
+            Un changement de classe est réservé à la <strong>direction</strong> et demande un motif.
+            La facture sera recalculée avec les frais de la nouvelle classe ; les paiements déjà faits sont conservés.
+          </div>
+          <label>Motif du changement de classe <span class="muted">(obligatoire si vous changez le niveau)</span>
+            <textarea name="levelChangeReason" rows="2" placeholder="Ex : erreur de classe à l'inscription"></textarea>
+          </label>
+        {% else %}
+          <p class="field-hint">Changer le niveau recalcule la facture avec les frais de la nouvelle classe.</p>
+        {% endif %}
+        <div><button type="submit" class="button">Enregistrer les changements</button></div>
       </form>
       {{ legend.render(['enrollmentType', 'enrollmentStatus']) }}
     </div>
@@ -61,13 +74,13 @@
         </div>
       </div>
       {% if invoice %}
-        <p><strong>Frais d inscription:</strong> {{ invoice.registrationFee }}</p>
-        <p><strong>Ecolage:</strong> {{ invoice.tuitionFee }}</p>
+        <p><strong>Frais d inscription:</strong> {{ invoice.registrationFee | money }}</p>
+        <p><strong>Écolage:</strong> {{ invoice.tuitionFee | money }}</p>
         <p><strong>Remise:</strong> {{ invoice.discountAmount }}</p>
-        <p><strong>Impayes reportes:</strong> {{ invoice.arrearsAmount }}</p>
-        <p><strong>Total du:</strong> {{ invoice.totalDue }}</p>
-        <p><strong>Paye:</strong> {{ invoice.paidAmount }}</p>
-        <p><strong>Reste:</strong> {{ invoice.balanceDue }}</p>
+        <p><strong>Impayés reportés:</strong> {{ invoice.arrearsAmount | money }}</p>
+        <p><strong>Total du:</strong> {{ invoice.totalDue | money }}</p>
+        <p><strong>Payé:</strong> {{ invoice.paidAmount | money }}</p>
+        <p><strong>Reste:</strong> {{ invoice.balanceDue | money }}</p>
         <p><strong>Statut:</strong> {% set value = invoice.status %}{% set group = 'invoiceStatus' %}{% include "partials/status-badge.njk" %}</p>
 
         {% if currentUser and currentUser.role == 'super_admin' %}
@@ -112,7 +125,7 @@
                   {% endfor %}
                 </select>
               </label>
-              <label>Reference<input name="reference" /></label>
+              <label>Référence<input name="reference" /></label>
             </div>
             <button type="submit">Enregistrer le paiement</button>
           </form>
@@ -141,14 +154,14 @@
                 <label>Remise appliquee
                   <input type="number" name="discountAmount" value="{{ invoice.discountAmount }}" min="0" step="0.01" required />
                 </label>
-                <label>Montant paye
+                <label>Montant payé
                   <input type="number" name="paidAmount" value="{{ invoice.paidAmount }}" min="0" step="0.01" required />
                 </label>
               </div>
               <label>Motif de modification
                 <textarea name="reason" rows="3" required></textarea>
               </label>
-              <button type="submit">Enregistrer la modification financiere</button>
+              <button type="submit">Enregistrer la modification financière</button>
             </form>
           </div>
         {% endif %}

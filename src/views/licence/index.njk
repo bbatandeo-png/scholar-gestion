@@ -2,7 +2,7 @@
 {% block content %}
   <section class="grid cols-2">
     <div class="panel">
-      <h2>Etat de la licence</h2>
+      <h2>État de la licence</h2>
 
       {% if status.state == 'ok' %}
         <p class="notice notice-info">
@@ -10,16 +10,16 @@
         </p>
       {% elif status.state == 'grace' %}
         <p class="notice notice-danger">
-          Licence expiree depuis le <strong>{{ status.expiresAt | formatDate }}</strong>. L'application reste pleinement utilisable jusqu'au <strong>{{ status.graceEndsAt | formatDate }}</strong>, date a partir de laquelle elle passera en lecture seule si la licence n'est pas renouvelee.
+          Licence expirée depuis le <strong>{{ status.expiresAt | formatDate }}</strong>. L'application reste pleinement utilisable jusqu'au <strong>{{ status.graceEndsAt | formatDate }}</strong>, date a partir de laquelle elle passera en lecture seule si la licence n'est pas renouvelee.
         </p>
       {% elif status.state == 'blocked' %}
         <p class="notice notice-danger">
           {% if status.expiresAt %}
-            Licence expiree depuis le <strong>{{ status.expiresAt | formatDate }}</strong> — la periode de grace est terminee.
+            Licence expirée depuis le <strong>{{ status.expiresAt | formatDate }}</strong> — la période de grâce est terminée.
           {% else %}
-            Aucune licence n'a encore ete enregistree pour cette installation.
+            Aucune licence n'a encore été enregistrée pour cette installation.
           {% endif %}
-          L'application est actuellement en lecture seule : consultation des dossiers, factures et bulletins deja enregistres toujours possible, mais aucun nouvel enregistrement.
+          L'application est actuellement en lecture seule : consultation des dossiers, factures et bulletins déjà enregistrés toujours possible, mais aucun nouvel enregistrement.
         </p>
       {% endif %}
 

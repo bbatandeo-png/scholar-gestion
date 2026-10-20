@@ -1,74 +1,173 @@
 ﻿{% extends "layout.njk" %}
+
+{# Cycle d'un niveau : decide du decoupage des bulletins (trimestres / semestres). #}
+{% macro cycleSelect(selected) %}
+  <select name="cycle" data-field="cycle">
+    <option value="">Non défini</option>
+    <option value="3" {% if selected == 3 %}selected{% endif %}>Primaire (trimestres)</option>
+    <option value="1" {% if selected == 1 %}selected{% endif %}>Collège (trimestres)</option>
+    <option value="2" {% if selected == 2 %}selected{% endif %}>Lycée (semestres)</option>
+  </select>
+{% endmacro %}
+
 {% block content %}
-  <section class="grid cols-2">
-    {% if editLevel %}
-      <div class="panel">
-        <h2>Modifier niveau</h2>
-        <form method="post" action="/settings/levels/{{ editLevel._id }}" class="stack">
-          <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
-          <div class="form-grid">
-            <label>Code<input name="code" value="{{ editLevel.code }}" required /></label>
-            <label>Libelle<input name="label" value="{{ editLevel.label }}" required /></label>
-            <label>Ordre<input type="number" name="sortOrder" min="1" value="{{ editLevel.sortOrder }}" required /></label>
-            <label>Cycle
-              <select name="cycle">
-                <option value="">Non defini</option>
-                <option value="1" {% if editLevel.cycle == 1 %}selected{% endif %}>College (trimestres)</option>
-                <option value="2" {% if editLevel.cycle == 2 %}selected{% endif %}>Lycee (semestres)</option>
-              </select>
-            </label>
-          </div>
-          <div class="toolbar compact-actions">
-            <button type="submit">Mettre à jour</button>
-            <a class="button secondary" href="/settings/levels">Annuler</a>
-          </div>
-        </form>
-      </div>
-    {% endif %}
-    <div class="panel">
-      <h2>Nouveau niveau</h2>
-      <form method="post" action="/settings/levels" class="stack">
-        <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
-        <div class="form-grid">
-          <label>Code<input name="code" required /></label>
-          <label>Libelle<input name="label" required /></label>
-          <label>Ordre<input type="number" name="sortOrder" min="1" required /></label>
-          <label>Cycle
-            <select name="cycle">
-              <option value="">Non defini</option>
-              <option value="1">College (trimestres)</option>
-              <option value="2">Lycee (semestres)</option>
-            </select>
-          </label>
-        </div>
-        <button type="submit">Enregistrer</button>
-      </form>
+<div class="panel">
+  <div class="panel-heading">
+    <div>
+      <h2>Niveaux — {{ schoolYear.label }}</h2>
+      <p class="muted">Un niveau inactif n'est plus proposé dans les inscriptions, les frais et les bulletins de {{ schoolYear.label }}. Il n'est pas supprimé : réactivez-le à tout moment.</p>
     </div>
-    <div class="panel">
-      <div class="panel-heading">
-        <div>
-          <h2>Niveaux</h2>
-          <p class="muted">Export Excel pour la nomenclature des classes.</p>
-        </div>
-        <a class="button secondary" href="/settings/levels/export">Exporter Excel</a>
-      </div>
-      <div class="table-shell">
-        <table class="table-report">
-          <thead><tr><th>N°</th><th>Code</th><th>Libelle</th><th>Ordre</th><th>Cycle</th><th>Actions</th></tr></thead>
-          <tbody>
-            {% for item in levels %}
-              <tr>
-                <td>{{ loop.index }}</td>
-                <td>{{ item.code }}</td>
-                <td>{{ item.label }}</td>
-                <td>{{ item.sortOrder }}</td>
-                <td>{% if item.cycle == 1 %}College{% elif item.cycle == 2 %}Lycee{% else %}—{% endif %}</td>
-                <td><a class="button btn-sm" href="/settings/levels/{{ item._id }}/edit">Modifier</a></td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
+    <div class="panel-heading-actions">
+      <a class="button secondary btn-icon icon-export" href="/settings/levels/export">Exporter Excel</a>
+      <button type="button" class="button" data-open-dialog="levelCreateDialog">+ Ajouter un niveau</button>
     </div>
-  </section>
+  </div>
+
+  {# Une seule recherche pour tous les cycles (table-filter.js, data-filter-group). #}
+  <div data-filter-anchor>
+  {% for group in groups %}
+    <section class="level-group" aria-labelledby="cycle-{{ loop.index }}">
+      <header class="level-group-header">
+        <h3 id="cycle-{{ loop.index }}">{{ group.label }} <span class="muted">({{ group.periodLabel }})</span></h3>
+        <span class="muted">{{ group.levels.length }} niveau(x) · {{ group.enabledCount }} actif(s)</span>
+      </header>
+      {% if group.levels.length %}
+        <div class="table-shell">
+          <table class="table-report level-table" data-filter-group="levels">
+            <thead>
+              <tr><th>Code</th><th>Libellé</th><th class="num">Ordre</th><th>État</th><th><span class="sr-only">Actions</span></th></tr>
+            </thead>
+            <tbody>
+              {% for item in group.levels %}
+                <tr class="{% if not item.isEnabled %}is-disabled-row{% endif %}">
+                  <td>{{ item.code }}</td>
+                  <td>{{ item.label }}</td>
+                  <td class="num">{{ item.sortOrder }}</td>
+                  <td>
+                    <form method="post" action="/settings/levels/{{ item._id }}/enabled" class="inline-form"
+                      {% if item.isEnabled %}data-confirm="Désactiver {{ item.label }} pour {{ schoolYear.label }} ? Il ne sera plus proposé dans les inscriptions, les frais et les bulletins de cette année." onsubmit="return confirm(this.dataset.confirm);"{% endif %}>
+                      <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+                      <input type="hidden" name="enabled" value="{{ 'false' if item.isEnabled else 'true' }}" />
+                      <button type="submit" class="switch-button" role="switch" aria-checked="{{ 'true' if item.isEnabled else 'false' }}"
+                        aria-label="{{ item.label }} : {{ 'actif, cliquer pour désactiver' if item.isEnabled else 'inactif, cliquer pour activer' }}">
+                        <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+                        <span class="switch-label">{{ 'Actif' if item.isEnabled else 'Inactif' }}</span>
+                      </button>
+                    </form>
+                  </td>
+                  <td class="level-actions">
+                    <a class="button ghost btn-sm" href="/settings/levels/{{ item._id }}/edit"
+                      data-edit-level
+                      data-id="{{ item._id }}"
+                      data-code="{{ item.code }}"
+                      data-label="{{ item.label }}"
+                      data-sort-order="{{ item.sortOrder }}"
+                      data-cycle="{{ item.cycle or '' }}">Modifier</a>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="muted level-group-empty">Aucun niveau dans ce cycle.</p>
+      {% endif %}
+    </section>
+  {% endfor %}
+  </div>
+</div>
+
+{# Ajout d'un niveau #}
+<dialog id="levelCreateDialog" class="confirm-dialog app-dialog" aria-labelledby="levelCreateTitle">
+  <form method="post" action="/settings/levels" class="stack">
+    <h3 id="levelCreateTitle">Ajouter un niveau</h3>
+    <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+    <div class="form-grid">
+      <label>Code<input name="code" required autocomplete="off" placeholder="Ex : 6EME" /></label>
+      <label>Libellé<input name="label" required autocomplete="off" placeholder="Ex : 6ème" /></label>
+      <label>Ordre<input type="number" name="sortOrder" min="1" value="{{ nextSortOrder }}" required /></label>
+      <label>Cycle{{ cycleSelect('') }}</label>
+    </div>
+    <p class="field-hint">L'ordre détermine le passage d'un niveau au suivant lors des promotions.</p>
+    <div class="toolbar compact-actions dialog-actions">
+      <button type="button" class="button secondary" data-close-dialog>Annuler</button>
+      <button type="submit" class="button">Ajouter</button>
+    </div>
+  </form>
+</dialog>
+
+{# Modification d'un niveau : ouverte au clic sur "Modifier", ou directement
+   sur /settings/levels/:id/edit (lien direct, navigateur sans JavaScript). #}
+<dialog id="levelEditDialog" class="confirm-dialog app-dialog" aria-labelledby="levelEditTitle" {% if editLevel %}open data-open-on-load{% endif %}>
+  <form method="post" action="{% if editLevel %}/settings/levels/{{ editLevel._id }}{% endif %}" class="stack">
+    <h3 id="levelEditTitle">Modifier {% if editLevel %}{{ editLevel.label }}{% else %}le niveau{% endif %}</h3>
+    <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+    <div class="form-grid">
+      <label>Code<input name="code" data-field="code" value="{{ editLevel.code if editLevel }}" required autocomplete="off" /></label>
+      <label>Libellé<input name="label" data-field="label" value="{{ editLevel.label if editLevel }}" required autocomplete="off" /></label>
+      <label>Ordre<input type="number" name="sortOrder" data-field="sortOrder" min="1" value="{{ editLevel.sortOrder if editLevel }}" required /></label>
+      <label>Cycle{{ cycleSelect(editLevel.cycle if editLevel else '') }}</label>
+    </div>
+    <div class="toolbar compact-actions dialog-actions">
+      <a class="button secondary" href="/settings/levels" data-close-dialog>Annuler</a>
+      <button type="submit" class="button btn-icon icon-save">Enregistrer</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+  (() => {
+    const supportsDialog = typeof HTMLDialogElement === 'function';
+    const createDialog = document.getElementById('levelCreateDialog');
+    const editDialog = document.getElementById('levelEditDialog');
+
+    // Sans <dialog> natif : on garde la navigation classique (page /edit).
+    if (!supportsDialog) {
+      return;
+    }
+
+    document.querySelectorAll('[data-open-dialog]').forEach((button) => {
+      button.addEventListener('click', () => {
+        document.getElementById(button.dataset.openDialog)?.showModal();
+        document.getElementById(button.dataset.openDialog)?.querySelector('input:not([type=hidden])')?.focus();
+      });
+    });
+
+    document.querySelectorAll('dialog [data-close-dialog]').forEach((control) => {
+      control.addEventListener('click', (event) => {
+        event.preventDefault();
+        control.closest('dialog')?.close();
+      });
+    });
+
+    // Fermer une fenetre ouverte via /edit ramene l'URL sur la liste.
+    editDialog?.addEventListener('close', () => {
+      if (window.location.pathname !== '/settings/levels') {
+        window.history.replaceState(null, '', '/settings/levels');
+      }
+    });
+
+    document.querySelectorAll('[data-edit-level]').forEach((link) => {
+      link.addEventListener('click', (event) => {
+        event.preventDefault();
+        const form = editDialog.querySelector('form');
+        form.action = '/settings/levels/' + link.dataset.id;
+        editDialog.querySelector('#levelEditTitle').textContent = 'Modifier ' + link.dataset.label;
+        form.querySelector('[data-field="code"]').value = link.dataset.code;
+        form.querySelector('[data-field="label"]').value = link.dataset.label;
+        form.querySelector('[data-field="sortOrder"]').value = link.dataset.sortOrder;
+        form.querySelector('[data-field="cycle"]').value = link.dataset.cycle;
+        editDialog.showModal();
+        form.querySelector('[data-field="label"]').focus();
+      });
+    });
+
+    if (editDialog?.hasAttribute('data-open-on-load')) {
+      // Rendue ouverte cote serveur (fonctionne sans JavaScript) : on la
+      // rouvre en modale pour le fond assombri et le focus piege.
+      editDialog.close();
+      editDialog.showModal();
+    }
+  })();
+</script>
 {% endblock %}

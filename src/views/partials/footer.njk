@@ -1,0 +1,9 @@
+{#
+  Pied de page partage (layout.njk, login-layout.njk). Le titulaire est
+  l'editeur du logiciel (COPYRIGHT_HOLDER, "Scolar-Gestion" par defaut),
+  jamais l'ecole cliente : l'etablissement utilise le logiciel, il n'en
+  detient pas les droits. L'annee est calculee a chaque rendu.
+#}
+<footer class="app-footer">
+  <p>© {{ currentYear() if currentYear else '' }} {{ copyrightHolder or 'Scolar-Gestion' }}. Tous droits réservés.</p>
+</footer>

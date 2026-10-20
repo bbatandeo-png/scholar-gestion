@@ -8,22 +8,15 @@ import { AppModule } from '../app.module';
 // at arbitrary business data - collège vs lycée is a fixed, well-known
 // convention. Any code not in this table is left unset and reported so an
 // operator can configure it manually via the Levels settings screen.
-const COLLEGE_CODES = new Set([
-  'CP1',
-  'CP2',
-  'CE1',
-  'CE2',
-  'CM1',
-  'CM2',
-  '6EME',
-  '5EME',
-  '4EME',
-  '3EME',
-]);
+const PRIMAIRE_CODES = new Set(['CP1', 'CP2', 'CE1', 'CE2', 'CM1', 'CM2']);
+const COLLEGE_CODES = new Set(['6EME', '5EME', '4EME', '3EME']);
 const LYCEE_CODES = new Set(['2NDE', '1ERE', 'TERMINALE']);
 
-function inferCycle(code: string): 1 | 2 | undefined {
+function inferCycle(code: string): 1 | 2 | 3 | undefined {
   const normalized = code.trim().toUpperCase();
+  if (PRIMAIRE_CODES.has(normalized)) {
+    return 3;
+  }
   if (COLLEGE_CODES.has(normalized)) {
     return 1;
   }

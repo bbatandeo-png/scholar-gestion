@@ -66,7 +66,7 @@ export class StockController {
     @Res() res: Response,
   ) {
     await this.stockService.create(dto);
-    setFlash(req, 'success', 'Article ajoute au stock.');
+    setFlash(req, 'success', 'Article ajouté au stock.');
     return res.redirect('/stock');
   }
 
@@ -95,7 +95,7 @@ export class StockController {
     @Res() res: Response,
   ) {
     await this.stockService.update(id, dto);
-    setFlash(req, 'success', 'Article mis a jour.');
+    setFlash(req, 'success', 'Article mis à jour.');
     return res.redirect(`/stock/${id}`);
   }
 
@@ -109,7 +109,7 @@ export class StockController {
     @CurrentUser() user: SessionUser | undefined,
   ) {
     await this.stockService.recordMovement(id, dto, user?.id);
-    setFlash(req, 'success', 'Mouvement enregistre.');
+    setFlash(req, 'success', 'Mouvement enregistré.');
     return res.redirect(`/stock/${id}`);
   }
 }

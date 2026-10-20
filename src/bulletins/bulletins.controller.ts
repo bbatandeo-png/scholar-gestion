@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
   Render,
   Req,
   Res,
@@ -46,7 +47,7 @@ export class BulletinsController {
   @Render('bulletins/index')
   async index() {
     return {
-      title: 'Gestion pedagogique — Bulletins',
+      title: 'Gestion pédagogique — Bulletins',
       sessions: await this.bulletinsService.listSessions(),
       periodeLabels: PERIODE_LABELS,
     };
@@ -99,6 +100,115 @@ export class BulletinsController {
     };
   }
 
+  // Saisie des notes dans l'application, une matiere a la fois.
+  @Get('/:id/saisie')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT)
+  @Render('bulletins/grade-entry')
+  async gradeEntry(
+    @Param('id') id: string,
+    @Query('subjectId') subjectId?: string,
+  ) {
+    const entry = await this.bulletinsService.getGradeEntry(id, subjectId);
+    const selectedIndex = entry.subjects.findIndex(
+      (subject) => subject.subjectId === entry.selected?.subjectId,
+    );
+    return {
+      title: 'Saisie des notes',
+      ...entry,
+      nextSubject: entry.subjects[selectedIndex + 1] ?? null,
+      periodeLabels: PERIODE_LABELS,
+    };
+  }
+
+  @Post('/:id/saisie')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT)
+  async saveGradeEntry(
+    @Param('id') id: string,
+    // Pas de DTO : le formulaire envoie un champ notes[<eleve>][i1|i2|devoir|compo]
+    // par eleve, dont les cles (identifiants) ne sont pas connues a l'avance.
+    @Body() body: Record<string, unknown>,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const subjectId = typeof body.subjectId === 'string' ? body.subjectId : '';
+    const toNote = (raw: unknown): number | null => {
+      if (typeof raw !== 'string' || raw.trim() === '') {
+        return null;
+      }
+      return Number(raw.trim().replace(',', '.'));
+    };
+    const rawNotes =
+      body.notes && typeof body.notes === 'object'
+        ? (body.notes as Record<string, Record<string, unknown>>)
+        : {};
+    const values = Object.fromEntries(
+      Object.entries(rawNotes).map(([studentId, fields]) => [
+        studentId,
+        {
+          i1: toNote(fields?.i1),
+          i2: toNote(fields?.i2),
+          devoir: toNote(fields?.devoir),
+          compo: toNote(fields?.compo),
+        },
+      ]),
+    );
+
+    let nextSubjectId = subjectId;
+    try {
+      const saved = await this.bulletinsService.saveGradeEntry(
+        id,
+        subjectId,
+        values,
+      );
+      setFlash(
+        req,
+        'success',
+        `Notes de ${saved.subjectLabel} enregistrées pour ${saved.studentCount} élève(s).`,
+      );
+      if (typeof body.nextSubjectId === 'string' && body.nextSubjectId) {
+        nextSubjectId = body.nextSubjectId;
+      }
+    } catch (error) {
+      if (!(error instanceof BadRequestException)) {
+        throw error;
+      }
+      setFlash(req, 'error', error.message);
+    }
+    return res.redirect(
+      `/bulletins/${id}/saisie?subjectId=${encodeURIComponent(nextSubjectId)}`,
+    );
+  }
+
+  // Modele Excel pre-rempli (eleves, matieres, coefficients, enseignants)
+  // au format exact attendu par POST /:id/import ci-dessous.
+  @Get('/:id/template')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT)
+  async downloadTemplate(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    try {
+      const { buffer, fileName } =
+        await this.bulletinsService.buildImportTemplate(id);
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${fileName}"`,
+      );
+      return res.send(buffer);
+    } catch (error) {
+      if (!(error instanceof BadRequestException)) {
+        throw error;
+      }
+      setFlash(req, 'error', error.message);
+      return res.redirect(`/bulletins/${id}`);
+    }
+  }
+
   @Post('/:id/import')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT)
   async importFile(
@@ -127,7 +237,7 @@ export class BulletinsController {
       setFlash(
         req,
         'error',
-        error instanceof Error ? error.message : "Echec de l'import",
+        error instanceof Error ? error.message : "Échec de l'import",
       );
     }
     return res.redirect(`/bulletins/${id}/review`);
@@ -142,11 +252,32 @@ export class BulletinsController {
       this.bulletinsService.getUnapprovedSubjects(id),
       this.bulletinsService.getRosterForSession(id),
     ]);
+    // Matieres deja configurees pour la classe : pour comparer avec celles
+    // du fichier, et detecter un fichier destine a une autre classe (aucune
+    // matiere du fichier reconnue alors que la classe en a).
+    const classSubjects = await this.bulletinsService.listClassSubjects(
+      String((session.schoolYearId as unknown as { _id: unknown })._id),
+      String((session.levelId as unknown as { _id: unknown })._id),
+    );
+    const configuredSubjects = classSubjects.map((cs) => ({
+      label: (cs.subjectId as unknown as { label: string }).label,
+      coefficient: cs.coefficient,
+    }));
+    const recognizedCount = new Set(
+      rows.flatMap((row) =>
+        row.notes.filter((n) => n.subjectId).map((n) => n.subjectNameRaw),
+      ),
+    ).size;
     return {
       title: 'Revue import — Bulletins',
       session,
       rows,
       unapprovedSubjects,
+      configuredSubjects,
+      looksLikeOtherClass:
+        configuredSubjects.length > 0 &&
+        unapprovedSubjects.length > 0 &&
+        recognizedCount === 0,
       roster,
       periodeLabels: PERIODE_LABELS,
       subjectCategories: Object.values(SubjectCategory),
@@ -158,7 +289,7 @@ export class BulletinsController {
   async importData(@Param('id') id: string) {
     const grid = await this.bulletinsService.getImportGrid(id);
     return {
-      title: 'Donnees importees — Bulletins',
+      title: 'Données importées — Bulletins',
       ...grid,
       periodeLabels: PERIODE_LABELS,
     };
@@ -178,6 +309,82 @@ export class BulletinsController {
     return res.redirect(`/bulletins/${id}/review`);
   }
 
+  // Approbation de toutes les matieres a approuver en une fois. Le
+  // formulaire envoie subjects[i][subjectNameRaw|label|category|coefficient|
+  // teacherName] (valeurs pre-remplies depuis le fichier et le catalogue,
+  // modifiables) ; chaque ligne passe par la meme regle que l'approbation
+  // unitaire.
+  @Post('/:id/subjects/approve-all')
+  @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT)
+  async approveAllSubjects(
+    @Param('id') id: string,
+    @Body() body: Record<string, unknown>,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const rawSubjects = body.subjects;
+    const entries = (
+      Array.isArray(rawSubjects)
+        ? rawSubjects
+        : rawSubjects && typeof rawSubjects === 'object'
+          ? Object.values(rawSubjects)
+          : []
+    ) as Array<Record<string, unknown>>;
+    const text = (value: unknown) =>
+      typeof value === 'string' ? value.trim() : '';
+    const categories = Object.values(SubjectCategory) as string[];
+
+    const errors: string[] = [];
+    let approved = 0;
+    for (const entry of entries) {
+      const subjectNameRaw = text(entry.subjectNameRaw);
+      const coefficient = Number(text(entry.coefficient).replace(',', '.'));
+      const category = text(entry.category);
+      if (!subjectNameRaw) {
+        continue;
+      }
+      if (!Number.isFinite(coefficient) || coefficient < 0) {
+        errors.push(`${subjectNameRaw} : coefficient manquant ou invalide`);
+        continue;
+      }
+      if (!categories.includes(category)) {
+        errors.push(`${subjectNameRaw} : catégorie manquante`);
+        continue;
+      }
+      try {
+        await this.bulletinsService.approveSubject(id, {
+          subjectNameRaw,
+          label: text(entry.label) || subjectNameRaw,
+          category: category as SubjectCategory,
+          coefficient,
+          teacherName: text(entry.teacherName) || undefined,
+        });
+        approved += 1;
+      } catch (error) {
+        errors.push(
+          `${subjectNameRaw} : ${error instanceof Error ? error.message : 'échec'}`,
+        );
+      }
+    }
+
+    if (approved > 0) {
+      setFlash(
+        req,
+        errors.length ? 'error' : 'success',
+        errors.length
+          ? `${approved} matière(s) approuvée(s). À corriger : ${errors.join(' ; ')}`
+          : `${approved} matière(s) approuvée(s) et ajoutée(s) à la classe.`,
+      );
+    } else {
+      setFlash(
+        req,
+        'error',
+        errors.length ? errors.join(' ; ') : 'Aucune matière à approuver.',
+      );
+    }
+    return res.redirect(`/bulletins/${id}/review`);
+  }
+
   @Post('/:id/subjects/approve')
   @Roles(Role.SUPER_ADMIN, Role.DIRECTION, Role.SECRETARIAT)
   async approveSubject(
@@ -188,12 +395,12 @@ export class BulletinsController {
   ) {
     try {
       await this.bulletinsService.approveSubject(id, dto);
-      setFlash(req, 'success', 'Matiere approuvee');
+      setFlash(req, 'success', 'Matière approuvée');
     } catch (error) {
       setFlash(
         req,
         'error',
-        error instanceof Error ? error.message : "Echec de l'approbation",
+        error instanceof Error ? error.message : "Échec de l'approbation",
       );
     }
     return res.redirect(`/bulletins/${id}/review`);
@@ -224,7 +431,7 @@ export class BulletinsController {
     @Res() res: Response,
   ) {
     await this.bulletinsService.saveDiscipline(rowId, dto);
-    setFlash(req, 'success', 'Informations enregistrees');
+    setFlash(req, 'success', 'Informations enregistrées');
     return res.redirect(`/bulletins/${id}/discipline`);
   }
 
@@ -242,12 +449,12 @@ export class BulletinsController {
     }
     try {
       await this.bulletinsService.validateSession(id, actorId);
-      setFlash(req, 'success', 'Session validee - les notes sont enregistrees');
+      setFlash(req, 'success', 'Session validée - les notes sont enregistrées');
     } catch (error) {
       setFlash(
         req,
         'error',
-        error instanceof Error ? error.message : 'Echec de la validation',
+        error instanceof Error ? error.message : 'Échec de la validation',
       );
     }
     return res.redirect(`/bulletins/${id}`);

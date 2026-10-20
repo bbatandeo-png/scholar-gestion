@@ -4,7 +4,7 @@
   <section class="panel">
     <div class="panel-heading">
       <div>
-        <h2>Synthese eleve</h2>
+        <h2>Synthèse élève</h2>
       </div>
       {% if activeModules and activeModules.finance %}
         <a class="button btn-icon icon-pay" href="/enrollments?studentId={{ student._id }}">Payer</a>
@@ -23,13 +23,13 @@
 
   <section class="grid cols-2">
     <div class="panel">
-      <h2>Dossier eleve</h2>
+      <h2>Dossier élève</h2>
       <form method="post" action="/students/{{ student._id }}?_method=PUT" enctype="multipart/form-data" class="stack">
         <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
         <div class="form-grid">
           <label>Matricule<input name="matricule" value="{{ student.matricule }}" /></label>
           <label>Nom<input name="lastname" value="{{ student.lastname }}" /></label>
-          <label>Prenoms<input name="firstname" value="{{ student.firstname }}" /></label>
+          <label>Prénoms<input name="firstname" value="{{ student.firstname }}" /></label>
           <label>Sexe
             <select name="gender">
               <option value="M" {% if student.gender == 'M' %}selected{% endif %}>M</option>
@@ -39,14 +39,25 @@
           <label>Date de naissance<input type="date" name="birthDate" value="{{ student.birthDate | inputDate }}" /></label>
           <label>Lieu de naissance<input name="birthPlace" value="{{ student.birthPlace }}" /></label>
           <label>Quartier<input name="district" value="{{ student.district }}" /></label>
-          <label>Classe
-            <select name="levelId">
-              <option value="">{{ 'Garder : ' + studentClass.declared if studentClass and studentClass.declared else 'Non definie' }}</option>
-              {% for level in levels %}
-                <option value="{{ level._id }}">{{ level.label }}</option>
-              {% endfor %}
-            </select>
-          </label>
+          {# La classe affichee partout est celle de l'inscription de l'annee :
+             elle se change sur l'inscription (regles de paiement, recalcul
+             de la facture), pas sur ce dossier. #}
+          {% if currentEnrollment and currentEnrollment.status == 'active' %}
+            <div class="stack">
+              <span><strong>Classe</strong></span>
+              <span>{{ currentEnrollment.levelSnapshot.label if currentEnrollment.levelSnapshot else currentEnrollment.levelId.label }}</span>
+              <a class="button secondary btn-sm" href="/enrollments/{{ currentEnrollment._id }}#modifier">Changer la classe</a>
+            </div>
+          {% else %}
+            <label>Classe souhaitée
+              <select name="levelId">
+                <option value="">{{ 'Garder : ' + studentClass.declared if studentClass and studentClass.declared else 'Non définie' }}</option>
+                {% for level in levels %}
+                  <option value="{{ level._id }}">{{ level.label }}</option>
+                {% endfor %}
+              </select>
+            </label>
+          {% endif %}
           <label>Photo (pour la carte scolaire)
             <input type="file" name="photo" accept="image/png,image/jpeg,image/webp,image/gif" />
             {% if student.photo %}
@@ -58,24 +69,24 @@
         <h3>Responsables (parents / tuteur)</h3>
         <div class="form-grid">
           <input type="hidden" name="guardians[0][type]" value="father" />
-          <label>Nom complet du pere
+          <label>Nom complet du père
             <input name="guardians[0][fullname]" value="{{ fatherGuardian.lastname if fatherGuardian }} {{ fatherGuardian.firstname if fatherGuardian }}" />
           </label>
-          <label>Contact du pere
+          <label>Contact du père
             <input name="guardians[0][phone]" value="{{ fatherGuardian.phone if fatherGuardian }}" />
           </label>
-          <label>Adresse du pere
+          <label>Adresse du père
             <input name="guardians[0][address]" value="{{ fatherGuardian.address if fatherGuardian }}" />
           </label>
 
           <input type="hidden" name="guardians[1][type]" value="mother" />
-          <label>Nom complet de la mere
+          <label>Nom complet de la mère
             <input name="guardians[1][fullname]" value="{{ motherGuardian.lastname if motherGuardian }} {{ motherGuardian.firstname if motherGuardian }}" />
           </label>
-          <label>Contact de la mere
+          <label>Contact de la mère
             <input name="guardians[1][phone]" value="{{ motherGuardian.phone if motherGuardian }}" />
           </label>
-          <label>Adresse de la mere
+          <label>Adresse de la mère
             <input name="guardians[1][address]" value="{{ motherGuardian.address if motherGuardian }}" />
           </label>
 
@@ -93,7 +104,7 @@
 
         <div class="actions">
           <button type="submit">Mettre a jour</button>
-          <a class="button secondary" href="/students/{{ student._id }}/reenroll">Reinscription</a>
+          {% if currentUser and currentUser.role in ['super_admin', 'secretariat'] %}<a class="button secondary" href="/students/{{ student._id }}/reenroll">Réinscription</a>{% endif %}
           <a class="button secondary" target="_blank" href="/reports/student-cards/{{ student._id }}/pdf">Carte scolaire</a>
         </div>
       </form>
@@ -105,9 +116,9 @@
           <thead><tr><th>N°</th><th>Type</th><th>Nom</th><th>Contact</th></tr></thead>
           <tbody>
             {% for guardian in guardians %}
-              <tr><td>{{ loop.index }}</td><td>{{ guardian.type }}</td><td>{{ guardian.lastname }} {{ guardian.firstname }}</td><td>{{ guardian.phone or '-' }}</td></tr>
+              <tr><td>{{ loop.index }}</td><td>{{ ENUM_META.guardianType[guardian.type].label if ENUM_META.guardianType[guardian.type] else guardian.type }}</td><td>{{ guardian.lastname }} {{ guardian.firstname }}</td><td>{{ guardian.phone or '-' }}</td></tr>
             {% else %}
-              <tr><td colspan="4">Aucun responsable enregistre.</td></tr>
+              <tr><td colspan="4">Aucun responsable enregistré.</td></tr>
             {% endfor %}
           </tbody>
         </table>
@@ -119,7 +130,7 @@
     <h2>Historique administratif et financier</h2>
     <div class="table-shell">
       <table class="table-report">
-        <thead><tr><th>N°</th><th>Annee</th><th>Niveau</th><th>Type</th><th>Statut</th></tr></thead>
+        <thead><tr><th>N°</th><th>Année</th><th>Niveau</th><th>Type</th><th>Statut</th></tr></thead>
         <tbody>
           {% for item in history %}
             <tr>
@@ -141,20 +152,20 @@
     <h2>Historique des paiements</h2>
     <div class="table-shell">
       <table class="table-report">
-        <thead><tr><th>N°</th><th>Date</th><th>Montant</th><th>Mode</th><th>Recu</th><th>Annee</th><th>Niveau</th></tr></thead>
+        <thead><tr><th>N°</th><th>Date</th><th>Montant</th><th>Mode</th><th>Reçu</th><th>Année</th><th>Niveau</th></tr></thead>
         <tbody>
           {% for payment in paymentHistory %}
             <tr>
               <td>{{ loop.index }}</td>
               <td>{{ payment.paidAt | formatDate }}</td>
-              <td>{{ payment.amount }}</td>
+              <td>{{ payment.amount | money }}</td>
               <td>{{ ENUM_META.paymentMethod[payment.method].label if ENUM_META.paymentMethod[payment.method] else payment.method }}</td>
               <td><a class="button secondary" href="/receipts/{{ payment._id }}">{{ payment.receiptNumber }}</a></td>
               <td>{{ payment.enrollment.schoolYearId.label if payment.enrollment and payment.enrollment.schoolYearId }}</td>
               <td>{{ payment.enrollment.levelId.label if payment.enrollment and payment.enrollment.levelId }}</td>
             </tr>
           {% else %}
-            <tr><td colspan="7">Aucun paiement enregistre pour cet eleve.</td></tr>
+            <tr><td colspan="7">Aucun paiement enregistré pour cet élève.</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -167,16 +178,16 @@
       <div class="panel-heading">
         <div>
           <h2>Discipline</h2>
-          <p class="muted">Les 5 dernieres entrees du journal, toutes annees confondues.</p>
+          <p class="muted">Les 5 dernières entrées du journal, toutes années confondues.</p>
         </div>
         <div class="panel-heading-actions">
           <a class="button secondary btn-sm" href="/discipline?studentId={{ student._id }}">Voir tout</a>
-          <a class="button btn-sm" href="/discipline/new?studentId={{ student._id }}">Ajouter</a>
+          {% if currentUser and currentUser.role in ['super_admin', 'direction'] %}<a class="button btn-sm" href="/discipline/new?studentId={{ student._id }}">Ajouter</a>{% endif %}
         </div>
       </div>
       <div class="table-shell">
         <table class="table-report">
-          <thead><tr><th>N°</th><th>Date</th><th>Annee</th><th>Type</th><th>Motif</th><th>Mesure</th></tr></thead>
+          <thead><tr><th>N°</th><th>Date</th><th>Année</th><th>Type</th><th>Motif</th><th>Mesure</th></tr></thead>
           <tbody>
             {% for record in disciplineRecords %}
               <tr>
@@ -188,7 +199,7 @@
                 <td>{{ record.mesure or '—' }}</td>
               </tr>
             {% else %}
-              <tr><td colspan="6">Aucune entree au journal de discipline pour cet eleve.</td></tr>
+              <tr><td colspan="6">Aucune entrée au journal de discipline pour cet élève.</td></tr>
             {% endfor %}
           </tbody>
         </table>

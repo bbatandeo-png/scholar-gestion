@@ -23,7 +23,7 @@ import {
 import { EcoleModulesService } from '../ecole-modules/ecole-modules.service';
 import { Ecole } from '../ecoles/schemas/ecole.schema';
 import { ExpenseCategory } from '../expenses/schemas/expense-category.schema';
-import { LevelsService } from '../levels/levels.service';
+import { SchoolYearLevel } from '../levels/schemas/school-year-level.schema';
 import { Level } from '../levels/schemas/level.schema';
 import { SchoolYear } from '../school-years/schemas/school-year.schema';
 import { Setting } from '../settings/schemas/setting.schema';
@@ -50,11 +50,10 @@ type SeedLevel = {
   tuitionFee: number;
 };
 
-// Primaire has no LevelCycle of its own: bulletins only distinguish
-// trimestres (COLLEGE) from semestres (LYCEE), and the primaire works by
-// trimestres - same mapping as migrate-add-level-cycle.ts.
+// Primaire et college travaillent par trimestres, le lycee par semestres
+// (voir PERIODES_BY_CYCLE) - meme correspondance que migrate-add-level-cycle.ts.
 const LEVEL_CYCLE: Record<Cycle, LevelCycle> = {
-  primaire: LevelCycle.COLLEGE,
+  primaire: LevelCycle.PRIMAIRE,
   college: LevelCycle.COLLEGE,
   lycee: LevelCycle.LYCEE,
 };
@@ -382,7 +381,9 @@ export async function seedSchoolConfiguration(
   options: SeedSchoolConfigurationOptions,
 ): Promise<SchoolConfigurationReport> {
   const { ecoleId } = options;
-  const levelsService = app.get(LevelsService);
+  const schoolYearLevelModel = app.get<Model<SchoolYearLevel>>(
+    getModelToken(SchoolYearLevel.name),
+  );
   const settingsService = app.get(SettingsService);
   const ecoleModulesService = app.get(EcoleModulesService);
   const schoolYearModel = app.get<Model<SchoolYear>>(
@@ -451,7 +452,11 @@ export async function seedSchoolConfiguration(
 
     for (const level of SCHOOL_LEVELS) {
       const existing = existingByCode.get(level.code);
-      if (existing && !existing.cycle) {
+      // Cycle manquant, ou primaire range en "College" par une version
+      // precedente de ce seeder (avant l'ajout du cycle Primaire).
+      const wrongPrimaire =
+        level.cycle === 'primaire' && existing?.cycle === LevelCycle.COLLEGE;
+      if (existing && (!existing.cycle || wrongPrimaire)) {
         await levelModel.updateOne(
           { _id: existing._id },
           { $set: { cycle: LEVEL_CYCLE[level.cycle] } },
@@ -506,7 +511,14 @@ export async function seedSchoolConfiguration(
     // --- Niveaux ouverts + frais de l'année -------------------------------
     for (const level of SCHOOL_LEVELS) {
       const levelId = levelIdByCode.get(level.code)!;
-      await levelsService.enableForSchoolYear(schoolYearId, levelId);
+      // Active pour l'annee seulement si le niveau n'y a jamais ete
+      // configure : un niveau que l'ecole a desactive (Parametres > Niveaux)
+      // le reste, meme si le seeder est relance.
+      await schoolYearLevelModel.updateOne(
+        { schoolYearId, levelId },
+        { $setOnInsert: { schoolYearId, levelId, isEnabled: true } },
+        { upsert: true },
+      );
       report.feeSchedulesCreated += await upsertedCount(
         feeScheduleModel.updateOne(
           { schoolYearId, levelId },

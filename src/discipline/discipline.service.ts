@@ -30,7 +30,7 @@ export class DisciplineService {
       .lean()
       .exec();
     if (!student) {
-      throw new NotFoundException('Eleve introuvable');
+      throw new NotFoundException('Élève introuvable');
     }
 
     const created = await this.recordModel.create({
@@ -73,24 +73,7 @@ export class DisciplineService {
   async search(filters: SearchDisciplineRecordsDto) {
     const page = Math.max(1, filters.page ?? 1);
     const pageSize = Math.min(100, Math.max(5, filters.pageSize ?? 20));
-
-    const query: Record<string, unknown> = {};
-    if (filters.studentId) query.studentId = filters.studentId;
-    if (filters.schoolYearId) query.schoolYearId = filters.schoolYearId;
-    if (filters.type) query.type = filters.type;
-    // DisciplineRecord doesn't store a level - it's filtered through the
-    // student's CURRENT declared class, same simplification the nominal
-    // roll/reports already make elsewhere, rather than snapshotting the
-    // class the student was in on the day of the incident.
-    if (filters.levelId) {
-      const studentIds = await this.studentModel
-        .find({ levelId: filters.levelId })
-        .distinct('_id')
-        .exec();
-      query.studentId = filters.studentId
-        ? filters.studentId
-        : { $in: studentIds };
-    }
+    const query = await this.buildQuery(filters);
 
     const [items, total] = await Promise.all([
       this.recordModel
@@ -113,5 +96,40 @@ export class DisciplineService {
       pageSize,
       totalPages: Math.max(1, Math.ceil(total / pageSize)),
     };
+  }
+
+  // Every entry matching the filters, without pagination - for the PDF export.
+  async listAll(filters: SearchDisciplineRecordsDto) {
+    const query = await this.buildQuery(filters);
+    return this.recordModel
+      .find(query)
+      .populate('studentId')
+      .populate('schoolYearId')
+      .populate('recordedBy')
+      .sort({ date: -1 })
+      .limit(5000)
+      .lean()
+      .exec();
+  }
+
+  private async buildQuery(filters: SearchDisciplineRecordsDto) {
+    const query: Record<string, unknown> = {};
+    if (filters.studentId) query.studentId = filters.studentId;
+    if (filters.schoolYearId) query.schoolYearId = filters.schoolYearId;
+    if (filters.type) query.type = filters.type;
+    // DisciplineRecord doesn't store a level - it's filtered through the
+    // student's CURRENT declared class, same simplification the nominal
+    // roll/reports already make elsewhere, rather than snapshotting the
+    // class the student was in on the day of the incident.
+    if (filters.levelId) {
+      const studentIds = await this.studentModel
+        .find({ levelId: filters.levelId })
+        .distinct('_id')
+        .exec();
+      query.studentId = filters.studentId
+        ? filters.studentId
+        : { $in: studentIds };
+    }
+    return query;
   }
 }

@@ -19,11 +19,12 @@
         </div>
 
         {% if flash %}
-          <div class="flash {{ flash.type }}">{{ flash.message }}</div>
+          <div class="flash {{ flash.type }}" role="{{ 'alert' if flash.type == 'error' else 'status' }}">{{ flash.message }}</div>
         {% endif %}
 
         {% block content %}{% endblock %}
       </div>
+      {% include "partials/footer.njk" %}
     </div>
   </body>
 </html>

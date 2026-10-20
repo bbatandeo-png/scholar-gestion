@@ -70,7 +70,7 @@ export class StockService {
         error !== null &&
         (error as { code?: number }).code === 11000
       ) {
-        throw new ConflictException('Un article avec ce nom existe deja');
+        throw new ConflictException('Un article avec ce nom existe déjà');
       }
       throw error;
     }

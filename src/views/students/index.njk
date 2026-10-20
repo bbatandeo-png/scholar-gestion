@@ -2,11 +2,13 @@
 {% import "partials/legend.njk" as legend %}
 {% block content %}
   <section class="stack">
+    {# Import et creation : reserves au guichet (super admin, secretariat). #}
+    {% if currentUser and currentUser.role in ['super_admin', 'secretariat'] %}
     <div class="panel">
-      <h2>Importer des eleves</h2>
-      <p class="muted">Pour une ecole qui a deja ses eleves dans un fichier - importe en masse les memes champs que le formulaire de creation ci-dessous (matricule, nom, prenoms, sexe, date et lieu de naissance, quartier, et les responsables si renseignes).</p>
+      <h2>Importer des élèves</h2>
+      <p class="muted">Pour une école qui a déjà ses élèves dans un fichier - importez en masse les mêmes champs que le formulaire de création ci-dessous (matricule, nom, prénoms, sexe, date et lieu de naissance, quartier, et les responsables si renseignes).</p>
       <div class="toolbar compact-actions">
-        <a class="button secondary btn-icon icon-export" href="/students/import-template">Telecharger le modele (Excel)</a>
+        <a class="button secondary btn-icon icon-export" href="/students/import-template">Télécharger le modèle (Excel)</a>
       </div>
       <form method="post" action="/students/import" enctype="multipart/form-data" class="toolbar compact-actions top-gap">
         <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
@@ -16,7 +18,7 @@
     </div>
 
     <div class="panel">
-      <h2>Creer un eleve</h2>
+      <h2>Créer un élève</h2>
       <form method="post" action="/students" enctype="multipart/form-data" class="stack" id="createStudentForm">
         <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
         <div class="form-grid">
@@ -24,7 +26,7 @@
             <input name="matricule" placeholder="Laisser vide pour generation automatique" />
           </label>
           <label>Nom<input name="lastname" required /></label>
-          <label>Prenoms<input name="firstname" required /></label>
+          <label>Prénoms<input name="firstname" required /></label>
           <label>Sexe
             <select name="gender" required>
               <option value="">Sélectionner</option>
@@ -52,7 +54,7 @@
           <h3>Paiement a l'inscription <span class="muted">{{ '(obligatoire)' if registrationPaymentRequired else '(optionnel)' }}</span></h3>
           <p id="createFeeHint" class="muted">Choisissez une classe pour voir le montant de l'inscription.</p>
           <div class="form-grid">
-            <label>Montant paye maintenant
+            <label>Montant payé maintenant
               <input type="number" name="paymentAmount" id="createPaymentAmount" min="{{ '1' if registrationPaymentRequired else '0' }}" placeholder="0" {% if registrationPaymentRequired %}required{% endif %} />
             </label>
             <label>Mode de paiement
@@ -62,33 +64,33 @@
                 {% endfor %}
               </select>
             </label>
-            <label>Reference<input name="paymentReference" /></label>
+            <label>Référence<input name="paymentReference" /></label>
           </div>
         {% endif %}
 
         <h3>Responsables (parents / tuteur)</h3>
-        <p class="muted">Renseigne au moins les informations disponibles (nom, prenoms, contact).</p>
+        <p class="muted">Renseignez au moins les informations disponibles (nom, prénoms, contact).</p>
         <div class="form-grid">
           <input type="hidden" name="guardians[0][type]" value="father" />
-          <label>Nom complet du pere
-            <input name="guardians[0][fullname]" placeholder="Nom complet du pere" />
+          <label>Nom complet du père
+            <input name="guardians[0][fullname]" placeholder="Nom complet du père" />
           </label>
-          <label>Contact du pere
-            <input name="guardians[0][phone]" placeholder="Telephone du pere" />
+          <label>Contact du père
+            <input name="guardians[0][phone]" placeholder="Téléphone du père" />
           </label>
-          <label>Adresse du pere
-            <input name="guardians[0][address]" placeholder="Adresse du pere" />
+          <label>Adresse du père
+            <input name="guardians[0][address]" placeholder="Adresse du père" />
           </label>
 
           <input type="hidden" name="guardians[1][type]" value="mother" />
-          <label>Nom complet de la mere
-            <input name="guardians[1][fullname]" placeholder="Nom complet de la mere" />
+          <label>Nom complet de la mère
+            <input name="guardians[1][fullname]" placeholder="Nom complet de la mère" />
           </label>
-          <label>Contact de la mere
-            <input name="guardians[1][phone]" placeholder="Telephone de la mere" />
+          <label>Contact de la mère
+            <input name="guardians[1][phone]" placeholder="Téléphone de la mère" />
           </label>
-          <label>Adresse de la mere
-            <input name="guardians[1][address]" placeholder="Adresse de la mere" />
+          <label>Adresse de la mère
+            <input name="guardians[1][address]" placeholder="Adresse de la mère" />
           </label>
 
           <input type="hidden" name="guardians[2][type]" value="tutor" />
@@ -96,15 +98,15 @@
             <input name="guardians[2][fullname]" placeholder="Nom complet du tuteur" />
           </label>
           <label>Contact du tuteur
-            <input name="guardians[2][phone]" placeholder="Telephone du tuteur" />
+            <input name="guardians[2][phone]" placeholder="Téléphone du tuteur" />
           </label>
           <label>Adresse du tuteur
             <input name="guardians[2][address]" placeholder="Adresse du tuteur" />
           </label>
         </div>
 
-        <p class="muted">Le matricule sera genere automatiquement si le champ reste vide.</p>
-        <button type="submit" class="btn-lg btn-icon icon-save" id="createStudentSubmit">Creer le dossier</button>
+        <p class="muted">Le matricule sera généré automatiquement si le champ reste vide.</p>
+        <button type="submit" class="btn-lg btn-icon icon-save" id="createStudentSubmit">Créer le dossier</button>
       </form>
       {% set dialogId = 'duplicateNameDialog' %}
       {% include "partials/duplicate-name-confirm-dialog.njk" %}
@@ -130,13 +132,13 @@
               ? 'Choisissez une classe pour voir le montant de l\'inscription.'
               : !fee
                 ? 'Aucun frais defini pour cette classe.'
-                : "Inscription : " + fee.registrationFee + " - Ecolage : " + fee.tuitionFee +
-                  " - Total a payer : " + (fee.registrationFee + fee.tuitionFee) + " (hors impayes reportes)";
+                : 'Inscription : ' + formatMoney(fee.registrationFee) + ' — Écolage : ' + formatMoney(fee.tuitionFee) +
+                  ' — Total à payer : ' + formatMoney(fee.registrationFee + fee.tuitionFee) + ' (hors impayés reportés)';
           }
           if (submitButton) {
             submitButton.textContent = Number(amount?.value || 0) > 0
-              ? "Creer le dossier et enregistrer le paiement"
-              : 'Creer le dossier';
+              ? "Créer le dossier et enregistrer le paiement"
+              : 'Créer le dossier';
           }
         };
         level.addEventListener('change', refresh);
@@ -154,20 +156,21 @@
         '/students/check-duplicate',
       );
     </script>
+    {% endif %}
 
     <div class="panel">
       <div class="topbar">
         <div class="topbar-heading">
           <div class="topbar-title-row">
             <h2>Élèves</h2>
-            <p class="muted">{{ pagination.total }} élève(s) • page {{ pagination.page }} / {{ pagination.totalPages }}</p>
+            <p class="muted" id="students-summary" aria-live="polite">{{ pagination.total }} élève(s) • page {{ pagination.page }} / {{ pagination.totalPages }}</p>
           </div>
         </div>
 
         <div class="topbar-actions student-list-actions">
-          <form method="get" action="/students" class="inline-form" id="main-search">
+          <form method="get" action="/students" class="inline-form" id="main-search" role="search" data-live-search="#students-summary, #students-export, #students-results">
             <label class="search-controls">
-              <input type="search" name="q" value="{{ query }}" placeholder="Rechercher par nom, prénom ou matricule" />
+              <input type="search" name="q" value="{{ query }}" placeholder="Rechercher par nom, prénom ou matricule…" aria-label="Rechercher un élève par nom, prénom ou matricule" autocomplete="off" />
               <button type="submit" class="button btn-icon icon-search">Rechercher</button>
             </label>
           </form>
@@ -175,7 +178,7 @@
           <a class="button secondary" href="/students/search">Anciens élèves</a>
           <a class="button secondary" href="/students/duplicates">Doublons</a>
 
-          <form method="get" action="/students/export" class="inline-form">
+          <form method="get" action="/students/export" class="inline-form" id="students-export">
             <input type="hidden" name="q" value="{{ query }}" />
             <input type="hidden" name="levelId" value="{{ filters.levelId }}" />
             <input type="hidden" name="status" value="{{ filters.status }}" />
@@ -206,6 +209,7 @@
         {% endif %}
       </form>
 
+      <div id="students-results">
       <div class="table-shell">
         <table class="table-report js-sortable" data-no-filter>
           <thead>
@@ -238,7 +242,7 @@
                 </td>
               </tr>
             {% else %}
-              <tr><td colspan="7">Aucun eleve trouve.</td></tr>
+              <tr><td colspan="7">Aucun élève trouvé.</td></tr>
             {% endfor %}
           </tbody>
         </table>
@@ -253,7 +257,7 @@
           <input type="hidden" name="schoolYearId" value="{{ filters.schoolYearId }}" />
           <input type="hidden" name="pageSize" value="{{ pagination.pageSize }}" />
           <input type="hidden" name="page" value="{{ pagination.prevPage }}" />
-          <button type="submit" class="secondary btn-sm btn-icon icon-prev" {% if not pagination.hasPrev %}disabled{% endif %}>Precedent</button>
+          <button type="submit" class="secondary btn-sm btn-icon icon-prev" {% if not pagination.hasPrev %}disabled{% endif %}>Précédent</button>
         </form>
         <span class="muted">Page {{ pagination.page }} sur {{ pagination.totalPages }}</span>
         <form method="get" action="/students" class="inline-form">
@@ -266,6 +270,7 @@
           <input type="hidden" name="page" value="{{ pagination.nextPage }}" />
           <button type="submit" class="secondary btn-sm btn-icon icon-next" {% if not pagination.hasNext %}disabled{% endif %}>Suivant</button>
         </form>
+      </div>
       </div>
     </div>
   </section>

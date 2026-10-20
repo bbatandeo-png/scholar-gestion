@@ -27,7 +27,7 @@ export class RolesGuard implements CanActivate {
     const userRole = req.session?.user?.role;
 
     if (!userRole || !requiredRoles.includes(userRole)) {
-      throw new ForbiddenException('Acces refuse pour ce role');
+      throw new ForbiddenException('Accès refusé pour ce rôle');
     }
 
     return true;

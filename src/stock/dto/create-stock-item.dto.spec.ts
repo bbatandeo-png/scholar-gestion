@@ -35,7 +35,10 @@ describe('CreateStockItemDto', () => {
     const dto = transformBody({ ...minimalRequired, alertThreshold: '' });
     expect(dto.alertThreshold).toBeUndefined();
 
-    const errors = await validateBody({ ...minimalRequired, alertThreshold: '' });
+    const errors = await validateBody({
+      ...minimalRequired,
+      alertThreshold: '',
+    });
     expect(errors).toHaveLength(0);
   });
 
@@ -43,12 +46,18 @@ describe('CreateStockItemDto', () => {
     const dto = transformBody({ ...minimalRequired, alertThreshold: '5' });
     expect(dto.alertThreshold).toBe(5);
 
-    const errors = await validateBody({ ...minimalRequired, alertThreshold: '5' });
+    const errors = await validateBody({
+      ...minimalRequired,
+      alertThreshold: '5',
+    });
     expect(errors).toHaveLength(0);
   });
 
   it('refuse un seuil negatif', async () => {
-    const errors = await validateBody({ ...minimalRequired, alertThreshold: '-1' });
+    const errors = await validateBody({
+      ...minimalRequired,
+      alertThreshold: '-1',
+    });
     expect(errors).not.toHaveLength(0);
   });
 

@@ -5,24 +5,20 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
 import session from 'express-session';
 import MongoStore from 'connect-mongo';
-import { NextFunction, Request, Response, urlencoded } from 'express';
+import { urlencoded } from 'express';
 import methodOverride from 'method-override';
-import * as nunjucks from 'nunjucks';
 import * as fs from 'fs';
 import * as path from 'path';
 import { exec } from 'child_process';
 import csurf from 'csurf';
 import { AppModule } from './app.module';
+import { applyViewLocals, configureViewEngine } from './app-setup';
 import { FeeScheduleNotFoundFilter } from './common/filters/fee-schedule-not-found.filter';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { runSeed, shouldRunSeed } from './scripts/seed';
-import { SchoolYearsService } from './school-years/school-years.service';
 import { applyTenantMiddleware } from './common/tenant/apply-tenant-middleware';
 import { noStore } from './common/middleware/no-store';
 import { csrfErrorHandler } from './common/middleware/csrf-error-handler';
-import { EcoleModulesService } from './ecole-modules/ecole-modules.service';
-import { LicensingService } from './licensing/licensing.service';
-import { ENUM_META } from './common/view-helpers/enum-meta';
 import {
   getRuntimeRoot,
   getUploadsRoot,
@@ -81,51 +77,12 @@ async function bootstrap() {
   const uploadsDir = getUploadsRoot();
   fs.mkdirSync(uploadsDir, { recursive: true });
 
-  app.setBaseViewsDir(viewsDir);
-  app.setViewEngine('njk');
   app.useStaticAssets(publicDir);
   app.useStaticAssets(uploadsDir, { prefix: '/uploads' });
   app.useStaticAssets(siteVitrineDir, { prefix: '/vitrine' });
   // After the static mounts on purpose: assets keep caching, pages do not.
   app.use(noStore);
-  const nunjucksEnv = nunjucks.configure(viewsDir, {
-    autoescape: true,
-    express: app.getHttpAdapter().getInstance(),
-    noCache: true,
-  });
-
-  nunjucksEnv.addFilter('formatDate', (value: unknown) => {
-    if (!value) {
-      return '';
-    }
-
-    const date =
-      value instanceof Date ? value : new Date(value as string | number);
-    if (Number.isNaN(date.getTime())) {
-      return '';
-    }
-
-    return date.toLocaleString('fr-FR', {
-      dateStyle: 'long',
-      timeStyle: 'short',
-    });
-  });
-
-  nunjucksEnv.addGlobal('ENUM_META', ENUM_META);
-
-  nunjucksEnv.addFilter('inputDate', (value: unknown) => {
-    if (!value) {
-      return '';
-    }
-
-    const date =
-      value instanceof Date ? value : new Date(value as string | number);
-    if (Number.isNaN(date.getTime())) {
-      return '';
-    }
-
-    return date.toISOString().slice(0, 10);
-  });
+  configureViewEngine(app, viewsDir);
 
   app.use(cookieParser());
   app.use(urlencoded({ extended: true }));
@@ -179,133 +136,7 @@ async function bootstrap() {
 
   applyTenantMiddleware(app);
 
-  const schoolYearsService = app.get(SchoolYearsService);
-  const ecoleModulesService = app.get(EcoleModulesService);
-  const licensingService = app.get(LicensingService);
-  const LICENSE_WRITE_ALLOWLIST = ['/licence', '/logout'];
-  app.use(async (req: Request, res: Response, next: NextFunction) => {
-    const flash = req.session?.flash;
-    const user = req.session?.user;
-
-    res.locals.currentUser = user;
-    res.locals.flash = flash;
-    res.locals.currentPath = req.path;
-    res.locals.csrfToken =
-      typeof req.csrfToken === 'function' ? req.csrfToken() : '';
-
-    if (user) {
-      try {
-        const [schoolYears, openSchoolYear, selectedSchoolYear] =
-          await Promise.all([
-            schoolYearsService.list(),
-            schoolYearsService.findOpen(),
-            schoolYearsService.resolveSelected(
-              req.session.selectedSchoolYearId,
-            ),
-          ]);
-        res.locals.schoolYearContext = {
-          years: schoolYears,
-          open: openSchoolYear,
-          selected: selectedSchoolYear,
-          isHistorical:
-            Boolean(openSchoolYear) &&
-            String(openSchoolYear?._id) !== String(selectedSchoolYear?._id),
-        };
-        if (
-          res.locals.schoolYearContext.isHistorical &&
-          !['GET', 'HEAD', 'OPTIONS'].includes(req.method) &&
-          !['/settings/school-years/select', '/logout'].includes(req.path)
-        ) {
-          req.session.flash = {
-            type: 'error',
-            message: 'Cette annee historique est disponible en lecture seule',
-          };
-          return res.redirect(req.get('referer') || '/dashboard');
-        }
-      } catch {
-        res.locals.schoolYearContext = {
-          years: [],
-          open: null,
-          selected: null,
-          isHistorical: false,
-        };
-      }
-
-      if (user.ecoleId) {
-        try {
-          const openModules = await ecoleModulesService.listForEcole(
-            user.ecoleId,
-          );
-          const openCodes = new Set(openModules.map((m) => m.code));
-          res.locals.activeModules = {
-            finance: openCodes.has('FINANCE'),
-            bulletins: openCodes.has('BULLETINS'),
-            discipline: openCodes.has('DISCIPLINE'),
-            stock: openCodes.has('STOCK'),
-            enseignants: openCodes.has('ENSEIGNANTS'),
-          };
-        } catch {
-          res.locals.activeModules = {
-            finance: false,
-            bulletins: false,
-            discipline: false,
-            stock: false,
-            enseignants: false,
-          };
-        }
-
-        // Off by default: LICENSE_ENFORCEMENT must be explicitly set to 'on'
-        // in a given install's .env for the licence system to check/block
-        // anything there. Lets the licensing code ship to every client
-        // (including ones already deployed) without switching any of them
-        // over before it's actually decided per-client - flip this one
-        // variable later when ready to turn it on for a given school.
-        if (process.env.LICENSE_ENFORCEMENT === 'on') {
-          res.locals.licenseEnforcementEnabled = true;
-          try {
-            const licenseStatus = await licensingService.getStatus(
-              user.ecoleId,
-            );
-            res.locals.licenseStatus = licenseStatus;
-
-            const isWriteMethod = !['GET', 'HEAD', 'OPTIONS'].includes(
-              req.method,
-            );
-            const isAllowlisted = LICENSE_WRITE_ALLOWLIST.some((prefix) =>
-              req.path.startsWith(prefix),
-            );
-            if (
-              licenseStatus.state === 'blocked' &&
-              isWriteMethod &&
-              !isAllowlisted
-            ) {
-              req.session.flash = {
-                type: 'error',
-                message:
-                  'La licence de cette installation a expire - contactez le support pour la renouveler avant de pouvoir enregistrer de nouvelles donnees.',
-              };
-              return res.redirect('/licence');
-            }
-          } catch {
-            res.locals.licenseStatus = null;
-          }
-        } else {
-          res.locals.licenseEnforcementEnabled = false;
-          res.locals.licenseStatus = null;
-        }
-      } else {
-        // PLATFORM_ADMIN or any session with no ecole - not applicable.
-        res.locals.activeModules = null;
-        res.locals.licenseStatus = null;
-      }
-    }
-
-    if (req.session) {
-      delete req.session.flash;
-    }
-
-    next();
-  });
+  applyViewLocals(app);
 
   app.useGlobalPipes(
     new ValidationPipe({

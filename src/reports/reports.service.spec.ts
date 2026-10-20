@@ -716,7 +716,7 @@ describe('ReportsService', () => {
 
       await expect(
         service.getExamStatistics('missing-year', 'trimestre_1' as never),
-      ).rejects.toThrow('Annee scolaire introuvable');
+      ).rejects.toThrow('Année scolaire introuvable');
     });
   });
 });

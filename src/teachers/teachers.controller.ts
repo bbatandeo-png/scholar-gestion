@@ -107,7 +107,7 @@ export class TeachersController {
       String(teacher._id),
       pickUploadedFile(req, 'photo'),
     );
-    setFlash(req, 'success', 'Dossier enseignant cree');
+    setFlash(req, 'success', 'Dossier enseignant créé');
     return res.redirect(`/teachers/${String(teacher._id)}`);
   }
 
@@ -157,7 +157,7 @@ export class TeachersController {
   ) {
     await this.teachersService.update(id, dto, user?.id);
     await this.teachersService.savePhoto(id, pickUploadedFile(req, 'photo'));
-    setFlash(req, 'success', 'Dossier enseignant mis a jour');
+    setFlash(req, 'success', 'Dossier enseignant mis à jour');
     return res.redirect(`/teachers/${id}`);
   }
 
@@ -182,8 +182,8 @@ export class TeachersController {
       req,
       'success',
       skipped > 0
-        ? `${created} affectation(s) ajoutee(s), ${skipped} deja existante(s) ignoree(s)`
-        : `${created} affectation(s) ajoutee(s)`,
+        ? `${created} affectation(s) ajoutée(s), ${skipped} déjà existante(s) ignorée(s)`
+        : `${created} affectation(s) ajoutée(s)`,
     );
     return res.redirect(`/teachers/${id}`);
   }
@@ -204,7 +204,7 @@ export class TeachersController {
       dto,
       user?.id,
     );
-    setFlash(req, 'success', 'Affectation mise a jour');
+    setFlash(req, 'success', 'Affectation mise à jour');
     return res.redirect(`/teachers/${id}`);
   }
 
@@ -218,7 +218,7 @@ export class TeachersController {
     @CurrentUser() user: SessionUser | undefined,
   ) {
     await this.teachersService.createContract(id, dto, user?.id);
-    setFlash(req, 'success', 'Contrat enregistre');
+    setFlash(req, 'success', 'Contrat enregistré');
     return res.redirect(`/teachers/${id}`);
   }
 
@@ -233,7 +233,7 @@ export class TeachersController {
     @CurrentUser() user: SessionUser | undefined,
   ) {
     await this.teachersService.terminateContract(id, contractId, dto, user?.id);
-    setFlash(req, 'success', 'Contrat resilie');
+    setFlash(req, 'success', 'Contrat résilié');
     return res.redirect(`/teachers/${id}`);
   }
 
@@ -248,7 +248,7 @@ export class TeachersController {
     @CurrentUser() user: SessionUser | undefined,
   ) {
     await this.teachersService.updateContract(id, contractId, dto, user?.id);
-    setFlash(req, 'success', 'Contrat mis a jour');
+    setFlash(req, 'success', 'Contrat mis à jour');
     return res.redirect(`/teachers/${id}`);
   }
 
@@ -269,7 +269,7 @@ export class TeachersController {
       dto,
       user?.id,
     );
-    setFlash(req, 'success', 'Entree de suivi ajoutee');
+    setFlash(req, 'success', 'Entrée de suivi ajoutée');
     return res.redirect(`/teachers/${id}`);
   }
 
@@ -289,7 +289,7 @@ export class TeachersController {
       dto,
       user?.id,
     );
-    setFlash(req, 'success', 'Entree de suivi mise a jour');
+    setFlash(req, 'success', 'Entrée de suivi mise à jour');
     return res.redirect(`/teachers/${id}`);
   }
 
@@ -308,7 +308,7 @@ export class TeachersController {
       pickUploadedFile(req, 'file'),
       user?.id,
     );
-    setFlash(req, 'success', 'Document ajoute');
+    setFlash(req, 'success', 'Document ajouté');
     return res.redirect(`/teachers/${id}`);
   }
 
@@ -329,7 +329,7 @@ export class TeachersController {
       pickUploadedFile(req, 'file'),
       user?.id,
     );
-    setFlash(req, 'success', 'Document mis a jour');
+    setFlash(req, 'success', 'Document mis à jour');
     return res.redirect(`/teachers/${id}`);
   }
 }

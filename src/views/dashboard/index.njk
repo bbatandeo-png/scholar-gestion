@@ -12,8 +12,8 @@
   {% if not selectedYear %}
     <section class="panel">
       <h2>Bienvenue</h2>
-      <p class="muted">Aucune annee scolaire n'est encore configuree pour votre etablissement. Creez-en une pour commencer a utiliser la plateforme.</p>
-      <a class="button" href="/settings/school-years">Creer une annee scolaire</a>
+      <p class="muted">Aucune année scolaire n'est encore configurée pour votre établissement. Créez-en une pour commencer à utiliser la plateforme.</p>
+      <a class="button" href="/settings/school-years">Créer une année scolaire</a>
     </section>
   {% else %}
     <section class="hero">
@@ -42,14 +42,14 @@
         </label>
         <button type="submit" class="button">Appliquer</button>
         {% if filters.levelId or filters.dateFrom or filters.dateTo %}
-          <a href="/dashboard" class="button secondary btn-sm">Reinitialiser</a>
+          <a href="/dashboard" class="button secondary btn-sm">Réinitialiser</a>
         {% endif %}
       </form>
       {% if filters.dateFrom or filters.dateTo %}
         <p class="muted" style="margin:14px 0 0;">
-          Periode du {{ filters.dateFrom or 'debut de l’annee' }} au {{ filters.dateTo or 'aujourd’hui' }} :
-          les recettes, depenses et modifications de paiement ci-dessous ne portent que sur cette periode.
-          Les effectifs et les impayes restent la situation actuelle.
+          Période du {{ filters.dateFrom or 'début de l’année' }} au {{ filters.dateTo or 'aujourd’hui' }} :
+          les recettes, dépenses et modifications de paiement ci-dessous ne portent que sur cette période.
+          Les effectifs et les impayés restent la situation actuelle.
         </p>
       {% endif %}
     </section>
@@ -57,23 +57,23 @@
     {% if summary.ledgerDivergence and summary.ledgerDivergence.count and activeModules and activeModules.finance %}
       <div class="notice notice-warning">
         <strong>{{ summary.ledgerDivergence.count }} facture(s)</strong> ont un montant payé différent de la somme des paiements enregistrés
-        (écart total : {{ summary.ledgerDivergence.total }}). Les chiffres ci-dessous et les listes imprimées peuvent donc différer.
+        (écart total : {{ summary.ledgerDivergence.total | money }}). Les chiffres ci-dessous et les listes imprimées peuvent donc différer.
         <a href="/payments/reconciliation">Voir le détail et corriger</a>
       </div>
     {% endif %}
 
     <section class="grid cols-3">
       <article class="card"><div class="muted">Effectif total</div><div class="metric">{{ summary.totalStudents }}</div></article>
-      <article class="card"><div class="muted">Frais d'inscription encaissés</div><div class="metric">{{ summary.registrationRevenue }}</div></article>
-      <article class="card"><div class="muted">Frais d'écolage encaissés</div><div class="metric">{{ summary.tuitionRevenue }}</div></article>
-      <article class="card"><div class="muted">Dépenses</div><div class="metric">{{ summary.totalExpenses }}</div></article>
-      <article class="card"><div class="muted">Solde disponible</div><div class="metric">{{ summary.availableBalance }}</div></article>
-      <article class="card"><div class="muted">Recettes encaissees</div><div class="metric">{{ summary.revenue }}</div></article>
-      <article class="card"><div class="muted">Impayes globaux</div><div class="metric">{{ summary.totalBalance }}</div></article>
+      <article class="card"><div class="muted">Frais d'inscription encaissés</div><div class="metric">{{ summary.registrationRevenue | money }}</div></article>
+      <article class="card"><div class="muted">Frais d'écolage encaissés</div><div class="metric">{{ summary.tuitionRevenue | money }}</div></article>
+      <article class="card"><div class="muted">Dépenses</div><div class="metric">{{ summary.totalExpenses | money }}</div></article>
+      <article class="card"><div class="muted">Solde disponible</div><div class="metric">{{ summary.availableBalance | money }}</div></article>
+      <article class="card"><div class="muted">Recettes encaissees</div><div class="metric">{{ summary.revenue | money }}</div></article>
+      <article class="card"><div class="muted">Impayés globaux</div><div class="metric">{{ summary.totalBalance | money }}</div></article>
       <article class="card"><div class="muted">Taux de recouvrement</div><div class="metric">{{ summary.recoveryRate }}%</div></article>
-      <article class="card"><div class="muted">Eleves actifs</div><div class="metric">{{ summary.activeStudents }}</div></article>
-      <article class="card"><div class="muted">Eleves archives</div><div class="metric">{{ summary.archivedStudents }}</div></article>
-      <article class="card"><div class="muted">Impayes reportes</div><div class="metric">{{ summary.arrearsOpen }}</div></article>
+      <article class="card"><div class="muted">Élèves actifs</div><div class="metric">{{ summary.activeStudents }}</div></article>
+      <article class="card"><div class="muted">Élèves archivés</div><div class="metric">{{ summary.archivedStudents }}</div></article>
+      <article class="card"><div class="muted">Impayés reportés</div><div class="metric">{{ summary.arrearsOpen }}</div></article>
       <article class="card"><div class="muted">Inscriptions actives</div><div class="metric">{{ summary.enrollmentsActive }}</div></article>
       {% if activeModules and activeModules.finance %}
         <article class="card">
@@ -101,7 +101,7 @@
               <h3>Encaissements</h3>
               <p class="muted">En millions de FCFA, par mois.</p>
             </div>
-            <a href="/reports/revenue" class="button secondary btn-sm">Voir le détail</a>
+            {% if currentUser and currentUser.role in ['super_admin', 'direction', 'comptabilite', 'auditeur'] %}<a href="/reports/revenue" class="button secondary btn-sm">Voir le détail</a>{% endif %}
           </div>
           <div id="chart-encaissements"></div>
         </article>

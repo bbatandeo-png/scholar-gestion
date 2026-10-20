@@ -18,6 +18,6 @@ export class CreateLevelDto {
   @Transform(({ value }) =>
     value === '' || value === undefined ? undefined : Number(value),
   )
-  @IsIn([LevelCycle.COLLEGE, LevelCycle.LYCEE])
+  @IsIn([LevelCycle.PRIMAIRE, LevelCycle.COLLEGE, LevelCycle.LYCEE])
   cycle?: LevelCycle;
 }

@@ -1,3 +1,4 @@
+import { formatAmount, formatMoney } from '../common/view-helpers/format-money';
 import {
   BadRequestException,
   Injectable,
@@ -59,7 +60,7 @@ export class ExpensesService {
 
   async createCategory(dto: { name: string; description?: string }) {
     if (!dto.name?.trim()) {
-      throw new BadRequestException('Le nom de la categorie est obligatoire');
+      throw new BadRequestException('Le nom de la catégorie est obligatoire');
     }
 
     return this.categoryModel.create({
@@ -80,7 +81,7 @@ export class ExpensesService {
       )
       .exec();
     if (!category) {
-      throw new NotFoundException('Categorie introuvable');
+      throw new NotFoundException('Catégorie introuvable');
     }
     return category;
   }
@@ -89,12 +90,12 @@ export class ExpensesService {
     const used = await this.expenseModel.exists({ categoryId: id });
     if (used) {
       throw new BadRequestException(
-        'Cette categorie est utilisee par des depenses et ne peut pas etre supprimee',
+        'Cette catégorie est utilisée par des dépenses et ne peut pas être supprimée',
       );
     }
     const category = await this.categoryModel.findByIdAndDelete(id).exec();
     if (!category) {
-      throw new NotFoundException('Categorie introuvable');
+      throw new NotFoundException('Catégorie introuvable');
     }
     return category;
   }
@@ -132,16 +133,16 @@ export class ExpensesService {
     },
   ) {
     if (!dto.label?.trim()) {
-      throw new BadRequestException('Le libelle est obligatoire');
+      throw new BadRequestException('Le libellé est obligatoire');
     }
     if (!dto.beneficiary?.trim()) {
-      throw new BadRequestException('Le beneficiaire est obligatoire');
+      throw new BadRequestException('Le bénéficiaire est obligatoire');
     }
     if (!dto.categoryId) {
-      throw new BadRequestException('La categorie est obligatoire');
+      throw new BadRequestException('La catégorie est obligatoire');
     }
     if (!dto.amount || Number(dto.amount) <= 0) {
-      throw new BadRequestException('Le montant doit etre superieur a zero');
+      throw new BadRequestException('Le montant doit être supérieur à zéro');
     }
 
     const category = await this.categoryModel
@@ -149,7 +150,7 @@ export class ExpensesService {
       .lean()
       .exec();
     if (!category) {
-      throw new BadRequestException('Categorie inexistante');
+      throw new BadRequestException('Catégorie inexistante');
     }
 
     return this.expenseModel.create({
@@ -170,7 +171,7 @@ export class ExpensesService {
       .lean()
       .exec()) as PopulatedExpenseLean | null;
     if (!expense) {
-      throw new NotFoundException('Depense introuvable');
+      throw new NotFoundException('Dépense introuvable');
     }
     return expense;
   }
@@ -178,7 +179,7 @@ export class ExpensesService {
   async findCategoryById(id: string) {
     const category = await this.categoryModel.findById(id).lean().exec();
     if (!category) {
-      throw new NotFoundException('Categorie introuvable');
+      throw new NotFoundException('Catégorie introuvable');
     }
     return category;
   }
@@ -220,7 +221,7 @@ export class ExpensesService {
       .findOneAndUpdate({ _id: id, schoolYearId }, updatePayload, { new: true })
       .exec();
     if (!expense) {
-      throw new NotFoundException('Depense introuvable');
+      throw new NotFoundException('Dépense introuvable');
     }
     return expense;
   }
@@ -242,7 +243,7 @@ export class ExpensesService {
       )
       .exec();
     if (!expense) {
-      throw new NotFoundException('Depense introuvable');
+      throw new NotFoundException('Dépense introuvable');
     }
     return expense;
   }
@@ -397,7 +398,7 @@ export class ExpensesService {
             ? new Date(item.expenseDate).toLocaleDateString('fr-FR')
             : '',
           item.label ?? '',
-          Number(item.amount ?? 0).toFixed(2),
+          formatAmount(Number(item.amount ?? 0), { plainSpaces: true }),
           item.beneficiary ?? '',
           category?.name ?? '',
         ];
@@ -410,9 +411,12 @@ export class ExpensesService {
       doc
         .font('Times-Bold')
         .fontSize(10)
-        .text(`Total des dépenses : ${totalAmount.toFixed(2)} FCFA`, {
-          align: 'right',
-        });
+        .text(
+          `Total des dépenses : ${formatMoney(totalAmount, { plainSpaces: true })}`,
+          {
+            align: 'right',
+          },
+        );
       doc.end();
     });
   }

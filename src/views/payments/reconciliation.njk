@@ -11,7 +11,7 @@
     {% if rows.length %}
       <div class="notice notice-warning">
         <strong>{{ rows.length }} facture(s) en écart</strong> — le tableau de bord compte
-        <strong>{{ totalDifference }}</strong> de {{ 'plus' if totalDifference > 0 else 'moins' }}
+        <strong>{{ totalDifference | money }}</strong> de {{ 'plus' if totalDifference > 0 else 'moins' }}
         que les listes imprimées. Cela arrive quand un montant payé a été corrigé à la main
         (par exemple pour annuler un paiement saisi par erreur) avant que la correction ne soit
         répercutée sur les paiements enregistrés.
@@ -22,7 +22,7 @@
           <thead>
             <tr>
               <th>N°</th>
-              <th>Eleve</th>
+              <th>Élève</th>
               <th>Matricule</th>
               <th>Niveau</th>
               <th>Payé sur la facture</th>
@@ -38,8 +38,8 @@
                 <td>{{ row.studentName }}</td>
                 <td>{{ row.matricule }}</td>
                 <td>{{ row.levelLabel }}</td>
-                <td>{{ row.invoicePaid }}</td>
-                <td>{{ row.ledgerPaid }}</td>
+                <td>{{ row.invoicePaid | money }}</td>
+                <td>{{ row.ledgerPaid | money }}</td>
                 <td><strong>{{ row.difference }}</strong></td>
                 <td>{% if row.enrollmentId %}<a class="button secondary btn-sm" href="/enrollments/{{ row.enrollmentId }}">Voir</a>{% endif %}</td>
               </tr>
