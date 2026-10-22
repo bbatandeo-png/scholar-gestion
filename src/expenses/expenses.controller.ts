@@ -256,7 +256,11 @@ export class ExpensesController {
         );
       }
       payload.modificationReason = reason;
-      await this.expensesService.update(String(year._id), id, payload);
+      const user = req.session?.user;
+      await this.expensesService.update(String(year._id), id, payload, {
+        id: user?.id,
+        name: user?.name,
+      });
       setFlash(req, 'success', 'Dépense mise à jour');
       return res.redirect('/expenses');
     } catch (err) {

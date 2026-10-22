@@ -1105,7 +1105,11 @@ export class BulletinsService {
         compo: number | null;
       }
     >,
-  ): Promise<{ subjectLabel: string; studentCount: number }> {
+  ): Promise<{
+    subjectLabel: string;
+    studentCount: number;
+    withoutNotes: number;
+  }> {
     const session = await this.sessionModel.findById(sessionId).exec();
     if (!session) {
       throw new NotFoundException('Session introuvable');
@@ -1244,7 +1248,19 @@ export class BulletinsService {
     await session.save();
     await this.recomputeSessionStatus(sessionId);
 
-    return { subjectLabel, studentCount: roster.length };
+    // Rapport A28 : on compte les eleves qui ont reellement au moins une note,
+    // pas toute la classe.
+    const studentCount = roster.filter((entry) => {
+      const v = values[entry.studentId];
+      return Boolean(
+        v && [v.i1, v.i2, v.devoir, v.compo].some((note) => note !== null),
+      );
+    }).length;
+    return {
+      subjectLabel,
+      studentCount,
+      withoutNotes: roster.length - studentCount,
+    };
   }
 
   // Modele Excel d'import pre-rempli pour une session : exactement le format

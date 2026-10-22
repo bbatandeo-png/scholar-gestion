@@ -44,9 +44,17 @@ export async function migrateAddLevelCycle(
 
     const report: MigrationReport = { backfilled: 0, unrecognized: [] };
 
+    // Niveaux sans cycle, et classes du primaire rangees a tort dans le
+    // cycle « Collège » (creees avant l'existence du cycle Primaire -
+    // rapport A24).
     const levels = await db
       .collection('levels')
-      .find({ cycle: { $exists: false } })
+      .find({
+        $or: [
+          { cycle: { $exists: false } },
+          { code: { $in: [...PRIMAIRE_CODES] }, cycle: { $ne: 3 } },
+        ],
+      })
       .toArray();
 
     for (const level of levels) {

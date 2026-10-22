@@ -14,7 +14,7 @@
       {% if stats.expiringContracts.length %}
         <ul>
           {% for contract in stats.expiringContracts %}
-            <li>{{ contract.teacherId.firstname }} {{ contract.teacherId.lastname }} — {{ contract.endDate | formatDate }}</li>
+            <li>{{ contract.teacherId.firstname }} {{ contract.teacherId.lastname }} — {{ contract.endDate | formatDay }}</li>
           {% endfor %}
         </ul>
       {% else %}

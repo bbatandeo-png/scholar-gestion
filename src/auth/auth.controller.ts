@@ -6,6 +6,7 @@ import {
   Get,
   HttpException,
   Post,
+  Query,
   Redirect,
   Render,
   Req,
@@ -19,6 +20,7 @@ import { Request, Response } from 'express';
 import { AuthenticatedGuard } from '../common/guards/authenticated.guard';
 import { Role } from '../common/enums/domain.enums';
 import { setFlash } from '../common/utils/flash.util';
+import { safeNextPath } from '../common/filters/http-exception.filter';
 import { LoginDto } from './dto/login.dto';
 import { AuthService } from './auth.service';
 
@@ -39,8 +41,8 @@ export class AuthController {
 
   @Get('/login')
   @Render('auth/login')
-  loginPage() {
-    return { title: 'Connexion' };
+  loginPage(@Query('next') next?: string) {
+    return { title: 'Connexion', next: safeNextPath(next) };
   }
 
   @Post('/login')
@@ -62,10 +64,14 @@ export class AuthController {
       setFlash(req, 'success', 'Connexion réussie');
       const landingPage =
         user.role === Role.PLATFORM_ADMIN ? '/platform/ecoles' : '/dashboard';
-      return res.redirect(landingPage);
+      // Retour sur la page demandee avant l'expiration de la session.
+      return res.redirect(safeNextPath(dto.next) || landingPage);
     } catch {
       setFlash(req, 'error', 'Email ou mot de passe invalide');
-      return res.redirect('/login');
+      const next = safeNextPath(dto.next);
+      return res.redirect(
+        next ? `/login?next=${encodeURIComponent(next)}` : '/login',
+      );
     }
   }
 
@@ -73,7 +79,7 @@ export class AuthController {
   @UseGuards(AuthenticatedGuard)
   @Render('auth/logout')
   logoutPage() {
-    return { title: 'Deconnexion' };
+    return { title: 'Déconnexion' };
   }
 
   @Post('/logout')

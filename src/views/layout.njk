@@ -312,7 +312,7 @@
         {% if licenseStatus and licenseStatus.state == 'blocked' %}
           <div class="notice notice-danger" role="alert">
             {% if licenseStatus.expiresAt %}
-              Licence expirée depuis le <strong>{{ licenseStatus.expiresAt | formatDate }}</strong> — l'application est en lecture seule.
+              Licence expirée depuis le <strong>{{ licenseStatus.expiresAt | formatDay }}</strong> — l'application est en lecture seule.
             {% else %}
               Aucune licence enregistrée sur cette installation — l'application est en lecture seule.
             {% endif %}
@@ -320,11 +320,11 @@
           </div>
         {% elif licenseStatus and licenseStatus.state == 'grace' %}
           <div class="notice notice-danger" role="alert">
-            Licence expirée depuis le <strong>{{ licenseStatus.expiresAt | formatDate }}</strong> — passage en lecture seule le <strong>{{ licenseStatus.graceEndsAt | formatDate }}</strong> si elle n'est pas renouvelée. <a href="/licence">Renouveler la licence</a>.
+            Licence expirée depuis le <strong>{{ licenseStatus.expiresAt | formatDay }}</strong> — passage en lecture seule le <strong>{{ licenseStatus.graceEndsAt | formatDay }}</strong> si elle n'est pas renouvelée. <a href="/licence">Renouveler la licence</a>.
           </div>
         {% elif licenseStatus and licenseStatus.showWarning %}
           <div class="notice notice-warning">
-            Licence valable jusqu'au <strong>{{ licenseStatus.expiresAt | formatDate }}</strong> ({{ licenseStatus.daysRemaining }} jour(s) restant(s)). <a href="/licence">Voir les détails</a>.
+            Licence valable jusqu'au <strong>{{ licenseStatus.expiresAt | formatDay }}</strong> ({{ licenseStatus.daysRemaining }} jour(s) restant(s)). <a href="/licence">Voir les détails</a>.
           </div>
         {% endif %}
 
@@ -598,5 +598,42 @@
     </script>
     <script src="/table-filter.js" defer></script>
     <script src="/live-search.js" defer></script>
+    {% if oldInput %}
+      {# Formulaire refuse : on re-remplit les champs avec la saisie envoyee
+         au lieu de tout vider. Valeurs passees par un attribut (echappe)
+         plutot que dans le script, pour qu'une saisie ne puisse jamais y
+         injecter de code. #}
+      <div hidden id="old-input" data-old-input="{{ oldInput | dump }}"></div>
+      <script>
+        (() => {
+          const holder = document.getElementById('old-input');
+          let old;
+          try {
+            old = JSON.parse(holder.dataset.oldInput || '{}');
+          } catch {
+            return;
+          }
+          if (!old || !old.values) return;
+          document.querySelectorAll('form').forEach((form) => {
+            const action = new URL(
+              form.getAttribute('action') || window.location.pathname,
+              window.location.origin,
+            ).pathname;
+            if (action !== old.action) return;
+            Object.entries(old.values).forEach(([name, value]) => {
+              form.querySelectorAll('[name="' + CSS.escape(name) + '"]').forEach((field) => {
+                if (['file', 'password', 'hidden', 'submit', 'button'].includes(field.type)) return;
+                if (field.type === 'checkbox' || field.type === 'radio') {
+                  field.checked = field.value === value || (field.type === 'checkbox' && value === 'on');
+                } else {
+                  field.value = value;
+                }
+                field.dispatchEvent(new Event('change', { bubbles: true }));
+              });
+            });
+          });
+        })();
+      </script>
+    {% endif %}
   </body>
 </html>

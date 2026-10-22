@@ -69,7 +69,7 @@
           {% for record in items %}
             <tr>
               <td>{{ (page - 1) * pageSize + loop.index }}</td>
-              <td>{{ record.date | formatDate }}</td>
+              <td>{{ record.date | formatDay }}</td>
               <td><a href="/students/{{ record.studentId._id }}">{{ record.studentId.lastname }} {{ record.studentId.firstname }}</a></td>
               <td>{{ record.studentId.matricule }}</td>
               <td>{{ record.schoolYearId.label if record.schoolYearId }}</td>

@@ -17,7 +17,7 @@
       <p>Aucune inscription active ou historique disponible.</p>
     {% endif %}
     {% if studentClass and studentClass.declared %}
-      <p><strong>Classe indiquee:</strong> {{ studentClass.declared }}</p>
+      <p><strong>Classe indiquée :</strong> {{ studentClass.declared }}</p>
     {% endif %}
   </section>
 
@@ -103,7 +103,7 @@
         </div>
 
         <div class="actions">
-          <button type="submit">Mettre a jour</button>
+          <button type="submit">Mettre à jour</button>
           {% if currentUser and currentUser.role in ['super_admin', 'secretariat'] %}<a class="button secondary" href="/students/{{ student._id }}/reenroll">Réinscription</a>{% endif %}
           <a class="button secondary" target="_blank" href="/reports/student-cards/{{ student._id }}/pdf">Carte scolaire</a>
         </div>
@@ -192,7 +192,7 @@
             {% for record in disciplineRecords %}
               <tr>
                 <td>{{ loop.index }}</td>
-                <td>{{ record.date | formatDate }}</td>
+                <td>{{ record.date | formatDay }}</td>
                 <td>{{ record.schoolYearId.label if record.schoolYearId }}</td>
                 <td>{% set value = record.type %}{% set group = 'disciplineRecordType' %}{% include "partials/status-badge.njk" %}</td>
                 <td>{{ record.motif }}</td>

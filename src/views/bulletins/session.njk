@@ -33,7 +33,7 @@
     </div>
 
     <h3 class="top-gap">Importer le fichier Excel rempli</h3>
-    <form method="post" action="/bulletins/{{ session._id }}/import?_csrf={{ csrfToken }}" enctype="multipart/form-data" class="stack">
+    <form method="post" action="/bulletins/{{ session._id }}/import" enctype="multipart/form-data" class="stack">
       <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
       <div class="form-grid">
         <label>Fichier Excel<input type="file" name="file" accept=".xlsx,.xls" required /></label>
@@ -84,7 +84,7 @@
       Titulaire : {{ session.meta.titulaire or '—' }} —
       Chef d'établissement : {{ session.meta.chefEtablissement or '—' }} —
       Année scolaire (fichier) : {{ session.meta.anneeScolaire or '—' }} —
-      Date du conseil : {{ session.meta.dateDuConseil | formatDate if session.meta.dateDuConseil else '—' }}
+      Date du conseil : {{ session.meta.dateDuConseil | formatDay if session.meta.dateDuConseil else '—' }}
     </p>
   {% endif %}
   {{ legend.render(['bulletinSessionStatus']) }}

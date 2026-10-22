@@ -38,7 +38,8 @@ import {
   readExcelRows,
 } from '../common/utils/excel.util';
 import { pickUploadedFile } from '../common/utils/multer.util';
-import { toDisplayString } from '../common/utils/safe-string.util';
+import { lowerFirst, toDisplayString } from '../common/utils/safe-string.util';
+import { formatMoney } from '../common/view-helpers/format-money';
 import { PopulatedEnrollmentLean } from '../common/types/populated-refs.types';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { ReenrollStudentDto } from './dto/reenroll-student.dto';
@@ -213,10 +214,14 @@ export class StudentsController {
   async search(@Query() query: SearchStudentsDto) {
     const page = Math.max(1, Number(query.page ?? 1));
     const pageSize = Math.min(100, Math.max(5, Number(query.pageSize ?? 20)));
+    // Anciens eleves = dossiers sans inscription active sur l'annee ouverte.
+    const openYear = await this.schoolYearsService.findOpen();
     const result = await this.studentsService.searchPaginated(
       query.q,
       page,
       pageSize,
+      undefined,
+      { notEnrolledInYearId: openYear ? String(openYear._id) : undefined },
     );
 
     return {
@@ -403,15 +408,17 @@ export class StudentsController {
           setFlash(
             req,
             'success',
-            `Dossier élève créé (matricule ${student.matricule}), inscrit en ${openYear.label} et paiement de ${paymentAmount} enregistré`,
+            `Dossier élève créé (matricule ${student.matricule}), inscrit en ${openYear.label} et paiement de ${formatMoney(paymentAmount)} enregistré`,
           );
           return res.redirect(`/receipts/${payment.payment._id.toString()}`);
         } catch (error) {
           setFlash(
             req,
             'error',
-            `Dossier eleve cree et inscrit, mais le paiement n'a pas ete enregistre : ${
-              error instanceof Error ? error.message : 'erreur inconnue'
+            `Dossier élève créé et inscrit, mais le paiement n'a pas été enregistré : ${
+              error instanceof Error
+                ? lowerFirst(error.message)
+                : 'erreur inconnue'
             }`,
           );
           return res.redirect('/students');
@@ -421,7 +428,9 @@ export class StudentsController {
           req,
           'error',
           `Dossier eleve cree avec le matricule ${student.matricule}, mais l'inscription n'a pas ete effectuee : ${
-            error instanceof Error ? error.message : 'erreur inconnue'
+            error instanceof Error
+              ? lowerFirst(error.message)
+              : 'erreur inconnue'
           }`,
         );
         return res.redirect('/students');

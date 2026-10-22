@@ -16,6 +16,9 @@ declare module 'express-session' {
       tempPassword: string;
     };
     selectedSchoolYearId?: string;
+    // Saisie d'un formulaire refuse, pour le re-remplir a l'affichage suivant
+    // (meme duree de vie que flash).
+    oldInput?: { action: string; values: Record<string, string> };
   }
 }
 
@@ -47,6 +50,7 @@ declare global {
       } | null;
       licenseEnforcementEnabled?: boolean;
       licenseStatus?: unknown;
+      oldInput?: { action: string; values: Record<string, string> };
     }
   }
 }

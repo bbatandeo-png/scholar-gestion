@@ -2849,3 +2849,112 @@ form[role='search'].toolbar-grid {
   background: rgba(100, 116, 139, 0.14);
   color: var(--muted, #64748b);
 }
+
+/* Mobile (rapport A14) : en-tete compact sur une ou deux lignes au lieu de
+   la moitie du premier ecran, pas de debordement horizontal, bouton Menu
+   qui ne recouvre plus le contenu en defilant, et boutons d'action des
+   listes toujours visibles. */
+@media (max-width: 640px) {
+  .topbar {
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .topbar .eyebrow {
+    display: none;
+  }
+  /* En colonne, la largeur de base (420px) devenait une HAUTEUR de 420px :
+     c'est le grand vide sous le titre. */
+  .topbar-heading {
+    flex: 0 0 auto;
+  }
+  .topbar-actions {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+  }
+  .topbar-actions .global-search {
+    grid-column: 1 / -1;
+  }
+  .topbar-actions .user-chip {
+    display: none;
+  }
+  .topbar-actions .btn-logout {
+    width: auto;
+    padding-inline: 12px;
+  }
+  .topbar-actions .btn-logout span {
+    display: none;
+  }
+  .topbar-actions form:has(.btn-logout) {
+    width: auto;
+  }
+  .table-shell {
+    margin-inline: 0;
+    width: 100%;
+  }
+  .mobile-nav-toggle {
+    position: absolute;
+  }
+  .table-shell table tr > :last-child:not(:only-child) {
+    position: sticky;
+    right: 0;
+    background: var(--panel);
+    box-shadow: -6px 0 8px -6px rgba(19, 34, 56, 0.18);
+  }
+}
+
+/* Liste nominative (page Eleves) : bloc aere, texte a gauche, choix de la
+   classe et bouton alignes a droite ; empiles sur mobile. */
+.nominal-roll {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4, 16px) var(--space-6, 24px);
+  margin: var(--space-5, 20px) 0 var(--space-6, 24px);
+  padding: var(--space-4, 16px) var(--space-5, 20px);
+  border: 1px solid var(--line, #e1e4e9);
+  border-radius: 14px;
+  background: var(--surface-hover, #f6f7f9);
+}
+.nominal-roll-text h3 {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+}
+.nominal-roll-text p {
+  margin: 0;
+}
+.nominal-roll-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3, 12px);
+}
+.nominal-roll-form select {
+  min-width: 220px;
+}
+@media (max-width: 640px) {
+  .nominal-roll-form,
+  .nominal-roll-form label,
+  .nominal-roll-form select,
+  .nominal-roll-form .button {
+    width: 100%;
+  }
+}
+
+/* Page Eleves : la barre d'actions prend toute la ligne et le champ de
+   recherche s'etire, pour que le texte d'aide ne soit plus coupe. */
+.student-list-actions {
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3, 12px);
+}
+.student-list-actions > form#main-search {
+  flex: 1 1 360px;
+}
+.student-list-actions > form#main-search .search-controls {
+  width: 100%;
+}

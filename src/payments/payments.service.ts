@@ -19,6 +19,8 @@ import { SettingsService } from '../settings/settings.service';
 import { EcolesService } from '../ecoles/ecoles.service';
 import { PopulatedInvoiceLean } from '../common/types/populated-refs.types';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { ENUM_META } from '../common/view-helpers/enum-meta';
+import { formatMoney } from '../common/view-helpers/format-money';
 import { Payment, PaymentDocument } from './schemas/payment.schema';
 
 // Shape of a receipt after findReceiptById()'s deep populate + lean() +
@@ -30,6 +32,8 @@ export interface ReceiptPaymentLean {
   receiptNumber?: string;
   amount?: number;
   paidAt?: Date;
+  method?: string;
+  reference?: string;
   schoolYearId?: string;
   invoiceId?: ReceiptInvoiceLean | null;
 }
@@ -69,7 +73,7 @@ export class PaymentsService {
         throw new NotFoundException('Facture introuvable');
       }
       if (dto.amount > invoice.balanceDue) {
-        throw new BadRequestException('Le montant depasse le solde restant');
+        throw new BadRequestException('Le montant dépasse le solde restant');
       }
 
       const rule = await this.settingsService.getPaymentAllocationRule(
@@ -431,12 +435,31 @@ export class PaymentsService {
       ['Classe', levelLabel],
     ];
     if (receiptMode === ReceiptMode.TUITION_AND_REGISTRATION) {
-      rows.push(["Frais d'inscription", receiptSummary.registrationFee ?? '-']);
+      rows.push([
+        "Frais d'inscription",
+        typeof receiptSummary.registrationFee === 'number'
+          ? formatMoney(receiptSummary.registrationFee, { plainSpaces: true })
+          : '-',
+      ]);
     }
-    rows.push(['Montant de l’écolage', receiptSummary.tuitionFee]);
-    rows.push(['Nouveau paiement', receipt.amount ?? '-']);
-    rows.push(['Total payé', receiptSummary.totalPaid]);
-    rows.push(['Reste à payer', receiptSummary.balanceDue]);
+    // Montants formates comme a l'ecran (« 25 000 FCFA »), et mode de
+    // paiement / reference saisie au guichet (rapport A27).
+    const money = (value: unknown) =>
+      typeof value === 'number'
+        ? formatMoney(value, { plainSpaces: true })
+        : '-';
+    rows.push(['Montant de l’écolage', money(receiptSummary.tuitionFee)]);
+    rows.push(['Nouveau paiement', money(receipt.amount)]);
+    rows.push([
+      'Mode de paiement',
+      ENUM_META.paymentMethod[String(receipt.method)]?.label ??
+        String(receipt.method ?? '-'),
+    ]);
+    if (receipt.reference) {
+      rows.push(['Référence du paiement', String(receipt.reference)]);
+    }
+    rows.push(['Total payé', money(receiptSummary.totalPaid)]);
+    rows.push(['Reste à payer', money(receiptSummary.balanceDue)]);
 
     const startX = doc.page.margins.left;
     const usableWidth =
@@ -463,7 +486,7 @@ export class PaymentsService {
       doc
         .font('Times-Bold')
         .fontSize(10)
-        .text('REÇU DE PAIEMENT DES FRAIS DE SCOLARITE', startX, y, {
+        .text('REÇU DE PAIEMENT DES FRAIS DE SCOLARITÉ', startX, y, {
           width: usableWidth,
           align: 'center',
         });

@@ -3,7 +3,7 @@
   <section class="panel">
     <div class="panel-heading">
       <div>
-        <h2>Enregistrer une dépense</h2>
+        <h2>{% if editExpense %}Dépenses{% else %}Enregistrer une dépense{% endif %}</h2>
         <p class="muted">Sorties de fonds de l'établissement, classées par catégorie.</p>
       </div>
       <div class="panel-heading-actions">
@@ -13,6 +13,8 @@
       </div>
     </div>
 
+    {# En modification, seul le formulaire de modification est affiche. #}
+    {% if not editExpense %}
     {% if not categories.length %}
       <div class="notice notice-warning">
         Aucune catégorie de dépense : <a href="/expenses/categories">créez-en une</a> avant d'enregistrer une dépense.
@@ -24,7 +26,7 @@
       <div class="form-grid">
         <label>Date<input type="date" name="expenseDate" required data-default-today /></label>
         <label>Libellé<input type="text" name="label" required placeholder="Ex : Achat de craies" autocomplete="off" /></label>
-        <label>Montant (FCFA)<input type="number" name="amount" min="0" step="0.01" required inputmode="decimal" /></label>
+        <label>Montant (FCFA)<input type="number" name="amount" min="1" step="1" required inputmode="numeric" /></label>
         <label>Bénéficiaire<input type="text" name="beneficiary" required placeholder="Ex : Librairie du Centre" /></label>
         <label>Catégorie<select name="categoryId" required>
           {% for category in categories %}<option value="{{ category._id }}">{{ category.name }}</option>{% endfor %}
@@ -34,6 +36,7 @@
         <button type="submit" class="button btn-icon icon-save" {% if not categories.length %}disabled{% endif %}>Enregistrer la dépense</button>
       </div>
     </form>
+    {% endif %}
   </section>
 
   {% if editExpense %}
@@ -49,7 +52,7 @@
         <div class="form-grid">
           <label>Date<input type="date" name="expenseDate" value="{{ editExpense.expenseDate | inputDate }}" required /></label>
           <label>Libellé<input type="text" name="label" value="{{ editExpense.label }}" required /></label>
-          <label>Montant (FCFA)<input type="number" name="amount" min="0" step="0.01" value="{{ editExpense.amount }}" required inputmode="decimal" /></label>
+          <label>Montant (FCFA)<input type="number" name="amount" min="1" step="1" value="{{ editExpense.amount }}" required inputmode="numeric" /></label>
           <label>Bénéficiaire<input type="text" name="beneficiary" value="{{ editExpense.beneficiary }}" required /></label>
           <label>Catégorie<select name="categoryId" required>
             {% for category in categories %}

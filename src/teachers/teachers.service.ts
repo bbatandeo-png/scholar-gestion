@@ -36,8 +36,20 @@ import { TeacherAssignment } from './schemas/teacher-assignment.schema';
 import { TeacherContract } from './schemas/teacher-contract.schema';
 import { TeacherDocumentFile } from './schemas/teacher-document.schema';
 import { TeacherTrackingRecord } from './schemas/teacher-tracking-record.schema';
+import {
+  assertEndAfterStart,
+  assertHiredAfterMinimumAge,
+  assertNotInFuture,
+} from '../common/utils/date-rules.util';
+import { accentInsensitiveRegExp } from '../common/utils/search-pattern.util';
 
 const CONTRACT_EXPIRY_WARNING_DAYS = 30;
+
+function startOfToday() {
+  const day = new Date();
+  day.setHours(0, 0, 0, 0);
+  return day;
+}
 
 @Injectable()
 export class TeachersService {
@@ -55,15 +67,11 @@ export class TeachersService {
     private readonly auditService: AuditService,
   ) {}
 
-  private escapeRegExp(value: string) {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  }
-
   async list(filters: SearchTeachersDto = {}) {
     const query: Record<string, unknown> = {};
     if (filters.status) query.status = filters.status;
     if (filters.q) {
-      const pattern = { $regex: this.escapeRegExp(filters.q), $options: 'i' };
+      const pattern = accentInsensitiveRegExp(filters.q);
       query.$or = [{ lastname: pattern }, { firstname: pattern }];
     }
     return this.teacherModel
@@ -131,6 +139,7 @@ export class TeachersService {
   }
 
   async create(dto: CreateTeacherDto, actorId?: string) {
+    this.assertTeacherDates(dto);
     const teacher = await this.teacherModel.create({
       lastname: dto.lastname,
       firstname: dto.firstname,
@@ -156,6 +165,7 @@ export class TeachersService {
   }
 
   async update(id: string, dto: CreateTeacherDto, actorId?: string) {
+    this.assertTeacherDates(dto);
     const updated = await this.teacherModel
       .findByIdAndUpdate(
         id,
@@ -199,6 +209,41 @@ export class TeachersService {
       .exec();
   }
 
+  private assertTeacherDates(dto: CreateTeacherDto) {
+    assertNotInFuture(dto.birthDate, 'La date de naissance');
+    assertHiredAfterMinimumAge(dto.birthDate, dto.hireDate);
+  }
+
+  // Une matiere ne s'affecte que si elle est au programme de la classe
+  // pour l'annee (Matieres et coefficients) - rapport A10. Une classe sans
+  // aucune matiere configuree (ecole sans le module Bulletins) n'est pas
+  // bloquee.
+  private async assertSubjectInProgram(
+    schoolYearId: string,
+    levelId: string,
+    subjectId: string,
+  ) {
+    const classSubjectModel = this.assignmentModel.db?.models?.ClassSubject as
+      | Model<{ subjectId: Types.ObjectId }>
+      | undefined;
+    if (!classSubjectModel) {
+      return;
+    }
+    const program = await classSubjectModel
+      .find({ schoolYearId, levelId })
+      .select('subjectId')
+      .lean()
+      .exec();
+    if (
+      program.length > 0 &&
+      !program.some((cs) => String(cs.subjectId) === String(subjectId))
+    ) {
+      throw new BadRequestException(
+        "Cette matière n'est pas au programme de la classe choisie. Ajoutez-la d'abord dans Matières et coefficients.",
+      );
+    }
+  }
+
   // ---- Affectations ----
 
   async listAssignments(teacherId: string) {
@@ -224,6 +269,9 @@ export class TeachersService {
     dto: CreateTeacherAssignmentDto,
   ) {
     await this.findById(teacherId);
+    for (const levelId of dto.levelIds) {
+      await this.assertSubjectInProgram(schoolYearId, levelId, dto.subjectId);
+    }
     let created = 0;
     let skipped = 0;
     for (const levelId of dto.levelIds) {
@@ -285,6 +333,11 @@ export class TeachersService {
     if (!assignment) {
       throw new NotFoundException('Affectation introuvable');
     }
+    await this.assertSubjectInProgram(
+      String(assignment.schoolYearId),
+      String(assignment.levelId),
+      dto.subjectId,
+    );
 
     if (dto.isTitulaire) {
       await this.assignmentModel
@@ -335,7 +388,22 @@ export class TeachersService {
 
   // ---- Contrats ----
 
+  // Le statut suit les dates : un contrat actif dont la date de fin est
+  // passee est expire (rapport A03), sans attendre une action manuelle.
+  private async expireEndedContracts() {
+    await this.contractModel
+      .updateMany(
+        {
+          status: TeacherContractStatus.ACTIF,
+          endDate: { $exists: true, $lt: startOfToday() },
+        },
+        { status: TeacherContractStatus.EXPIRE },
+      )
+      .exec();
+  }
+
   async listContracts(teacherId: string) {
+    await this.expireEndedContracts();
     return this.contractModel
       .find({ teacherId })
       .sort({ startDate: -1 })
@@ -351,6 +419,7 @@ export class TeachersService {
     dto: CreateTeacherContractDto,
     actorId?: string,
   ) {
+    assertEndAfterStart(dto.startDate, dto.endDate);
     await this.findById(teacherId);
     return runWithMongoTransactionFallback(this.connection, async (session) => {
       const existing = await this.contractModel
@@ -441,6 +510,7 @@ export class TeachersService {
     if (!contract) {
       throw new NotFoundException('Contrat introuvable');
     }
+    assertEndAfterStart(dto.startDate, dto.endDate);
 
     const before = {
       type: contract.type,
@@ -650,6 +720,7 @@ export class TeachersService {
       this.teacherModel.countDocuments({ status: 'depart' }).exec(),
     ]);
 
+    await this.expireEndedContracts();
     const expiryThreshold = new Date();
     expiryThreshold.setDate(
       expiryThreshold.getDate() + CONTRACT_EXPIRY_WARNING_DAYS,
@@ -657,7 +728,8 @@ export class TeachersService {
     const expiringContracts = await this.contractModel
       .find({
         status: TeacherContractStatus.ACTIF,
-        endDate: { $exists: true, $lte: expiryThreshold },
+        // A venir uniquement : un contrat deja termine n'expire plus.
+        endDate: { $exists: true, $gte: startOfToday(), $lte: expiryThreshold },
       })
       .populate('teacherId')
       .sort({ endDate: 1 })

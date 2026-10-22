@@ -22,7 +22,7 @@
           </label>
         </div>
         <div class="stack compact-actions">
-          <button type="submit">{% if editYear %}Mettre a jour{% else %}Enregistrer{% endif %}</button>
+          <button type="submit">{% if editYear %}Mettre à jour{% else %}Enregistrer{% endif %}</button>
           {% if editYear %}
             <a class="button secondary" href="/settings/school-years">Annuler</a>
           {% endif %}
@@ -46,8 +46,8 @@
               <tr>
                 <td>{{ loop.index }}</td>
                 <td>{{ item.label }}</td>
-                <td>{{ item.startDate | formatDate }}</td>
-                <td>{{ item.endDate | formatDate }}</td>
+                <td>{{ item.startDate | formatDay }}</td>
+                <td>{{ item.endDate | formatDay }}</td>
                 <td>{% set value = item.status %}{% set group = 'schoolYearStatus' %}{% include "partials/status-badge.njk" %}</td>
                 <td>
                   <div class="table-actions">

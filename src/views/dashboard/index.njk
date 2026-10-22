@@ -45,6 +45,9 @@
           <a href="/dashboard" class="button secondary btn-sm">Réinitialiser</a>
         {% endif %}
       </form>
+      {% if datesSwapped %}
+        <p class="notice notice-warning" role="status" style="margin:14px 0 0;">La date de début était postérieure à la date de fin : les deux dates ont été inversées.</p>
+      {% endif %}
       {% if filters.dateFrom or filters.dateTo %}
         <p class="muted" style="margin:14px 0 0;">
           Période du {{ filters.dateFrom or 'début de l’année' }} au {{ filters.dateTo or 'aujourd’hui' }} :
@@ -66,9 +69,13 @@
       <article class="card"><div class="muted">Effectif total</div><div class="metric">{{ summary.totalStudents }}</div></article>
       <article class="card"><div class="muted">Frais d'inscription encaissés</div><div class="metric">{{ summary.registrationRevenue | money }}</div></article>
       <article class="card"><div class="muted">Frais d'écolage encaissés</div><div class="metric">{{ summary.tuitionRevenue | money }}</div></article>
-      <article class="card"><div class="muted">Dépenses</div><div class="metric">{{ summary.totalExpenses | money }}</div></article>
-      <article class="card"><div class="muted">Solde disponible</div><div class="metric">{{ summary.availableBalance | money }}</div></article>
-      <article class="card"><div class="muted">Recettes encaissees</div><div class="metric">{{ summary.revenue | money }}</div></article>
+      {% if summary.expensesByClass %}
+        <article class="card"><div class="muted">Dépenses</div><div class="metric">{{ summary.totalExpenses | money }}</div></article>
+        <article class="card"><div class="muted">Solde disponible</div><div class="metric">{{ summary.availableBalance | money }}</div></article>
+      {% else %}
+        <article class="card"><div class="muted">Dépenses et solde</div><div class="metric">—</div><p class="muted">Les dépenses concernent toute l’école : elles ne sont pas réparties par classe.</p></article>
+      {% endif %}
+      <article class="card"><div class="muted">Recettes encaissées</div><div class="metric">{{ summary.revenue | money }}</div></article>
       <article class="card"><div class="muted">Impayés globaux</div><div class="metric">{{ summary.totalBalance | money }}</div></article>
       <article class="card"><div class="muted">Taux de recouvrement</div><div class="metric">{{ summary.recoveryRate }}%</div></article>
       <article class="card"><div class="muted">Élèves actifs</div><div class="metric">{{ summary.activeStudents }}</div></article>
@@ -99,7 +106,7 @@
           <div class="chart-card-heading">
             <div>
               <h3>Encaissements</h3>
-              <p class="muted">En millions de FCFA, par mois.</p>
+              <p class="muted" id="chart-encaissements-unit">Montants encaissés, par mois.</p>
             </div>
             {% if currentUser and currentUser.role in ['super_admin', 'direction', 'comptabilite', 'auditeur'] %}<a href="/reports/revenue" class="button secondary btn-sm">Voir le détail</a>{% endif %}
           </div>
@@ -112,12 +119,12 @@
       {% if activeModules and activeModules.finance %}
         <article class="card chart-card">
           <h3>Répartition des recettes</h3>
-          <p class="muted">Inscription, écolage et dépenses de la période affichée.</p>
+          <p class="muted">Inscription, écolage{% if summary.expensesByClass %} et dépenses{% endif %} de la période affichée.</p>
           <div id="chart-revenue"></div>
         </article>
         <article class="card chart-card">
           <h3>Taux de recouvrement</h3>
-          <p class="muted">Part de l’écolage total dû déjà encaissée.</p>
+          <p class="muted">Part des frais dus (inscription et écolage) déjà encaissée.</p>
           <div id="chart-recovery"></div>
         </article>
       {% endif %}
@@ -140,7 +147,7 @@
 
         const revenueEl = document.getElementById('chart-revenue');
         if (revenueEl) {
-          renderBarChart(revenueEl, revenueByCategory, { ariaLabel: 'Repartition des recettes' });
+          renderBarChart(revenueEl, revenueByCategory, { ariaLabel: 'Répartition des recettes' });
         }
 
         const recoveryEl = document.getElementById('chart-recovery');
@@ -164,6 +171,8 @@
         if (encaissementsEl) {
           renderGroupedBarChart(encaissementsEl, monthlyEncaissements, {
             ariaLabel: 'Encaissements mensuels',
+            autoUnit: true,
+            unitTarget: document.getElementById('chart-encaissements-unit'),
             series: [
               { key: 'previousYear', label: previousYearLabel, color: '#db6c3f' },
               { key: 'currentYear', label: currentYearLabel, color: '#0e7c66' },

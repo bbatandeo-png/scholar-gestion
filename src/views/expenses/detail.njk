@@ -4,7 +4,7 @@
     <div class="panel-heading">
       <div>
         <h2>Détail de la dépense</h2>
-        <p class="muted">Fiche complète de l'opération et motif de dernière modification.</p>
+        <p class="muted">Fiche complète de l'opération et historique de ses modifications.</p>
       </div>
       <div class="toolbar">
         <a class="button secondary" href="/expenses">Retour aux dépenses</a>
@@ -13,25 +13,40 @@
     </div>
     <div class="stack">
       <div><strong>Numéro:</strong> {{ expense.orderNumber }}</div>
-      <div><strong>Date:</strong> {{ expense.expenseDate | formatDate }}</div>
+      <div><strong>Date:</strong> {{ expense.expenseDate | formatDay }}</div>
       <div><strong>Libellé:</strong> {{ expense.label }}</div>
       <div><strong>Montant:</strong> {{ expense.amount | money }}</div>
       <div><strong>Bénéficiaire:</strong> {{ expense.beneficiary }}</div>
       <div><strong>Catégorie:</strong> {{ expense.categoryId.name if expense.categoryId else '' }}</div>
-      <div><strong>Dernière modification:</strong>
-        {% if expense.modifiedAt %}
-          {{ expense.modifiedAt | formatDate }}
-        {% else %}
-          Aucune
-        {% endif %}
-      </div>
-      <div><strong>Motif de modification:</strong>
-        {% if expense.lastModificationReason %}
-          {{ expense.lastModificationReason }}
-        {% else %}
-          Aucun
-        {% endif %}
-      </div>
     </div>
+
+    <h3 class="top-gap">Historique des modifications</h3>
+    {% if expense.modificationHistory and expense.modificationHistory.length %}
+      <div class="table-shell">
+        <table class="table-report" data-no-filter>
+          <thead><tr><th>Date</th><th>Par</th><th>Motif</th><th>Changements</th></tr></thead>
+          <tbody>
+            {% for entry in expense.modificationHistory | reverse %}
+              <tr>
+                <td>{{ entry.at | formatDate }}</td>
+                <td>{{ entry.byName or '—' }}</td>
+                <td>{{ entry.reason }}</td>
+                <td>
+                  {% for change in entry.changes %}
+                    <div><strong>{{ change.field }}</strong> : {% if change.field == 'Montant' %}{{ change.before | money }} → {{ change.after | money }}{% else %}{{ change.before or '—' }} → {{ change.after or '—' }}{% endif %}</div>
+                  {% else %}
+                    <span class="muted">Aucune valeur changée</span>
+                  {% endfor %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% elif expense.lastModificationReason %}
+      <p class="muted">Modifiée le {{ expense.modifiedAt | formatDate }} : {{ expense.lastModificationReason }} (détail des valeurs non conservé pour cette ancienne modification).</p>
+    {% else %}
+      <p class="muted">Aucune modification depuis l'enregistrement.</p>
+    {% endif %}
   </section>
 {% endblock %}

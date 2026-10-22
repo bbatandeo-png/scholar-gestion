@@ -45,7 +45,7 @@ describe('DashboardController.index', () => {
     const result = await controller.index(fakeRequest);
 
     expect(result).toEqual({
-      title: 'Dashboard',
+      title: 'Tableau de bord',
       summary: null,
       selectedYear: null,
     });
@@ -75,12 +75,13 @@ describe('DashboardController.index', () => {
       'year-1',
     );
     expect(result).toEqual({
-      title: 'Dashboard',
+      title: 'Tableau de bord',
       summary: { totalStudents: 42 },
       selectedYear: year,
       levels: [],
       encaissements: emptyEncaissements,
       filters: { levelId: '', dateFrom: '', dateTo: '' },
+      datesSwapped: false,
     });
   });
 
@@ -114,6 +115,8 @@ describe('DashboardController.index', () => {
       dateFrom: '2026-09-01',
       dateTo: '2026-09-30',
     });
+    // Rapport A20 : l'inversion est signalee a l'utilisateur.
+    expect(result.datesSwapped).toBe(true);
   });
 
   it('ignore une date invalide plutot que de planter', async () => {

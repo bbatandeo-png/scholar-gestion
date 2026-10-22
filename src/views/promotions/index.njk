@@ -28,7 +28,7 @@
 
     <h3>Importer un fichier Excel des élèves admis</h3>
     <p>Colonnes attendues : <strong>matricule</strong>, <strong>décision</strong>, <strong>niveau_cible</strong>. Valeurs possibles pour <em>décision</em> : Admis, Redouble, Transféré, Quitte l’école, Archivé.</p>
-    <form method="post" action="/promotions/prepare-import?_csrf={{ csrfToken }}" enctype="multipart/form-data" class="stack">
+    <form method="post" action="/promotions/prepare-import" enctype="multipart/form-data" class="stack">
       <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
       <div class="form-grid">
         <label>Année source

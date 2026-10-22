@@ -63,13 +63,13 @@
               {% endfor %}
             </select>
           </label>
-          <label id="discountField">Reduction de frais (optionnel)
+          <label id="discountField">Réduction de frais (optionnel)
             <input type="number" name="discountAmount" min="0" step="0.01" placeholder="0.00" />
           </label>
         </div>
 
         {% if activeModules and activeModules.finance and currentUser and (currentUser.role == 'super_admin' or currentUser.role == 'secretariat') %}
-          <h3 id="paymentSectionTitle">Paiement a l'inscription <span class="muted">(optionnel)</span></h3>
+          <h3 id="paymentSectionTitle">Paiement à l'inscription <span class="muted">(optionnel)</span></h3>
           <p id="feeHint" class="muted">Choisissez un niveau pour voir le montant de l'inscription.</p>
           <div class="form-grid">
             <label>Montant payé maintenant
@@ -96,7 +96,7 @@
       <div class="panel-heading">
         <div>
           <h2>Situation de l'élève</h2>
-          <p class="muted">Aperçu instantané pour décider de l inscription ou du règlement à prévoir.</p>
+          <p class="muted">Aperçu instantané pour décider de l'inscription ou du règlement à prévoir.</p>
         </div>
         <span id="studentFinancialBadge" class="badge badge-neutral">En attente</span>
       </div>
@@ -392,7 +392,7 @@
       };
       paymentAmountInput?.addEventListener('input', updateSubmitLabel);
 
-      const enterPayOnlyMode = (currentEnrollment) => {
+      const enterPayOnlyMode = (currentEnrollment, balanceDue) => {
         payOnly = true;
         const levelId = currentEnrollment.levelId?._id;
         const levelLabel = currentEnrollment.levelSnapshot?.label || currentEnrollment.levelId?.label;
@@ -407,13 +407,18 @@
         if (paymentAmountInput) {
           paymentAmountInput.required = true;
           paymentAmountInput.min = '1';
+          // Jamais plus que le reste a payer : refuse avant la confirmation.
+          if (Number(balanceDue) > 0) {
+            paymentAmountInput.max = String(balanceDue);
+            paymentAmountInput.title = 'Au plus ' + formatMoney(balanceDue) + ' (reste à payer)';
+          }
         }
         if (notice) {
           notice.hidden = false;
           notice.textContent =
             'Cet élève est déjà inscrit cette année' +
             (levelLabel ? ' en ' + levelLabel : '') +
-            '. Ce paiement sera ajoute a sa facture existante.';
+            '. Ce paiement sera ajouté à sa facture existante.';
         }
         updateSubmitLabel();
       };
@@ -427,14 +432,21 @@
         if (typeField) typeField.hidden = false;
         if (discountField) discountField.hidden = false;
         if (formTitle) formTitle.textContent = 'Créer une inscription';
-        if (paymentSectionTitle) paymentSectionTitle.innerHTML = "Paiement a l'inscription <span class=\"muted\">(optionnel)</span>";
+        if (paymentSectionTitle) paymentSectionTitle.innerHTML = "Paiement à l'inscription <span class=\"muted\">(optionnel)</span>";
         if (paymentAmountInput) {
           paymentAmountInput.required = false;
           paymentAmountInput.min = '0';
+          paymentAmountInput.removeAttribute('max');
+          paymentAmountInput.removeAttribute('title');
         }
         if (notice) notice.hidden = true;
         updateSubmitLabel();
       };
+
+      // Libelles francais des statuts de facture (jamais le code brut « unpaid »).
+      const INVOICE_STATUS_META = {{ ENUM_META.invoiceStatus | dump | safe }};
+      const invoiceStatusLabel = (status) =>
+        (INVOICE_STATUS_META[status] && INVOICE_STATUS_META[status].label) || status || '-';
 
       const renderEmpty = (message) => {
         if (classInfo) classInfo.hidden = true;
@@ -452,7 +464,7 @@
         const totalDue = Number(payload.totalDue ?? 0);
         const openArrearsAmount = Number(payload.openArrearsAmount ?? 0);
         const outstandingInvoicesAmount = Number(payload.outstandingInvoicesAmount ?? 0);
-        const settlementLabel = payload.isSettled ? 'Soldé' : 'A régler';
+        const settlementLabel = payload.isSettled ? 'Soldé' : 'À régler';
         const settlementClass = payload.isSettled ? 'badge' : 'badge badge-danger';
         const invoiceProgress = currentInvoice.totalDue
           ? Math.min(Math.round(((Number(currentInvoice.paidAmount ?? 0) / Number(currentInvoice.totalDue)) * 100)), 100)
@@ -486,7 +498,7 @@
             </article>
             <article class="status-metric">
               <span>Facture en cours</span>
-              <strong>${currentInvoice.status || '-'}</strong>
+              <strong>${invoiceStatusLabel(currentInvoice.status)}</strong>
             </article>
             <article class="status-metric">
               <span>Reste facture</span>
@@ -519,7 +531,10 @@
         `;
 
         if (payload.currentEnrollment && payload.currentEnrollment.status === 'active') {
-          enterPayOnlyMode(payload.currentEnrollment);
+          enterPayOnlyMode(
+            payload.currentEnrollment,
+            Number((payload.currentInvoice || {}).balanceDue ?? 0),
+          );
         } else {
           exitPayOnlyMode();
         }

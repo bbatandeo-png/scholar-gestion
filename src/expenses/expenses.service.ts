@@ -18,6 +18,7 @@ import {
   SchoolYearDocument,
 } from '../school-years/schemas/school-year.schema';
 import { SchoolYearStatus } from '../common/enums/domain.enums';
+import { accentInsensitiveRegExp } from '../common/utils/search-pattern.util';
 
 type PdfDocumentInstance = InstanceType<typeof PDFDocument>;
 
@@ -103,7 +104,7 @@ export class ExpensesService {
   async list(schoolYearId: string, query?: string, categoryId?: string) {
     const criteria: Record<string, unknown> = { schoolYearId };
     if (query) {
-      const regex = new RegExp(query.trim(), 'i');
+      const regex = accentInsensitiveRegExp(query);
       criteria.$or = [
         { label: regex },
         { beneficiary: regex },
@@ -195,7 +196,36 @@ export class ExpensesService {
       categoryId: string;
       modificationReason?: string;
     },
+    actor?: { id?: string; name?: string },
   ) {
+    const current = await this.expenseModel
+      .findOne({ _id: id, schoolYearId })
+      .populate('categoryId')
+      .lean()
+      .exec();
+    if (!current) {
+      throw new NotFoundException('Dépense introuvable');
+    }
+    const newCategory = await this.categoryModel
+      .findById(dto.categoryId)
+      .lean()
+      .exec();
+    const dayOf = (value: unknown) =>
+      value ? new Date(value as string).toISOString().slice(0, 10) : '';
+    const currentCategory = current.categoryId as unknown as
+      | { name?: string }
+      | undefined;
+    const compared: Array<[string, string, string]> = [
+      ['Date', dayOf(current.expenseDate), dayOf(dto.expenseDate)],
+      ['Libellé', current.label ?? '', dto.label.trim()],
+      ['Montant', String(current.amount ?? ''), String(Number(dto.amount))],
+      ['Bénéficiaire', current.beneficiary ?? '', dto.beneficiary.trim()],
+      ['Catégorie', currentCategory?.name ?? '', newCategory?.name ?? ''],
+    ];
+    const changes = compared
+      .filter(([, before, after]) => before !== after)
+      .map(([field, before, after]) => ({ field, before, after }));
+
     const updatePayload: {
       expenseDate: Date;
       label: string;
@@ -218,7 +248,22 @@ export class ExpensesService {
     }
 
     const expense = await this.expenseModel
-      .findOneAndUpdate({ _id: id, schoolYearId }, updatePayload, { new: true })
+      .findOneAndUpdate(
+        { _id: id, schoolYearId },
+        {
+          ...updatePayload,
+          $push: {
+            modificationHistory: {
+              at: new Date(),
+              byId: actor?.id,
+              byName: actor?.name,
+              reason: dto.modificationReason?.trim() ?? '',
+              changes,
+            },
+          },
+        },
+        { new: true },
+      )
       .exec();
     if (!expense) {
       throw new NotFoundException('Dépense introuvable');

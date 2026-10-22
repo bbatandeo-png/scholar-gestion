@@ -95,6 +95,36 @@ export class SettingsService {
     return this.parseStudentMatriculeRule(setting?.value);
   }
 
+  // Le vrai prochain matricule (rapport A23) : apres le plus grand numero deja
+  // attribue avec ce prefixe, jamais en dessous du numero de depart choisi -
+  // meme calcul que la creation d'un eleve (StudentsService).
+  async previewNextStudentMatricule() {
+    const rule = await this.getStudentMatriculeRule();
+    const basePrefix = `${rule.prefix}${rule.separator}`;
+    const escaped = basePrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp(`^${escaped}(\\d+)$`, 'i');
+    const studentModel = this.settingModel.db?.models?.Student as
+      | Model<{ matricule: string }>
+      | undefined;
+    const existing = studentModel
+      ? await studentModel
+          .find({ matricule: pattern })
+          .select('matricule')
+          .lean()
+          .exec()
+      : [];
+    let highest = 0;
+    for (const student of existing) {
+      const match = pattern.exec(String(student.matricule));
+      if (match) highest = Math.max(highest, Number(match[1]));
+    }
+    const nextNumber = Math.max(rule.startAt, highest + 1);
+    return {
+      matricule: `${basePrefix}${String(nextNumber).padStart(rule.padding, '0')}`,
+      highestUsed: highest,
+    };
+  }
+
   async setStudentMatriculeRule(value: StudentMatriculeRule) {
     const normalized = this.parseStudentMatriculeRule(JSON.stringify(value));
     const criteria = {

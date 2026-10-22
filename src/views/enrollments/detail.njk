@@ -117,7 +117,7 @@
             <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
             <input type="hidden" name="invoiceId" value="{{ invoice._id }}" />
             <div class="form-grid">
-              <label>Montant<input type="number" name="amount" min="1" required /></label>
+              <label>Montant<input type="number" name="amount" min="1" {% if invoice.balanceDue > 0 %}max="{{ invoice.balanceDue }}" title="Au plus {{ invoice.balanceDue | money }} (reste à payer)"{% endif %} required /></label>
               <label>Mode
                 <select name="method">
                   {% for key, meta in ENUM_META.paymentMethod %}

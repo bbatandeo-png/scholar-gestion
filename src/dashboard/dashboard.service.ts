@@ -173,11 +173,16 @@ export class DashboardService {
           })
           .lean()
           .exec(),
-        // Not level-scoped: an expense isn't tied to any one class.
-        this.expenseModel
-          .find({ schoolYearId, isCancelled: { $ne: true } })
-          .lean()
-          .exec(),
+        // Une depense n'est rattachee a aucune classe : avec un filtre par
+        // classe, elle n'est pas imputee a cette classe (rapport A12).
+        levelId
+          ? Promise.resolve(
+              [] as Array<{ amount?: number; expenseDate?: Date }>,
+            )
+          : this.expenseModel
+              .find({ schoolYearId, isCancelled: { $ne: true } })
+              .lean()
+              .exec(),
       ]);
 
     const invoiceIds = invoices.map((invoice) => String(invoice._id));
@@ -362,6 +367,7 @@ export class DashboardService {
       totalExpenses,
       availableBalance,
       recoveryRate,
+      expensesByClass: !levelId,
       activeStudents,
       archivedStudents,
       arrearsOpen,
@@ -378,7 +384,7 @@ export class DashboardService {
         revenueByCategory: [
           { label: "Frais d'inscription", value: registrationRevenue },
           { label: 'Frais d’écolage', value: tuitionRevenue },
-          { label: 'Dépenses', value: totalExpenses },
+          ...(levelId ? [] : [{ label: 'Dépenses', value: totalExpenses }]),
         ],
         recoveryBreakdown: [
           { label: 'Encaissé', value: Math.max(revenue, 0) },
@@ -460,8 +466,10 @@ export class DashboardService {
         }
         return sum;
       }, 0);
-    const toMillions = (value: number) =>
-      Math.round((value / 1_000_000) * 10) / 10;
+    // Montants en FCFA : le graphique choisit lui-meme son unite (FCFA,
+    // milliers ou millions). Les convertir ici en millions arrondis faisait
+    // tomber a 0 tout mois sous 50 000 FCFA.
+    const toAmount = (value: number) => Math.round(value);
 
     const months = Array.from({ length: monthCount }, (_, i) => {
       const current = new Date(
@@ -483,7 +491,7 @@ export class DashboardService {
 
       return {
         label: MONTH_LABELS[current.getUTCMonth()],
-        currentYear: toMillions(
+        currentYear: toAmount(
           sumForMonth(
             currentPayments,
             current.getUTCFullYear(),
@@ -491,7 +499,7 @@ export class DashboardService {
           ),
         ),
         previousYear: previous
-          ? toMillions(
+          ? toAmount(
               sumForMonth(
                 previousPayments,
                 previous.getUTCFullYear(),

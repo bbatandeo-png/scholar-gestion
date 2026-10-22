@@ -199,7 +199,34 @@
     if (!container) return;
     const options = opts || {};
     const series = (options.series || []).filter((s) => s.label);
-    const safeRows = rows || [];
+    // Montants recus en FCFA : on choisit l'unite d'affichage (FCFA, milliers
+    // ou millions) selon le plus grand montant, pour que de petits montants
+    // restent visibles au lieu d'etre arrondis a zero.
+    const rawRows = rows || [];
+    const rawMax = Math.max(
+      0,
+      ...rawRows.flatMap((row) =>
+        series.map((s) => Number(row[s.key])).filter(Number.isFinite),
+      ),
+    );
+    const unit = options.autoUnit
+      ? rawMax >= 1000000
+        ? { divisor: 1000000, label: 'En millions de FCFA' }
+        : rawMax >= 1000
+          ? { divisor: 1000, label: 'En milliers de FCFA' }
+          : { divisor: 1, label: 'En FCFA' }
+      : { divisor: 1, label: '' };
+    if (options.unitTarget && unit.label) {
+      options.unitTarget.textContent = unit.label + ', par mois.';
+    }
+    const safeRows = rawRows.map((row) => {
+      const scaled = { ...row };
+      series.forEach((s) => {
+        const value = Number(row[s.key]);
+        if (Number.isFinite(value)) scaled[s.key] = value / unit.divisor;
+      });
+      return scaled;
+    });
     const allValues = safeRows.flatMap((row) =>
       series.map((s) => Number(row[s.key])).filter(Number.isFinite),
     );

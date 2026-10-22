@@ -30,6 +30,11 @@ import {
   PopulatedEnrollmentLean,
   PopulatedStudentLean,
 } from '../common/types/populated-refs.types';
+import { assertNotInFuture } from '../common/utils/date-rules.util';
+import {
+  accentInsensitivePattern,
+  accentInsensitiveRegExp,
+} from '../common/utils/search-pattern.util';
 
 // Fields selected by search()/searchPaginated() beyond the base
 // PopulatedStudentLean shape - kept separate since most other populated-ref
@@ -71,24 +76,7 @@ export class StudentsService {
   }
 
   private buildAccentInsensitivePattern(value: string) {
-    const accentGroups: Record<string, string> = {
-      a: 'aàáâãäå',
-      c: 'cç',
-      e: 'eèéêë',
-      i: 'iìíîï',
-      n: 'nñ',
-      o: 'oòóôõö',
-      u: 'uùúûü',
-      y: 'yýÿ',
-    };
-    const normalized = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-
-    return Array.from(normalized)
-      .map((character) => {
-        const group = accentGroups[character.toLowerCase()];
-        return group ? `[${group}]` : this.escapeRegExp(character);
-      })
-      .join('');
+    return accentInsensitivePattern(value);
   }
 
   private async generateMatriculeCandidate() {
@@ -455,7 +443,7 @@ export class StudentsService {
       return this.applyYearSnapshots(students, schoolYearId);
     }
 
-    const regex = new RegExp(this.escapeRegExp(query.trim()), 'i');
+    const regex = accentInsensitiveRegExp(query);
     const students = (await this.studentModel
       .find({
         ...extraCriteria,
@@ -511,6 +499,8 @@ export class StudentsService {
       levelId?: string;
       status?: string;
       matricule?: string;
+      // Anciens eleves : sans inscription active sur cette annee (rapport A11).
+      notEnrolledInYearId?: string;
     } = {},
   ) {
     // A level filter only makes sense scoped to a school year (the same
@@ -551,19 +541,34 @@ export class StudentsService {
           .distinct('studentId', enrollmentCriteria)
           .exec()
       : undefined;
+    const excludedIds = filters.notEnrolledInYearId
+      ? await this.enrollmentModel
+          .distinct('studentId', {
+            schoolYearId: filters.notEnrolledInYearId,
+            status: 'active',
+          })
+          .exec()
+      : [];
     const searchCriteria = query
       ? {
           $or: [
-            { matricule: new RegExp(this.escapeRegExp(query.trim()), 'i') },
-            { lastname: new RegExp(this.escapeRegExp(query.trim()), 'i') },
-            { firstname: new RegExp(this.escapeRegExp(query.trim()), 'i') },
-            { district: new RegExp(this.escapeRegExp(query.trim()), 'i') },
+            { matricule: accentInsensitiveRegExp(query) },
+            { lastname: accentInsensitiveRegExp(query) },
+            { firstname: accentInsensitiveRegExp(query) },
+            { district: accentInsensitiveRegExp(query) },
           ],
         }
       : {};
     const criteria = {
       ...searchCriteria,
-      ...(studentIds ? { _id: { $in: studentIds } } : {}),
+      ...(studentIds || excludedIds.length
+        ? {
+            _id: {
+              ...(studentIds ? { $in: studentIds } : {}),
+              ...(excludedIds.length ? { $nin: excludedIds } : {}),
+            },
+          }
+        : {}),
       ...(filters.status ? { status: filters.status } : {}),
       // levelId applies directly against the Student record (its declared
       // class) whenever enrollment-scoping was skipped above - this only
@@ -714,6 +719,7 @@ export class StudentsService {
   async create(
     dto: CreateStudentDto,
   ): Promise<Student & { _id: unknown; guardiansCount: number }> {
+    assertNotInFuture(dto.birthDate, 'La date de naissance');
     const normalizedGuardians = this.normalizeGuardians(dto.guardians);
 
     const matricule =
@@ -773,6 +779,7 @@ export class StudentsService {
   }
 
   async update(id: string, dto: UpdateStudentDto) {
+    assertNotInFuture(dto.birthDate, 'La date de naissance');
     return runWithMongoTransactionFallback(this.connection, async (session) => {
       const { levelId, ...dtoFields } = dto;
       const updatePayload = {

@@ -230,7 +230,7 @@
           </form>
         </div>
         <div>
-          <strong>Paiement a l'inscription obligatoire</strong>
+          <strong>Paiement à l'inscription obligatoire</strong>
           <p class="muted">{{ 'Oui' if registrationPaymentRequired else 'Non (optionnel)' }}</p>
           <form method="post" action="/platform/ecoles/{{ editEcole._id }}/registration-payment-required/toggle" class="inline-form no-wrap">
             <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
@@ -256,7 +256,7 @@
         </form>
         <p class="muted" style="margin:10px 0 0;">Avec une date : le pack généré est déjà actif jusqu'à cette date, sans aucune action supplémentaire côté école au premier démarrage. Sans date : le pack part sans limite de licence (comme avant), a decider plus tard.</p>
         {% if editEcole.licenseActivatedAt %}
-          <p class="muted" style="margin:4px 0 0;">Dernier téléchargement : {{ editEcole.licenseActivatedAt | formatDate }}{% if editEcole.releaseVersion %} (version {{ editEcole.releaseVersion }}){% endif %}{% if editEcole.licenseExpiresAt %}, licence jusqu'au {{ editEcole.licenseExpiresAt | formatDate }}{% endif %}.</p>
+          <p class="muted" style="margin:4px 0 0;">Dernier téléchargement : {{ editEcole.licenseActivatedAt | formatDate }}{% if editEcole.releaseVersion %} (version {{ editEcole.releaseVersion }}){% endif %}{% if editEcole.licenseExpiresAt %}, licence jusqu'au {{ editEcole.licenseExpiresAt | formatDay }}{% endif %}.</p>
         {% endif %}
         <script>
           (() => {
@@ -306,9 +306,9 @@
           <h2>{% if editEcole %}Modifier l'école{% else %}Nouvelle école{% endif %}</h2>
           <p class="muted">
             {% if editEcole %}
-              Mettez a jour les informations de {{ editEcole.nom }}.
+              Mettez à jour les informations de {{ editEcole.nom }}.
             {% else %}
-              Cree un nouvel etablissement (un "tenant") avec ses propres donnees, isolees de toutes les autres ecoles. Un compte administrateur est genere automatiquement pour son equipe.
+              Crée un nouvel établissement avec ses propres données, isolées de toutes les autres écoles. Un compte administrateur est généré automatiquement pour son équipe.
             {% endif %}
           </p>
         </div>
@@ -422,7 +422,7 @@
                 <td>{{ item.nom }}</td>
                 <td>{{ item.localite }}</td>
                 <td>{% set value = item.statutCompte %}{% set group = 'ecoleAccountStatus' %}{% include "partials/status-badge.njk" %}</td>
-                <td>{{ item.dateInscription | formatDate }}</td>
+                <td>{{ item.dateInscription | formatDay }}</td>
                 <td>
                   <div class="table-actions">
                     <a class="button btn-sm" href="/platform/ecoles/{{ item._id }}/edit">Modifier</a>

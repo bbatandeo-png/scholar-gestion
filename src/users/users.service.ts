@@ -4,6 +4,7 @@ import * as bcrypt from 'bcryptjs';
 import { Model } from 'mongoose';
 import { Role, UserStatus } from '../common/enums/domain.enums';
 import { User, UserDocument } from './schemas/user.schema';
+import { accentInsensitiveRegExp } from '../common/utils/search-pattern.util';
 
 @Injectable()
 export class UsersService {
@@ -49,8 +50,8 @@ export class UsersService {
 
     if (q) {
       filter.$or = [
-        { name: { $regex: q, $options: 'i' } },
-        { email: { $regex: q, $options: 'i' } },
+        { name: accentInsensitiveRegExp(q) },
+        { email: accentInsensitiveRegExp(q) },
       ];
     }
 

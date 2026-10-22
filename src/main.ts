@@ -18,6 +18,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { runSeed, shouldRunSeed } from './scripts/seed';
 import { applyTenantMiddleware } from './common/tenant/apply-tenant-middleware';
 import { noStore } from './common/middleware/no-store';
+import { securityHeaders } from './common/middleware/security-headers';
 import { csrfErrorHandler } from './common/middleware/csrf-error-handler';
 import {
   getRuntimeRoot,
@@ -77,6 +78,12 @@ async function bootstrap() {
   const uploadsDir = getUploadsRoot();
   fs.mkdirSync(uploadsDir, { recursive: true });
 
+  // Securite (rapport A15) : pas de version du serveur exposee, en-tetes de
+  // protection sur toutes les reponses, et adresse reelle du client derriere
+  // le proxy (nginx) pour savoir si la connexion est en HTTPS.
+  app.disable('x-powered-by');
+  app.set('trust proxy', 1);
+  app.use(securityHeaders);
   app.useStaticAssets(publicDir);
   app.useStaticAssets(uploadsDir, { prefix: '/uploads' });
   app.useStaticAssets(siteVitrineDir, { prefix: '/vitrine' });
@@ -95,6 +102,9 @@ async function bootstrap() {
     cookie: {
       httpOnly: true,
       sameSite: 'lax',
+      // Cookie « Secure » des que la connexion est en HTTPS (version en
+      // ligne), sans casser la version locale en http.
+      secure: 'auto',
       maxAge: 1000 * 60 * 60 * 8,
     },
   };

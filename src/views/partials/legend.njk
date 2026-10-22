@@ -1,6 +1,19 @@
+{# Titre adapte au contenu : « Légende des statuts » seulement pour des statuts
+   (une page qui montre aussi des modes ou des types n'affiche plus deux fois
+   le meme titre). #}
 {% macro render(groups, title) %}
+  {% set LEGEND_TITLES = {
+    'bulletinImportMode': "Légende des modes d'import",
+    'disciplineRecordType': "Légende des types d'entrée",
+    'stockMovementType': 'Légende des types de mouvement',
+    'stockCategory': 'Légende des catégories',
+    'teacherTrackingType': 'Légende des types de suivi',
+    'teacherContractType': 'Légende des contrats',
+    'enrollmentType': 'Légende des inscriptions',
+    'finalDecision': 'Légende des décisions'
+  } %}
   <details class="legend">
-    <summary>{{ title or 'Légende des statuts' }}</summary>
+    <summary>{{ title or LEGEND_TITLES[groups[0]] or 'Légende des statuts' }}</summary>
     <ul class="legend-list">
       {% for g in groups %}
         {% for key, meta in ENUM_META[g] %}

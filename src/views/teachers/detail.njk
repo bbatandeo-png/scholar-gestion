@@ -10,7 +10,6 @@
           {% if teacher.specialty %} — {{ teacher.specialty }}{% endif %}
         </p>
       </div>
-      <a class="button secondary btn-sm" href="/teachers">Retour</a>
     </div>
     {% if teacher.photo %}
       <img src="/uploads/{{ teacher.photo }}" alt="Photo" style="height:96px;display:block;margin-bottom:12px;" />
@@ -37,7 +36,7 @@
           <label>Téléphone<input name="phone" value="{{ teacher.phone }}" /></label>
           <label>Email<input type="email" name="email" value="{{ teacher.email }}" /></label>
           <label>Adresse<input name="address" value="{{ teacher.address }}" /></label>
-          <label>Diplome<input name="diploma" value="{{ teacher.diploma }}" /></label>
+          <label>Diplôme<input name="diploma" value="{{ teacher.diploma }}" /></label>
           <label>Spécialité<input name="specialty" value="{{ teacher.specialty }}" /></label>
           <label>Date d'embauche<input type="date" name="hireDate" value="{{ teacher.hireDate | inputDate }}" /></label>
           <label>Statut
@@ -136,7 +135,7 @@
   <section class="grid cols-2 top-gap">
     <div class="panel">
       <h3>Nouveau contrat</h3>
-      <p class="muted">Enregistrer un nouveau contrat cloture automatiquement le contrat actif en cours (renouvellement).</p>
+      <p class="muted">Enregistrer un nouveau contrat clôture automatiquement le contrat actif en cours (renouvellement).</p>
       <form method="post" action="/teachers/{{ teacher._id }}/contracts" class="stack">
         <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
         <div class="form-grid">
@@ -173,8 +172,8 @@
               <tr>
                 <td>{{ loop.index }}</td>
                 <td>{% set value = contract.type %}{% set group = 'teacherContractType' %}{% include "partials/status-badge.njk" %}</td>
-                <td>{{ contract.startDate | formatDate }}</td>
-                <td>{{ contract.endDate | formatDate if contract.endDate else '—' }}</td>
+                <td>{{ contract.startDate | formatDay }}</td>
+                <td>{{ contract.endDate | formatDay if contract.endDate else '—' }}</td>
                 <td>{% set value = contract.status %}{% set group = 'teacherContractStatus' %}{% include "partials/status-badge.njk" %}</td>
                 <td>
                   <div class="table-actions">
@@ -243,7 +242,7 @@
               <tr>
                 <td>{{ loop.index }}</td>
                 <td>{{ record.schoolYearId.label }}</td>
-                <td>{{ record.date | formatDate }}</td>
+                <td>{{ record.date | formatDay }}</td>
                 <td>{% set value = record.type %}{% set group = 'teacherTrackingType' %}{% include "partials/status-badge.njk" %}</td>
                 <td>{{ record.note or '—' }}</td>
                 <td>
@@ -273,7 +272,7 @@
       <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
       <label class="field-inline">
         Libellé
-        <input name="label" placeholder="Diplome, CNI, CV..." required />
+        <input name="label" placeholder="Diplôme, CNI, CV…" required />
       </label>
       <label class="field-inline">
         Fichier
@@ -289,7 +288,7 @@
             <th>N°</th>
             <th>Libellé</th>
             <th>Fichier</th>
-            <th>Ajoute le</th>
+            <th>Ajouté le</th>
             <th></th>
           </tr>
         </thead>
@@ -310,7 +309,7 @@
               </td>
             </tr>
           {% else %}
-            <tr><td colspan="5">Aucun document deposé.</td></tr>
+            <tr><td colspan="5">Aucun document déposé.</td></tr>
           {% endfor %}
         </tbody>
       </table>

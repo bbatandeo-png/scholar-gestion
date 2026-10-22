@@ -7,6 +7,7 @@ import { Student } from '../students/schemas/student.schema';
 import { CreateDisciplineRecordDto } from './dto/create-discipline-record.dto';
 import { SearchDisciplineRecordsDto } from './dto/search-discipline-records.dto';
 import { DisciplineRecord } from './schemas/discipline-record.schema';
+import { assertNotInFuture } from '../common/utils/date-rules.util';
 
 @Injectable()
 export class DisciplineService {
@@ -25,6 +26,7 @@ export class DisciplineService {
     schoolYearId: string,
     actorId?: string,
   ) {
+    assertNotInFuture(dto.date, "La date de l'incident");
     const student = await this.studentModel
       .findById(dto.studentId)
       .lean()

@@ -7,8 +7,11 @@
     <p class="muted">Connectez-vous avec les identifiants fournis par votre établissement.</p>
   </div>
 
+  {% if next %}<p class="notice notice-info" role="status">Votre session a expiré ou vous n'êtes pas connecté : connectez-vous pour continuer.</p>{% endif %}
+
   <form action="/login" method="post" class="stack auth-form">
     <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
+    {% if next %}<input type="hidden" name="next" value="{{ next }}" />{% endif %}
 
     <div class="field">
       <label for="email">
@@ -25,6 +28,7 @@
     </div>
 
     <button type="submit" class="button full-width">Se connecter</button>
+    <p class="muted auth-help">Mot de passe oublié ? Demandez à l'administrateur de votre établissement de le réinitialiser depuis la page Utilisateurs.</p>
   </form>
 </section>
 {% endblock %}

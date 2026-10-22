@@ -47,7 +47,7 @@ describe('StudentsService autocomplete', () => {
       $sort: Record<string, number>;
     };
     expect(pipeline).toContainEqual({ $limit: 30 });
-    expect(String(matchStage.$match.$or[1].lastname)).toContain('[eèéêë]');
+    expect(String(matchStage.$match.$or[1].lastname)).toContain('[eèéêëEÈÉÊË]');
     expect(sortStage.$sort).toEqual({
       searchRank: 1,
       lastname: 1,

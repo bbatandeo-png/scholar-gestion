@@ -171,9 +171,9 @@ describe('DashboardService.getMonthlyEncaissements', () => {
     expect(result.currentYearLabel).toBe('2026-2027');
     expect(result.previousYearLabel).toBe('2025-2026');
     expect(result.months).toEqual([
-      { label: 'SEP', currentYear: 20, previousYear: 18 },
-      { label: 'OCT', currentYear: 15.5, previousYear: 12.3 },
-      { label: 'NOV', currentYear: 0, previousYear: 9 },
+      { label: 'SEP', currentYear: 20_000_000, previousYear: 18_000_000 },
+      { label: 'OCT', currentYear: 15_500_000, previousYear: 12_300_000 },
+      { label: 'NOV', currentYear: 0, previousYear: 9_000_000 },
     ]);
     expect(find).toHaveBeenCalledWith({
       schoolYearId: 'year-2',
@@ -207,10 +207,36 @@ describe('DashboardService.getMonthlyEncaissements', () => {
     expect(result.months.every((m) => m.previousYear === 0)).toBe(true);
     expect(result.months[0]).toEqual({
       label: 'SEP',
-      currentYear: 20,
+      currentYear: 20_000_000,
       previousYear: 0,
     });
     expect(find).toHaveBeenCalledTimes(1);
+  });
+
+  // Rapport A01 : 37 000 FCFA encaisses en octobre donnaient 0 (millions arrondis).
+  it('garde les petits montants en FCFA au lieu de les arrondir a zero', async () => {
+    const { service } = buildService({
+      currentYear: {
+        _id: 'year-1',
+        label: '2026-2027',
+        startDate: new Date('2026-10-01T00:00:00.000Z'),
+        endDate: new Date('2027-07-31T00:00:00.000Z'),
+      },
+      previousYear: null,
+      paymentsByYear: {
+        'year-1': [
+          { amount: 30_000, paidAt: new Date('2026-10-19T00:00:00.000Z') },
+          { amount: 7_000, paidAt: new Date('2026-10-21T00:00:00.000Z') },
+        ],
+      },
+    });
+
+    const result = await service.getMonthlyEncaissements('year-1');
+
+    expect(result.months[0]).toMatchObject({
+      label: 'OCT',
+      currentYear: 37_000,
+    });
   });
 
   it('retourne une liste vide sans planter quand l annee scolaire est introuvable', async () => {

@@ -21,3 +21,8 @@ export function toDisplayString(value: unknown): string {
   }
   return JSON.stringify(value);
 }
+
+// Pour enchainer un message apres « : » (« … : le montant dépasse … »).
+export function lowerFirst(message: string) {
+  return message ? message.charAt(0).toLowerCase() + message.slice(1) : message;
+}

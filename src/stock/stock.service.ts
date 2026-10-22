@@ -13,6 +13,7 @@ import { RecordStockMovementDto } from './dto/record-stock-movement.dto';
 import { SearchStockItemsDto } from './dto/search-stock-items.dto';
 import { StockItem } from './schemas/stock-item.schema';
 import { StockMovement } from './schemas/stock-movement.schema';
+import { accentInsensitiveRegExp } from '../common/utils/search-pattern.util';
 
 @Injectable()
 export class StockService {
@@ -27,7 +28,7 @@ export class StockService {
     const query: Record<string, unknown> = {};
     if (filters.category) query.category = filters.category;
     if (filters.q) {
-      query.name = { $regex: this.escapeRegExp(filters.q), $options: 'i' };
+      query.name = accentInsensitiveRegExp(filters.q);
     }
     const items = await this.itemModel
       .find(query)
@@ -40,10 +41,6 @@ export class StockService {
         typeof item.alertThreshold === 'number' &&
         item.quantity <= item.alertThreshold,
     }));
-  }
-
-  private escapeRegExp(value: string) {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
   async findById(id: string) {

@@ -163,7 +163,10 @@ export class BulletinsController {
       setFlash(
         req,
         'success',
-        `Notes de ${saved.subjectLabel} enregistrées pour ${saved.studentCount} élève(s).`,
+        `Notes de ${saved.subjectLabel} enregistrées pour ${saved.studentCount} élève(s)` +
+          (saved.withoutNotes > 0
+            ? ` ; ${saved.withoutNotes} élève(s) encore sans note dans cette matière.`
+            : '.'),
       );
       if (typeof body.nextSubjectId === 'string' && body.nextSubjectId) {
         nextSubjectId = body.nextSubjectId;

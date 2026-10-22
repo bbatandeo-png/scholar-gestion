@@ -6,16 +6,16 @@
 
       {% if status.state == 'ok' %}
         <p class="notice notice-info">
-          Licence active, valable jusqu'au <strong>{{ status.expiresAt | formatDate }}</strong>.
+          Licence active, valable jusqu'au <strong>{{ status.expiresAt | formatDay }}</strong>.
         </p>
       {% elif status.state == 'grace' %}
         <p class="notice notice-danger">
-          Licence expirée depuis le <strong>{{ status.expiresAt | formatDate }}</strong>. L'application reste pleinement utilisable jusqu'au <strong>{{ status.graceEndsAt | formatDate }}</strong>, date a partir de laquelle elle passera en lecture seule si la licence n'est pas renouvelee.
+          Licence expirée depuis le <strong>{{ status.expiresAt | formatDay }}</strong>. L'application reste pleinement utilisable jusqu'au <strong>{{ status.graceEndsAt | formatDay }}</strong>, date a partir de laquelle elle passera en lecture seule si la licence n'est pas renouvelee.
         </p>
       {% elif status.state == 'blocked' %}
         <p class="notice notice-danger">
           {% if status.expiresAt %}
-            Licence expirée depuis le <strong>{{ status.expiresAt | formatDate }}</strong> — la période de grâce est terminée.
+            Licence expirée depuis le <strong>{{ status.expiresAt | formatDay }}</strong> — la période de grâce est terminée.
           {% else %}
             Aucune licence n'a encore été enregistrée pour cette installation.
           {% endif %}

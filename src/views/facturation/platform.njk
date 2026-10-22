@@ -5,7 +5,7 @@
       <h2>Paramètre de facturation — {{ ecole.nom }}</h2>
       {% if parametre %}
         <p class="muted">
-          Actif depuis le {{ parametre.dateEffet | formatDate }} —
+          Actif depuis le {{ parametre.dateEffet | formatDay }} —
           mode <strong>{{ parametre.mode }}</strong>
           {% if parametre.sousType %}({{ parametre.sousType }}){% endif %},
           {{ parametre.montantUnitaire | money }}

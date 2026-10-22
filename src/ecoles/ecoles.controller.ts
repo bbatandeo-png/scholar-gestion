@@ -211,7 +211,7 @@ export class EcolesController {
         id,
         dto.required === 'true',
       );
-      setFlash(req, 'success', "Paiement a l'inscription mis à jour");
+      setFlash(req, 'success', "Paiement à l'inscription mis à jour");
     } catch (error) {
       setFlash(
         req,

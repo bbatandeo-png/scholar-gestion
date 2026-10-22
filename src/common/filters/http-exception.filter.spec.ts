@@ -3,8 +3,9 @@ import {
   BadRequestException,
   Logger,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
-import { HttpExceptionFilter } from './http-exception.filter';
+import { HttpExceptionFilter, safeNextPath } from './http-exception.filter';
 
 interface FakeFlash {
   type: 'success' | 'error';
@@ -136,5 +137,74 @@ describe('HttpExceptionFilter', () => {
     expect(json).toHaveBeenCalledWith(
       expect.objectContaining({ statusCode: 400, error: 'Bad Request' }),
     );
+  });
+
+  // Rapport A05 : session expiree -> page de connexion, puis retour.
+  it('renvoie une page demandee sans session vers la connexion, avec retour prevu', () => {
+    const filter = new HttpExceptionFilter();
+    const { host, req, redirect, json } = buildHost({ accept: '*/*' });
+    Object.assign(req, { method: 'GET', originalUrl: '/students?page=2' });
+
+    filter.catch(new UnauthorizedException('Authentification requise'), host);
+
+    expect(redirect).toHaveBeenCalledWith('/login?next=%2Fstudents%3Fpage%3D2');
+    expect(json).not.toHaveBeenCalled();
+  });
+
+  it('garde le JSON 401 pour un appel explicitement JSON', () => {
+    const filter = new HttpExceptionFilter();
+    const { host, req, redirect, status } = buildHost({
+      accept: 'application/json',
+    });
+    Object.assign(req, {
+      method: 'GET',
+      originalUrl: '/students/autocomplete',
+    });
+
+    filter.catch(new UnauthorizedException('Authentification requise'), host);
+
+    expect(redirect).not.toHaveBeenCalled();
+    expect(status).toHaveBeenCalledWith(401);
+  });
+
+  // Rapport A06 : identifiant invalide -> page introuvable, pas une 500.
+  it('affiche la page introuvable pour un identifiant invalide dans l adresse', () => {
+    const filter = new HttpExceptionFilter();
+    const { host, req, render, status } = buildHost({});
+    Object.assign(req, { method: 'GET', originalUrl: '/students/abc' });
+    const castError = Object.assign(new Error('Cast to ObjectId failed'), {
+      name: 'CastError',
+    });
+
+    filter.catch(castError, host);
+
+    expect(status).toHaveBeenCalledWith(404);
+    expect(render).toHaveBeenCalledWith(
+      'error/generic',
+      expect.objectContaining({ isNotFound: true }) as unknown,
+    );
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('affiche la page introuvable pour une adresse inconnue ouverte dans le navigateur', () => {
+    const filter = new HttpExceptionFilter();
+    const { host, req, render, redirect, status } = buildHost({});
+    Object.assign(req, { method: 'GET', originalUrl: '/nexiste-pas' });
+
+    filter.catch(new NotFoundException('Cannot GET /nexiste-pas'), host);
+
+    expect(redirect).not.toHaveBeenCalled();
+    expect(status).toHaveBeenCalledWith(404);
+    expect(render).toHaveBeenCalledWith(
+      'error/generic',
+      expect.objectContaining({ isNotFound: true }) as unknown,
+    );
+  });
+
+  it('n accepte comme retour apres connexion qu une adresse du site', () => {
+    expect(safeNextPath('/students')).toBe('/students');
+    expect(safeNextPath('//evil.example')).toBe('');
+    expect(safeNextPath('https://evil.example')).toBe('');
+    expect(safeNextPath('/logout')).toBe('');
   });
 });

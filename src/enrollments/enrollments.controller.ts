@@ -26,7 +26,8 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { setFlash } from '../common/utils/flash.util';
 import { buildExcelBuffer } from '../common/utils/excel.util';
 import { pickUploadedFile } from '../common/utils/multer.util';
-import { toDisplayString } from '../common/utils/safe-string.util';
+import { lowerFirst, toDisplayString } from '../common/utils/safe-string.util';
+import { formatMoney } from '../common/view-helpers/format-money';
 import { CreateEnrollmentDto } from './dto/create-enrollment.dto';
 import { UpdateEnrollmentDto } from './dto/update-enrollment.dto';
 import { EnrollmentsService } from './enrollments.service';
@@ -253,15 +254,17 @@ export class EnrollmentsController {
         setFlash(
           req,
           'success',
-          `Paiement de ${paymentAmount} enregistre pour l'inscription existante`,
+          `Paiement de ${formatMoney(paymentAmount)} enregistré pour l'inscription existante`,
         );
         return res.redirect(`/receipts/${payment.payment._id.toString()}`);
       } catch (error) {
         setFlash(
           req,
           'error',
-          `Le paiement n'a pas ete enregistre : ${
-            error instanceof Error ? error.message : 'erreur inconnue'
+          `Le paiement n'a pas été enregistré : ${
+            error instanceof Error
+              ? lowerFirst(error.message)
+              : 'erreur inconnue'
           }`,
         );
         return res.redirect(`/enrollments/${String(existingEnrollment._id)}`);
@@ -291,7 +294,7 @@ export class EnrollmentsController {
       setFlash(
         req,
         'success',
-        `Inscription créée et paiement de ${paymentAmount} enregistré`,
+        `Inscription créée et paiement de ${formatMoney(paymentAmount)} enregistré`,
       );
       return res.redirect(`/receipts/${payment.payment._id.toString()}`);
     } catch (error) {
@@ -300,8 +303,8 @@ export class EnrollmentsController {
       setFlash(
         req,
         'error',
-        `Inscription creee, mais le paiement n'a pas ete enregistre : ${
-          error instanceof Error ? error.message : 'erreur inconnue'
+        `Inscription créée, mais le paiement n'a pas été enregistré : ${
+          error instanceof Error ? lowerFirst(error.message) : 'erreur inconnue'
         }`,
       );
       return res.redirect(`/enrollments/${result.enrollmentId}`);

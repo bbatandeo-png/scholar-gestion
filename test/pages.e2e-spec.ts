@@ -5,10 +5,13 @@ import { Test } from '@nestjs/testing';
 import { urlencoded } from 'express';
 import session from 'express-session';
 import { Model } from 'mongoose';
+import * as fs from 'fs';
 import * as path from 'path';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { applyViewLocals, configureViewEngine } from '../src/app-setup';
+import { FeeScheduleNotFoundFilter } from '../src/common/filters/fee-schedule-not-found.filter';
+import { HttpExceptionFilter } from '../src/common/filters/http-exception.filter';
 import { BulletinsService } from '../src/bulletins/bulletins.service';
 import { SchoolYearStatus } from '../src/common/enums/domain.enums';
 import { applyTenantMiddleware } from '../src/common/tenant/apply-tenant-middleware';
@@ -116,6 +119,7 @@ describe('Parcours de toutes les pages et scenarios metier (e2e)', () => {
           .get(url)
           .set('x-test-role', role)
           .set('x-test-ecole-id', ecoleId)
+          .set('accept', 'text/html,application/xhtml+xml,*/*')
           .buffer(true)
           .parse(
             binaryParser as unknown as Parameters<request.Test['parse']>[0],
@@ -125,6 +129,7 @@ describe('Parcours de toutes les pages et scenarios metier (e2e)', () => {
           .post(url)
           .set('x-test-role', role)
           .set('x-test-ecole-id', ecoleId)
+          .set('accept', 'text/html,application/xhtml+xml,*/*')
           .type('form')
           .send(body),
     };
@@ -184,6 +189,11 @@ describe('Parcours de toutes les pages et scenarios metier (e2e)', () => {
         transform: true,
         forbidUnknownValues: false,
       }),
+    );
+    // Memes filtres d'erreur qu'en production (main.ts).
+    app.useGlobalFilters(
+      new FeeScheduleNotFoundFilter(),
+      new HttpExceptionFilter(),
     );
     await app.init();
 
@@ -270,6 +280,53 @@ describe('Parcours de toutes les pages et scenarios metier (e2e)', () => {
     });
   });
 
+  describe('Fonctionnalite : ne jamais perdre une saisie refusee', () => {
+    it('Scenario : matricule deja utilise, le formulaire garde ce qui a ete saisi', async () => {
+      const secretariat = agentFor('secretariat');
+      const existing = await runWithTenant({ ecoleId }, () =>
+        app
+          .get<Model<Student>>(getModelToken(Student.name))
+          .findById(ids.studentId)
+          .lean(),
+      );
+
+      // Quand la secretaire cree un eleve avec un matricule deja pris
+      const refused = await secretariat.post('/students', {
+        matricule: existing!.matricule,
+        lastname: 'AGBODJAN',
+        firstname: 'Yao',
+        gender: 'M',
+        levelId: ids.cm1Id,
+        'guardians[0][fullname]': 'AGBODJAN Kossi',
+      });
+      expect(refused.status).toBe(302);
+      const page = html(
+        await secretariat.get(refused.headers.location as string),
+      );
+
+      // Alors l'erreur s'affiche
+      expect(page).toMatch(/<div class="flash error"/);
+      // Et la saisie est conservee pour re-remplir le formulaire
+      const oldInput = /data-old-input="([^"]*)"/.exec(page)?.[1] ?? '';
+      const values = JSON.parse(oldInput.replace(/&quot;/g, '"')) as {
+        action: string;
+        values: Record<string, string>;
+      };
+      expect(values.action).toBe('/students');
+      expect(values.values).toMatchObject({
+        lastname: 'AGBODJAN',
+        firstname: 'Yao',
+        'guardians[0][fullname]': 'AGBODJAN Kossi',
+      });
+      expect(values.values).not.toHaveProperty('_csrf');
+
+      // Et la page suivante n'est plus pre-remplie
+      expect(html(await secretariat.get('/students'))).not.toContain(
+        'data-old-input',
+      );
+    });
+  });
+
   describe('Fonctionnalite : saisir les notes et produire les bulletins', () => {
     it('Scenario : session de CM1, notes saisies a l ecran, validation puis PDF', async () => {
       const direction = agentFor('direction');
@@ -309,6 +366,8 @@ describe('Parcours de toutes les pages et scenarios metier (e2e)', () => {
           },
         );
         expect(saved.flash?.type === 'success' ? 'ok' : saved.flash).toBe('ok');
+        // Rapport A28 : seuls les eleves ayant une note sont comptes.
+        expect(saved.flash?.message).toContain('enregistrées pour 1 élève(s)');
       }
       // L'ecran de saisie reprend les notes deja enregistrees
       const entry = await direction.get(`/bulletins/${ids.sessionId}/saisie`);
@@ -328,6 +387,110 @@ describe('Parcours de toutes les pages et scenarios metier (e2e)', () => {
       const pdf = await direction.get(`/bulletins/${ids.sessionId}/pdf`);
       expect(pdf.status).toBe(200);
       expect((pdf.body as Buffer).subarray(0, 4).toString()).toBe('%PDF');
+    });
+  });
+
+  describe('Fonctionnalite : refuser les saisies incoherentes (rapport de test)', () => {
+    const nextYear = `${new Date().getFullYear() + 1}`;
+
+    it('Scenario : naissance dans le futur, contrat aux dates inversees, matiere hors programme', async () => {
+      const superAdmin = agentFor('super_admin');
+
+      // A07 : un eleve ne nait pas dans le futur
+      const futureBirth = await submit(superAdmin, '/students', {
+        lastname: 'FUTUR',
+        firstname: 'Bebe',
+        gender: 'M',
+        levelId: ids.cm1Id,
+        birthDate: `${nextYear}-03-01`,
+      });
+      expect(futureBirth.flash).toEqual({
+        type: 'error',
+        message: 'La date de naissance ne peut pas être dans le futur.',
+      });
+
+      // A03 : un contrat ne finit pas avant d'avoir commence
+      const teacher = await submit(superAdmin, '/teachers', {
+        lastname: 'DATES',
+        firstname: 'Kossi',
+      });
+      const teacherId = /\/teachers\/([a-f0-9]{24})/.exec(teacher.location)![1];
+      const inverted = await submit(
+        superAdmin,
+        `/teachers/${teacherId}/contracts`,
+        { type: 'cdd', startDate: '2026-10-21', endDate: '2026-01-01' },
+      );
+      expect(inverted.flash).toEqual({
+        type: 'error',
+        message: 'La date de fin doit être postérieure à la date de début.',
+      });
+
+      // A10 : on n'affecte pas une matiere absente du programme de la classe
+      const philosophie = await runWithTenant({ ecoleId }, () =>
+        app
+          .get(BulletinsService)
+          .listSubjects()
+          .then((subjects) => subjects.find((s) => s.label === 'Philosophie')),
+      );
+      const outOfProgram = await submit(
+        superAdmin,
+        `/teachers/${teacherId}/assignments`,
+        {
+          levelIds: ids.cm1Id,
+          subjectId: String(philosophie!._id),
+          hoursPerWeek: '2',
+        },
+      );
+      expect(outOfProgram.flash?.type).toBe('error');
+      expect(outOfProgram.flash?.message).toContain(
+        "n'est pas au programme de la classe",
+      );
+    });
+
+    it('Scenario : recherche sans accents et historique complet d une depense', async () => {
+      const superAdmin = agentFor('super_admin');
+
+      // A09 : « eleonore », sans majuscules ni accents, retrouve « ÉLÉONORE »
+      await submit(superAdmin, '/students', {
+        lastname: 'ÉLÉONORE',
+        firstname: 'Adjoa',
+        gender: 'F',
+        levelId: ids.cm1Id,
+      });
+      const found = visibleText(
+        html(await superAdmin.get('/students?q=eleonore')),
+      );
+      expect(found).toContain('ÉLÉONORE');
+
+      // A13 : chaque modification d'une depense garde avant/apres et motif
+      await submit(superAdmin, '/expenses', {
+        expenseDate: new Date().toISOString().slice(0, 10),
+        label: 'Ramettes de papier',
+        amount: '8000',
+        beneficiary: 'Papeterie',
+        categoryId: ids.expenseCategoryId,
+      });
+      const list = html(await superAdmin.get('/expenses'));
+      const expenseId =
+        /Ramettes de papier[\s\S]*?href="\/expenses\/([a-f0-9]{24})"/.exec(
+          list,
+        )?.[1];
+      expect(expenseId).toBeDefined();
+      const edited = await submit(superAdmin, `/expenses/${expenseId}`, {
+        expenseDate: new Date().toISOString().slice(0, 10),
+        label: 'Ramettes de papier',
+        amount: '9500',
+        beneficiary: 'Papeterie',
+        categoryId: ids.expenseCategoryId,
+        modificationReason: 'Erreur de montant',
+      });
+      expect(edited.flash?.type).toBe('success');
+      const detail = visibleText(
+        html(await superAdmin.get(`/expenses/${expenseId}`)),
+      );
+      expect(detail).toContain('Historique des modifications');
+      expect(detail).toContain('Erreur de montant');
+      expect(detail).toMatch(/Montant\s*:\s*8\s000\sFCFA\s*→\s*9\s500\sFCFA/);
     });
   });
 
@@ -453,6 +616,16 @@ describe('Parcours de toutes les pages et scenarios metier (e2e)', () => {
           if (location.startsWith('/login')) {
             problems.push(`${url} -> renvoie vers la connexion`);
           } else if (location.startsWith('/')) {
+            // En production, un refus (droit, donnee absente...) devient un
+            // retour en arriere avec un message d'erreur : on le lit.
+            const landing = html(await agent.get(location));
+            const refused =
+              /<div class="flash error"[^>]*>\s*<span class="flash-message">([^<]*)</.exec(
+                landing,
+              );
+            if (refused && !direct.includes(url)) {
+              problems.push(`${url} -> refus « ${refused[1]} »`);
+            }
             queue.push(location);
           }
           continue;
@@ -476,6 +649,21 @@ describe('Parcours de toutes les pages et scenarios metier (e2e)', () => {
 
         htmlPages += 1;
         const page = html(res);
+        // PAGES_DUMP_DIR=<dossier> : copie des pages rendues, pour les
+        // verifier a l'oeil (captures mobile, etc.).
+        if (process.env.PAGES_DUMP_DIR) {
+          fs.mkdirSync(path.join(process.env.PAGES_DUMP_DIR, role), {
+            recursive: true,
+          });
+          fs.writeFileSync(
+            path.join(
+              process.env.PAGES_DUMP_DIR,
+              role,
+              `${key.replace(/[^a-z0-9]+/gi, '_') || 'index'}.html`,
+            ),
+            page,
+          );
+        }
         const text = visibleText(page);
         const technical = TECHNICAL_ERRORS.exec(text);
         if (technical) {

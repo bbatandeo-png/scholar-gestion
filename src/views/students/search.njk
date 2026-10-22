@@ -11,37 +11,16 @@
       </div>
 
       <div class="topbar-actions">
-        <form method="get" action="/students/search" class="inline-form" id="search-archived" role="search" data-live-search="#archived-summary, #archived-advanced-form, #archived-results">
+        <form method="get" action="/students/search" class="inline-form" id="search-archived" role="search" data-live-search="#archived-summary, #archived-results">
           <label class="search-controls">
             <input type="search" name="q" value="{{ query }}" placeholder="Matricule, nom, prénom, quartier…" aria-label="Rechercher un ancien élève" autocomplete="off" />
             <button type="submit" class="button btn-icon icon-search">Rechercher</button>
-            <button type="button" id="toggle-advanced-archived" class="button secondary">Filtres</button>
           </label>
         </form>
       </div>
     </div>
 
-    <div id="advanced-filters-archived" style="display:none;margin-top:14px;">
-      <div class="panel form-section">
-        <form method="get" action="/students/search" class="form-grid" id="archived-advanced-form">
-          <input type="hidden" name="q" value="{{ query }}" />
-          <label>Niveau
-            <input name="level" placeholder="Ex: 6ème, 5ème" />
-          </label>
-          <label>Année
-            <input name="schoolYear" placeholder="Ex: 2024/2025" />
-          </label>
-          <label>Quartier
-            <input name="district" placeholder="Quartier" />
-          </label>
-          <div>
-            <button type="submit" class="button">Appliquer</button>
-            <a href="/students/search" class="button secondary">Réinitialiser</a>
-          </div>
-        </form>
-      </div>
-    </div>
-
+    <p class="muted">Élèves sans inscription active sur l'année ouverte : partis, archivés ou pas encore réinscrits.</p>
     <div id="archived-results">
     <div class="table-shell">
       <table class="table-report js-sortable" data-no-filter>
@@ -87,22 +66,5 @@
       </form>
     </div>
     </div>
-  </section>
-
-  <script>
-    (function(){
-      const toggle = document.getElementById('toggle-advanced-archived');
-      const panel = document.getElementById('advanced-filters-archived');
-      if (toggle && panel) {
-        toggle.addEventListener('click', () => {
-          const isHidden = panel.style.display === 'none' || panel.style.display === '';
-          panel.style.display = isHidden ? 'block' : 'none';
-          try { localStorage.setItem('studentsAdvancedFiltersArchived', isHidden ? '1' : '0'); } catch(e){}
-        });
-        try { const v = localStorage.getItem('studentsAdvancedFiltersArchived'); if (v === '1') panel.style.display = 'block'; } catch(e){}
-      }
-    })();
-  </script>
-  
   </section>
 {% endblock %}

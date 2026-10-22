@@ -42,12 +42,13 @@ export class DashboardController {
 
     if (!year) {
       return {
-        title: 'Dashboard',
+        title: 'Tableau de bord',
         summary: null,
         selectedYear: null,
       };
     }
 
+    let datesSwapped = false;
     // <input type="date"> values (YYYY-MM-DD) - swapped as plain strings
     // (they sort lexically) before turning into UTC day boundaries, so the
     // date inputs re-rendered on the page and the range actually applied
@@ -60,6 +61,7 @@ export class DashboardController {
       dateFromInput > dateToInput
     ) {
       [dateFromInput, dateToInput] = [dateToInput, dateFromInput];
+      datesSwapped = true;
     }
     let dateFrom = dateFromInput
       ? new Date(`${dateFromInput}T00:00:00.000Z`)
@@ -81,7 +83,7 @@ export class DashboardController {
     ]);
 
     return {
-      title: 'Dashboard',
+      title: 'Tableau de bord',
       summary,
       selectedYear: year,
       levels,
@@ -91,6 +93,7 @@ export class DashboardController {
         dateFrom: dateFromInput ?? '',
         dateTo: dateToInput ?? '',
       },
+      datesSwapped,
     };
   }
 }

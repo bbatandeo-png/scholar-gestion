@@ -10,6 +10,7 @@ import { UpdateSchoolYearDto } from './dto/update-school-year.dto';
 import { SchoolYear, SchoolYearDocument } from './schemas/school-year.schema';
 import { SchoolYearStatus } from '../common/enums/domain.enums';
 import { runWithMongoTransactionFallback } from '../common/utils/mongo-transaction.util';
+import { assertSchoolYearCoherent } from '../common/utils/date-rules.util';
 
 @Injectable()
 export class SchoolYearsService {
@@ -20,6 +21,7 @@ export class SchoolYearsService {
   ) {}
 
   async create(dto: CreateSchoolYearDto) {
+    assertSchoolYearCoherent(dto.label, dto.startDate, dto.endDate);
     const created = await this.schoolYearModel.create({
       ...dto,
       status:
@@ -117,6 +119,14 @@ export class SchoolYearsService {
   }
 
   async update(id: string, dto: UpdateSchoolYearDto) {
+    const current = await this.schoolYearModel.findById(id).lean().exec();
+    if (current) {
+      assertSchoolYearCoherent(
+        dto.label ?? current.label,
+        dto.startDate ?? current.startDate,
+        dto.endDate ?? current.endDate,
+      );
+    }
     const updated = await this.schoolYearModel
       .findByIdAndUpdate(
         id,

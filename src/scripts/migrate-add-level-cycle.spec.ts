@@ -78,4 +78,27 @@ describe('migration level.cycle', () => {
     expect(second.backfilled).toBe(0);
     expect(second.unrecognized.map((u) => u.code)).toEqual(['CLASSE-SPECIALE']);
   });
+
+  // Rapport A24 : CP1 a CM2 ranges dans « Collège » (crees avant le cycle
+  // Primaire) sont remis dans le bon cycle.
+  it('replace les classes du primaire classees a tort en college', async () => {
+    const connection = await createConnection(repl.uri).asPromise();
+    await connection.db!.collection('levels').insertOne({
+      code: 'CP1',
+      label: 'CP1',
+      sortOrder: 10,
+      cycle: 1,
+    });
+    await connection.close();
+
+    const applied = await migrateAddLevelCycle(true);
+    expect(applied.backfilled).toBe(1);
+
+    const verification = await createConnection(repl.uri).asPromise();
+    const cp1 = await verification
+      .db!.collection('levels')
+      .findOne({ code: 'CP1' });
+    expect(cp1?.cycle).toBe(3);
+    await verification.close();
+  });
 });

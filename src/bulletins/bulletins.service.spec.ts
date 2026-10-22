@@ -2416,7 +2416,11 @@ describe('BulletinsService', () => {
         [String(s3._id)]: notes(15, 16),
       }),
     );
-    expect(saved).toEqual({ subjectLabel: 'Mathématiques', studentCount: 3 });
+    expect(saved).toEqual({
+      subjectLabel: 'Mathématiques',
+      studentCount: 3,
+      withoutNotes: 0,
+    });
 
     const afterMaths = await runWithTenant({ ecoleId }, () =>
       service.getGradeEntry(sessionId, mathsId),

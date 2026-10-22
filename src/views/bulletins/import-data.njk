@@ -9,7 +9,7 @@
     </div>
     <div class="toolbar">
       <a class="button secondary" href="/bulletins/{{ session._id }}/review">Revue / rapprochement</a>
-      <a class="button secondary" href="/bulletins/{{ session._id }}">Retour a la session</a>
+      <a class="button secondary" href="/bulletins/{{ session._id }}">Retour à la session</a>
     </div>
   </div>
 
@@ -18,7 +18,7 @@
       Titulaire : {{ session.meta.titulaire or '—' }} —
       Chef d'établissement : {{ session.meta.chefEtablissement or '—' }} —
       Année scolaire (fichier) : {{ session.meta.anneeScolaire or '—' }} —
-      Date du conseil : {{ session.meta.dateDuConseil | formatDate if session.meta.dateDuConseil else '—' }}
+      Date du conseil : {{ session.meta.dateDuConseil | formatDay if session.meta.dateDuConseil else '—' }}
     </p>
   {% endif %}
 

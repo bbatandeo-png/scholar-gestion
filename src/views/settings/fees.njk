@@ -129,9 +129,9 @@
       <details class="settings-section">
         <summary>
           <span class="settings-section-title">Matricule des élèves</span>
-          <span class="settings-section-value">Format : {{ matriculePreview }}</span>
+          <span class="settings-section-value">Prochain : {{ matriculePreview }}</span>
         </summary>
-        <form method="post" action="/settings/matricule-rule" class="stack" id="matriculeForm">
+        <form method="post" action="/settings/matricule-rule" class="stack" id="matriculeForm" data-saved-prefix="{{ matriculeRule.prefix }}{{ matriculeRule.separator }}" data-highest-used="{{ matriculeHighestUsed or 0 }}">
           <input type="hidden" name="_csrf" value="{{ csrfToken }}" />
           <div class="form-grid">
             <label>Préfixe<input name="prefix" value="{{ matriculeRule.prefix }}" required /></label>
@@ -139,7 +139,7 @@
             <label>Nombre de chiffres<input type="number" name="padding" min="1" value="{{ matriculeRule.padding }}" required /></label>
             <label>Début du compteur<input type="number" name="startAt" min="1" value="{{ matriculeRule.startAt }}" required /></label>
           </div>
-          <p class="field-hint">Prochain matricule généré : <strong data-matricule-preview>{{ matriculePreview }}</strong></p>
+          <p class="field-hint">Prochain matricule généré : <strong data-matricule-preview>{{ matriculePreview }}</strong>{% if matriculeHighestUsed %} (le plus grand déjà attribué est le n° {{ matriculeHighestUsed }}){% endif %}</p>
           <div><button type="submit" class="button secondary btn-icon icon-save">Enregistrer</button></div>
         </form>
       </details>
@@ -250,8 +250,11 @@
           const field = (name) => matriculeForm.querySelector(`[name="${name}"]`).value;
           const padding = Math.max(1, Number(field('padding')) || 1);
           const start = Math.max(1, Number(field('startAt')) || 1);
-          matriculePreview.textContent =
-            field('prefix').trim() + field('separator') + String(start).padStart(padding, '0');
+          const prefix = field('prefix').trim() + field('separator');
+          // Meme prefixe que l'actuel : on continue apres le plus grand numero deja attribue.
+          const highest =
+            prefix === matriculeForm.dataset.savedPrefix ? Number(matriculeForm.dataset.highestUsed) || 0 : 0;
+          matriculePreview.textContent = prefix + String(Math.max(start, highest + 1)).padStart(padding, '0');
         };
         matriculeForm.addEventListener('input', refresh);
       }

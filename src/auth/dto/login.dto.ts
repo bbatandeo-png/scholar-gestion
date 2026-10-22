@@ -1,4 +1,4 @@
-import { IsEmail, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
 
 export class LoginDto {
   @IsEmail()
@@ -7,4 +7,9 @@ export class LoginDto {
   @IsString()
   @MinLength(6)
   password: string;
+
+  // Page demandee avant la redirection vers la connexion (session expiree).
+  @IsOptional()
+  @IsString()
+  next?: string;
 }

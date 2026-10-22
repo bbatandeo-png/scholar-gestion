@@ -33,7 +33,7 @@
               {% endfor %}
             </select>
           </label>
-          <label>Unite
+          <label>Unité
             <input name="unit" value="{{ item.unit }}" required />
           </label>
           <label>Seuil d'alerte <span class="muted">(facultatif)</span>
@@ -71,7 +71,7 @@
           </label>
         </div>
         <label>Motif
-          <input name="reason" required placeholder="Achat, distribution a la classe de..., perte, casse..." />
+          <input name="reason" required placeholder="Achat, distribution à la classe de…, perte, casse…" />
         </label>
         <button type="submit">Enregistrer</button>
       </form>
@@ -96,7 +96,7 @@
           {% for movement in movements %}
             <tr>
               <td>{{ loop.index }}</td>
-              <td>{{ movement.date | formatDate }}</td>
+              <td>{{ movement.date | formatDay }}</td>
               <td>{% set value = movement.type %}{% set group = 'stockMovementType' %}{% include "partials/status-badge.njk" %}</td>
               <td>{{ movement.quantity }} {{ item.unit }}</td>
               <td>{{ movement.reason }}</td>

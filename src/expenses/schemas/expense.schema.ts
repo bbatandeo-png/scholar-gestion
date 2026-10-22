@@ -43,6 +43,28 @@ export class Expense {
   @Prop()
   modifiedAt?: Date;
 
+  // Historique complet des modifications (rapport A13) : valeurs avant et
+  // apres, auteur, date et motif de CHAQUE modification - jamais ecrase.
+  @Prop({
+    type: [
+      {
+        at: Date,
+        byName: String,
+        byId: String,
+        reason: String,
+        changes: [{ field: String, before: String, after: String }],
+      },
+    ],
+    default: [],
+  })
+  modificationHistory: Array<{
+    at: Date;
+    byName?: string;
+    byId?: string;
+    reason: string;
+    changes: Array<{ field: string; before: string; after: string }>;
+  }>;
+
   @Prop({ default: false, index: true })
   isCancelled: boolean;
 

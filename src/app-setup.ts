@@ -85,6 +85,7 @@ export function applyViewLocals(app: NestExpressApplication) {
 
     res.locals.currentUser = user;
     res.locals.flash = flash;
+    res.locals.oldInput = req.session?.oldInput;
     res.locals.currentPath = req.path;
     res.locals.csrfToken =
       typeof req.csrfToken === 'function' ? req.csrfToken() : '';
@@ -198,6 +199,10 @@ export function applyViewLocals(app: NestExpressApplication) {
 
     if (req.session) {
       delete req.session.flash;
+      // Garde la saisie pendant une redirection (POST -> 302 -> GET).
+      if (req.method === 'GET') {
+        delete req.session.oldInput;
+      }
     }
 
     next();

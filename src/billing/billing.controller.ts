@@ -74,6 +74,8 @@ export class BillingController {
       ? await this.expensesService.findCategoryById(editCategoryId)
       : undefined;
 
+    const nextMatricule =
+      await this.settingsService.previewNextStudentMatricule();
     return {
       title: 'Frais par niveau',
       feeSchedules: await this.billingService.listFeeSchedules(schoolYearId),
@@ -86,7 +88,8 @@ export class BillingController {
       paymentAllocationRule,
       chefEtablissementNom,
       importPaidStudentsEnabled,
-      matriculePreview: `${matriculeRule.prefix}${matriculeRule.separator}${String(matriculeRule.startAt).padStart(matriculeRule.padding, '0')}`,
+      matriculePreview: nextMatricule.matricule,
+      matriculeHighestUsed: nextMatricule.highestUsed,
       editCategory,
     };
   }
@@ -256,6 +259,8 @@ export class BillingController {
       this.billingService.findFeeScheduleById(id),
     ]);
 
+    const nextMatricule =
+      await this.settingsService.previewNextStudentMatricule();
     return {
       title: 'Modifier frais',
       feeSchedules,
@@ -268,7 +273,8 @@ export class BillingController {
       paymentAllocationRule,
       chefEtablissementNom,
       importPaidStudentsEnabled,
-      matriculePreview: `${matriculeRule.prefix}${matriculeRule.separator}${String(matriculeRule.startAt).padStart(matriculeRule.padding, '0')}`,
+      matriculePreview: nextMatricule.matricule,
+      matriculeHighestUsed: nextMatricule.highestUsed,
     };
   }
 
